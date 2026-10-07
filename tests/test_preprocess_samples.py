@@ -39,6 +39,20 @@ class SamplePreprocessTests(unittest.TestCase):
         self.assertEqual(mod.ROLE_TO_VOICE["ride"], 10)
         self.assertEqual(len(set(mod.ROLE_TO_VOICE.values())), len(mod.ROLE_TO_VOICE))
 
+    def test_selection_filters_and_rejects_missing_entries(self):
+        entries = [
+            {"kit": "808", "role": "kick"},
+            {"kit": "909", "role": "closed_hat"},
+            {"kit": "909", "role": "ride"},
+        ]
+        selected = mod.select_entries(entries, {"candidates": [
+            {"kit": "909", "role": "ride"},
+            {"kit": "909", "role": "closed_hat"},
+        ]})
+        self.assertEqual([(e["kit"], e["role"]) for e in selected], [("909", "closed_hat"), ("909", "ride")])
+        with self.assertRaises(ValueError):
+            mod.select_entries(entries, {"candidates": [{"kit": "909", "role": "crash"}]})
+
 
 if __name__ == "__main__":
     unittest.main()
