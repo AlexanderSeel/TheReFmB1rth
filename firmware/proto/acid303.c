@@ -27,6 +27,74 @@ uint32_t acid303_note_to_phase_inc(uint8_t note) {
     return inc;
 }
 
+static int32_t env_coeff(uint8_t time) {
+    uint32_t x = 128u - (uint32_t)(time > 127u ? 127u : time);
+    uint32_t c = 1u + x * x * 2u;
+    return c > 32767u ? 32767 : (int32_t)c;
+}
+
+static int32_t sustain_q15(const acid303_t *s) {
+    return (int32_t)s->amp_sustain * 258;
+}
+
+static void amp_envelope(acid303_t *s) {
+    int32_t target, d, step;
+    switch ((acid_env_stage_t)s->amp_stage) {
+    case ACID_ENV_ATTACK:
+        if (!s->amp_attack) {
+            s->amp = Q15_ONE;
+            s->amp_stage = ACID_ENV_DECAY;
+            break;
+        }
+        d = Q15_ONE - s->amp;
+        step = (int32_t)(((int64_t)d * env_coeff(s->amp_attack)) >> 15);
+        if (step < 1) step = 1;
+        s->amp += step;
+        if (s->amp >= Q15_ONE - 32) {
+            s->amp = Q15_ONE;
+            s->amp_stage = ACID_ENV_DECAY;
+        }
+        break;
+    case ACID_ENV_DECAY:
+        target = sustain_q15(s);
+        if (!s->amp_decay) {
+            s->amp = target;
+            s->amp_stage = ACID_ENV_SUSTAIN;
+            break;
+        }
+        d = s->amp - target;
+        if (d <= 32) {
+            s->amp = target;
+            s->amp_stage = ACID_ENV_SUSTAIN;
+            break;
+        }
+        step = (int32_t)(((int64_t)d * env_coeff(s->amp_decay)) >> 15);
+        if (step < 1) step = 1;
+        s->amp -= step;
+        break;
+    case ACID_ENV_SUSTAIN:
+        s->amp = sustain_q15(s);
+        break;
+    case ACID_ENV_RELEASE:
+        if (!s->amp_release) {
+            s->amp = 0;
+            s->amp_stage = ACID_ENV_OFF;
+            break;
+        }
+        step = (int32_t)(((int64_t)s->amp * env_coeff(s->amp_release)) >> 15);
+        if (step < 1) step = 1;
+        s->amp -= step;
+        if (s->amp <= 32) {
+            s->amp = 0;
+            s->amp_stage = ACID_ENV_OFF;
+        }
+        break;
+    default:
+        s->amp = 0;
+        break;
+    }
+}
+
 void acid303_init(acid303_t *s) {
     memset(s, 0, sizeof(*s));
     s->cutoff = 12000;
@@ -35,7 +103,14 @@ void acid303_init(acid303_t *s) {
     s->decay = 900;
     s->accent = 18000;
     s->drive = 5000;
-    s->amp = 0;
+    s->amp_attack = 0u;
+    s->amp_decay = 0u;
+    s->amp_sustain = 127u;
+    s->amp_release = 110u;
+    s->lfo_rate = 35u;
+    s->lfo_amount = 0u;
+    s->lfo_shape = ACID_LFO_SINE;
+    s->amp_stage = ACID_ENV_OFF;
 }
 
 void acid303_set_note(acid303_t *s, uint8_t note, uint8_t accent, uint8_t slide) {
@@ -48,7 +123,8 @@ void acid303_set_note(acid303_t *s, uint8_t note, uint8_t accent, uint8_t slide)
         s->slide_target_inc = inc;
         s->sliding = 0;
         s->env = Q15_ONE;
-        s->amp = Q15_ONE;
+        s->amp = s->amp_attack ? 0 : Q15_ONE;
+        s->amp_stage = s->amp_attack ? ACID_ENV_ATTACK : ACID_ENV_DECAY;
     }
     s->gate = 1;
     s->accented = accent ? 1u : 0u;
@@ -57,6 +133,28 @@ void acid303_set_note(acid303_t *s, uint8_t note, uint8_t accent, uint8_t slide)
 
 void acid303_note_off(acid303_t *s) {
     s->gate = 0;
+    if (s->amp > 0)
+        s->amp_stage = ACID_ENV_RELEASE;
+}
+
+int16_t acid303_lfo_value(const acid303_t *s) {
+    uint32_t q = s->lfo_phase >> 16;
+    int32_t saw = (int32_t)q - 32768;
+    int32_t tri = q < 32768u ? (int32_t)q * 2 - 32768 : 98302 - (int32_t)q * 2;
+    switch ((acid_lfo_shape_t)(s->lfo_shape & 3u)) {
+    case ACID_LFO_TRI:
+        return (int16_t)tri;
+    case ACID_LFO_SAW:
+        return (int16_t)saw;
+    case ACID_LFO_SQUARE:
+        return q < 32768u ? 32767 : -32768;
+    default: {
+        /* Parabolic sine-like curve: smooth and target-cheap, no table/libm. */
+        int32_t a = tri < 0 ? -tri : tri;
+        int32_t y = (int32_t)(((int64_t)tri * (49152 - a / 2)) >> 15);
+        return (int16_t)clamp32(y, -32768, 32767);
+    }
+    }
 }
 
 static int32_t oscillator(acid303_t *s) {
@@ -72,13 +170,16 @@ int32_t acid303_process(acid303_t *s) {
         if (d < 4 && d > -4) { s->phase_inc = s->slide_target_inc; s->sliding = 0; }
     }
 
+    s->lfo_phase += 4870u + (uint32_t)s->lfo_rate * 15310u; /* ~0.05 .. 20 Hz at 44.1 kHz */
+    int16_t lfo = acid303_lfo_value(s);
     int32_t osc = oscillator(s);
     int32_t decay_step = 12 + (int32_t)s->decay / 32;
     if (s->env > 0) s->env = s->env > decay_step ? s->env - decay_step : 0;
-    if (!s->gate && s->amp > 0) s->amp -= s->amp > 64 ? 64 : s->amp;
+    amp_envelope(s);
 
     int32_t accent_boost = s->accented ? (int32_t)s->accent / 3 : 0;
     int32_t fc = (int32_t)s->cutoff + (int32_t)(((int64_t)s->env * s->env_mod) >> 15) + accent_boost;
+    fc += ((int32_t)lfo * s->lfo_amount) >> 8; /* bipolar filter modulation */
     fc = clamp32(fc, 256, 30000);
 
     /* Two-pole fixed-point prototype. This is deliberately conservative and stable;
