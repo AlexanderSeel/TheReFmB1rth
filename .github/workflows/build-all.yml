@@ -63,10 +63,25 @@ jobs:
         run: python3 tools/apply_felucca_overlay.py .upstream/felucca --check
       - name: Download JieLi pi32v2 toolchain
         run: .upstream/felucca/tools/get_toolchain.sh "$RUNNER_TEMP/jieli"
-      - name: Fetch AC79 SDK
+      - name: Fetch pinned AC79 SDK with retry
+        shell: bash
         run: |
-          git clone --depth 1 --branch AC79NN_SDK_V1.2.1_2023-12-13 \
-            https://gitee.com/Jieli-Tech/fw-AC79_AIoT_SDK.git "$RUNNER_TEMP/ac79"
+          set -euo pipefail
+          SDK_URL=https://gitee.com/Jieli-Tech/fw-AC79_AIoT_SDK.git
+          SDK_TAG=AC79NN_SDK_V1.2.1_2023-12-13
+          SDK_DIR="$RUNNER_TEMP/ac79"
+          for attempt in 1 2 3; do
+            rm -rf "$SDK_DIR"
+            if git -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=120 \
+              clone --depth 1 --single-branch --branch "$SDK_TAG" "$SDK_URL" "$SDK_DIR"; then
+              git -C "$SDK_DIR" rev-parse HEAD
+              exit 0
+            fi
+            echo "AC79 SDK fetch attempt $attempt failed"
+            sleep $((attempt * 5))
+          done
+          echo "AC79 SDK fetch failed after 3 attempts" >&2
+          exit 1
       - name: Build FM-1 app, loader and FWSC package
         working-directory: .upstream/felucca
         env:
