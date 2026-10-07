@@ -56,6 +56,7 @@ jobs:
           grep -q "registerProcessor('refm-audio'" build/wasm/refm_audio_worklet.js
           grep -q "_refm_wasm_render" build/wasm/refm.js
           grep -q "_refm_wasm_enable_samples" build/wasm/refm.js
+          grep -q "_refm_wasm_set_acid_wave" build/wasm/refm.js
       - name: Record checksums
         run: sha256sum build/wasm/index.html build/wasm/worklet.html build/wasm/worklet_client.js build/wasm/refm_audio_worklet.js build/wasm/refm.js build/wasm/refm.wasm build/wasm/sample_controls.js build/wasm/sample-manifest.json build/wasm/sample-lock.json build/wasm/target-sample-budget.json > build/wasm/SHA256SUMS
       - uses: actions/upload-artifact@v4
@@ -91,8 +92,10 @@ jobs:
         run: tools/bootstrap_felucca.sh .upstream/felucca
       - name: Verify pinned Felucca integration anchors
         run: python3 tools/verify_felucca_integration.py .upstream/felucca
-      - name: Apply deterministic ReFmB1rth overlay
-        run: python3 tools/apply_felucca_overlay.py .upstream/felucca --check
+      - name: Apply deterministic ReFmB1rth overlay and compact UI
+        run: |
+          python3 tools/apply_felucca_overlay.py .upstream/felucca --check
+          python3 tools/patch_fm1_rebirth_ui.py .upstream/felucca
       - name: Download JieLi pi32v2 toolchain
         run: .upstream/felucca/tools/get_toolchain.sh "$RUNNER_TEMP/jieli"
       - name: Fetch pinned AC79 SDK with retry
@@ -132,6 +135,7 @@ jobs:
           cp .upstream/felucca/build/felucca.bin build/target/TheReFmB1rth-app.bin
           cp .upstream/felucca/build/loader/ota.bin build/target/ota.bin
           cp .upstream/felucca/.refm-overlay build/target/refm-overlay.txt
+          cp .upstream/felucca/.refm-ui-overlay build/target/refm-ui-overlay.txt
           python3 tools/release_manifest.py build/target/TheReFmB1rth-experimental.fwsc --commit "${GITHUB_SHA}" --output build/target/manifest.json
           python3 tools/release_manifest.py build/target/TheReFmB1rth-experimental.fwsc --verify build/target/manifest.json
           sha256sum build/target/TheReFmB1rth-experimental.fwsc build/target/TheReFmB1rth-app.bin build/target/ota.bin > build/target/SHA256SUMS
@@ -143,6 +147,7 @@ jobs:
           tools/bootstrap_felucca.sh .upstream/felucca-samples
           python3 tools/verify_felucca_integration.py .upstream/felucca-samples
           python3 tools/apply_felucca_overlay.py .upstream/felucca-samples --check
+          python3 tools/patch_fm1_rebirth_ui.py .upstream/felucca-samples
           python3 tools/inject_target_sample_experiment.py .upstream/felucca-samples build/target-samples
       - name: Build sample link-size experiment (not a release package)
         working-directory: .upstream/felucca-samples
@@ -176,6 +181,7 @@ jobs:
             build/target/ota.bin
             build/target/manifest.json
             build/target/refm-overlay.txt
+            build/target/refm-ui-overlay.txt
             build/target/SHA256SUMS
             build/target/target-memory.json
             build/target/felucca.syms
