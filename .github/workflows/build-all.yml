@@ -32,12 +32,21 @@ jobs:
           sudo apt-get install -y emscripten
       - name: Build shared ReFmB1rth WASM runtime
         run: sh web/emu/build_wasm.sh
+      - name: Smoke-check browser harness
+        run: |
+          test -s build/wasm/index.html
+          test -s build/wasm/refm.js
+          test -s build/wasm/refm.wasm
+          grep -q "import createRefm from './refm.js'" build/wasm/index.html
+          grep -q "_refm_wasm_render" build/wasm/refm.js
+          grep -q "_refm_wasm_midi" build/wasm/refm.js
       - name: Record checksums
-        run: sha256sum build/wasm/refm.js build/wasm/refm.wasm > build/wasm/SHA256SUMS
+        run: sha256sum build/wasm/index.html build/wasm/refm.js build/wasm/refm.wasm > build/wasm/SHA256SUMS
       - uses: actions/upload-artifact@v4
         with:
           name: refm-wasm-${{ github.sha }}
           path: |
+            build/wasm/index.html
             build/wasm/refm.js
             build/wasm/refm.wasm
             build/wasm/SHA256SUMS
