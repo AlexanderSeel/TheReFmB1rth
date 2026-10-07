@@ -25,10 +25,11 @@ typedef struct {
     uint32_t lfo_phase;
     uint32_t slide_target_inc;
 
-    /* 18 dB/oct diode-ladder approximation + resonance HP feedback. */
+    /* Four coupled stages used by the TB-303/Open303-style diode ladder model. */
     int32_t lp1;
     int32_t lp2;
     int32_t lp3;
+    int32_t lp4;
     int32_t resonance_hp_lp;
     int32_t output_hp_x;
     int32_t output_hp_y;
@@ -54,12 +55,12 @@ typedef struct {
     uint8_t amp_release;
     uint8_t amp_stage;
 
-    /* Optional post-303 modulation extension. A stock 303 has no LFO. */
+    /* Non-stock MOD extension. A stock TB-303 has no LFO. */
     uint8_t lfo_rate;
     uint8_t lfo_amount;
     uint8_t lfo_shape;
 
-    uint8_t square;      /* 0 = saw, 1 = derived/asymmetric 303 square */
+    uint8_t square;      /* 0 = saw, 1 = 303-style square */
     uint8_t gate;
     uint8_t accented;
     uint8_t sliding;
