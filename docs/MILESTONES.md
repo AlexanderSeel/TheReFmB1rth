@@ -32,7 +32,11 @@
 - [x] physical Felucca EDIT 1 page is bridged to ACID cutoff/resonance/env-mod/decay and renders the ReFmB1rth filter response curve
 - [x] WASM C bridge using the exact same `refm_target` runtime
 - [x] reproducible Emscripten build script for the shared engine
-- [x] GitHub Actions builds and uploads `refm.js` + `refm.wasm` with SHA-256 checksums
+- [x] standalone `web/emu/index.html` WASM lab for browser testing without the final React application
+- [x] browser lab provides WebAudio playback, transport, ACID keyboards, 808 pads and live engine status
+- [x] browser lab edits filter, ADSR and LFO state and renders the exact shared 64-point firmware graph model
+- [x] WASM artifact packages `index.html`, `refm.js`, `refm.wasm` and SHA-256 sums together
+- [x] GitHub Actions performs a browser-asset/export smoke check before publishing the WASM artifact
 - [x] native host compilation/tests for target ABI and WASM bridge
 - [x] automated integration tests for the unified render path
 - [x] CI verifies the exact pinned Felucca audio/build integration anchors
@@ -52,7 +56,8 @@
 - [ ] expose the ReFmB1rth project save/load hooks through the physical FM-1 UI
 - [ ] finish dedicated labels/layout and secondary ACID edit page instead of reusing generic Felucca EDIT card labels
 - [ ] implement the physical FM-1 mixer/song/pattern/drum UI and complete ACID step editing
-- [ ] add the browser UI/audio-worklet shell around the WASM bridge
+- [ ] replace the WASM lab's main-thread `ScriptProcessorNode` with an AudioWorklet-based production browser audio path
+- [ ] build the full React editor around the validated WASM ABI
 - [ ] add deterministic audio render hashes to CI
 - [ ] add full four-machine CPU-budget/audio-underrun regression measurements on target-equivalent and physical builds
 - [ ] add an explicit stack-watermark/runtime stack gate in addition to the static RAM/pool gate
@@ -82,7 +87,7 @@
 **M6 remains intentionally blocked from being called complete until:**
 
 - [ ] inherited Felucca host/update/loader/emulator regression suites are run against the integrated overlay, not only the target build
-- [ ] the browser emulator UI passes with the integrated runtime
+- [ ] the browser emulator UI passes with the integrated runtime under AudioWorklet timing
 - [ ] worst-case CPU/audio-underrun gates pass
 - [ ] runtime stack watermark/headroom is measured under worst-case UI + audio + MIDI activity
 - [ ] return-to-stock and FM-1-transporter recovery preparation is confirmed for the test unit
