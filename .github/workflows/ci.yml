@@ -12,5 +12,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Run host safety and DSP tests
         run: tests/run_host_tests.sh
-      - name: Verify pinned Felucca commit is reachable
+      - name: Prepare pinned Felucca baseline
         run: tools/bootstrap_felucca.sh .upstream/felucca
+      - name: Verify Felucca integration anchors
+        run: python3 tools/verify_felucca_integration.py .upstream/felucca
