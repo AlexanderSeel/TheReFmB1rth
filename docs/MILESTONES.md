@@ -20,8 +20,16 @@
 - [x] channel-10 drum routing plus dedicated drum channels
 - [x] raw MIDI byte parser with running status and realtime-message interleaving
 - [x] versioned project envelope + CRC32 corruption rejection
-- [x] groovebox state save/load for sequencers, A–H banks, drum grids, mixer/FX and song data
+- [x] groovebox state save/load for sequencers, A–H banks, drum grids, mixer/FX, song data and ACID modulation settings
+- [x] backward-compatible optional project extension for ACID ADSR/LFO settings
 - [x] hardware-neutral `refm_target` ABI for render/MIDI/transport/persistence
+- [x] real fixed-point ACID amp ADSR with attack/decay/sustain/release stages
+- [x] real fixed-point ACID LFO with sine-like/triangle/saw/square shapes and filter modulation
+- [x] shared 64-point ADSR/LFO/filter graph models used by target UI and browser/WASM path
+- [x] physical Felucca ENV page edits the selected ACID engine ADSR and renders its ReFmB1rth curve
+- [x] physical Felucca LFO page edits the selected ACID engine LFO and renders its ReFmB1rth curve
+- [x] physical Felucca LFO filter destination drives the ReFmB1rth filter-modulation depth
+- [x] physical Felucca EDIT 1 page is bridged to ACID cutoff/resonance/env-mod/decay and renders the ReFmB1rth filter response curve
 - [x] WASM C bridge using the exact same `refm_target` runtime
 - [x] reproducible Emscripten build script for the shared engine
 - [x] GitHub Actions builds and uploads `refm.js` + `refm.wasm` with SHA-256 checksums
@@ -36,15 +44,18 @@
 - [x] ReFmB1rth project slots are wired to Felucca's CRC-checked A/B atomic storage mechanism
 - [x] copied target sources compile cleanly with strict host warnings in CI after the overlay is applied
 - [x] complete pinned JieLi/AC79 target compile + link succeeds in GitHub Actions
+- [x] large ReFmB1rth runtime/project work buffers are placed in Felucca's dedicated `.pool` region rather than exhausting 96 KiB general RAM
+- [x] GitHub target build emits machine-readable XIP/RAM/pool usage and refuses release artifacts below conservative headroom thresholds
 
 **M5 target integration still open:**
 
 - [ ] expose the ReFmB1rth project save/load hooks through the physical FM-1 UI
-- [ ] implement the physical FM-1 mixer/song/pattern/ACID/drum UI
+- [ ] finish dedicated labels/layout and secondary ACID edit page instead of reusing generic Felucca EDIT card labels
+- [ ] implement the physical FM-1 mixer/song/pattern/drum UI and complete ACID step editing
 - [ ] add the browser UI/audio-worklet shell around the WASM bridge
 - [ ] add deterministic audio render hashes to CI
 - [ ] add full four-machine CPU-budget/audio-underrun regression measurements on target-equivalent and physical builds
-- [ ] turn linker output into explicit XIP/RAM/pool/stack budget gates
+- [ ] add an explicit stack-watermark/runtime stack gate in addition to the static RAM/pool gate
 
 ## M6 — hardware beta
 
@@ -64,14 +75,16 @@
 - [x] GitHub Actions downloads the official JieLi toolchain and pinned AC79 SDK
 - [x] a real experimental TheReFmB1rth `.fwsc`, application `.bin` and Felucca loader `ota.bin` are produced entirely in GitHub Actions
 - [x] the generated `.fwsc` passes manifest/product/SHA verification before artifact upload
-- [x] target-side audio/MIDI/storage integration remains behind the guarded overlay/build process; CI never flashes hardware
+- [x] explicit XIP/general-RAM/pool release gates are enforced before artifact upload
+- [x] the target artifact contains `target-memory.json` plus linker symbols for auditability
+- [x] target-side audio/MIDI/storage/UI integration remains behind the guarded overlay/build process; CI never flashes hardware
 
 **M6 remains intentionally blocked from being called complete until:**
 
 - [ ] inherited Felucca host/update/loader/emulator regression suites are run against the integrated overlay, not only the target build
 - [ ] the browser emulator UI passes with the integrated runtime
-- [ ] XIP/RAM/pool/stack limits are promoted to explicit release gates
 - [ ] worst-case CPU/audio-underrun gates pass
+- [ ] runtime stack watermark/headroom is measured under worst-case UI + audio + MIDI activity
 - [ ] return-to-stock and FM-1-transporter recovery preparation is confirmed for the test unit
 - [ ] a controlled physical FM-1 beta installation is performed successfully
 - [ ] post-install USB MIDI, TRS MIDI, USB audio, storage and recovery are verified on hardware
