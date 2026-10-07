@@ -3,6 +3,8 @@
 #include <stdio.h>
 #include "../firmware/proto/groovebox.h"
 
+#define EXPECTED_RENDER_HASH 0x29ad2a6ea2a3f94bull
+
 static uint64_t fnv1a_u16(uint64_t h, uint16_t v) {
     h ^= (uint8_t)v; h *= 1099511628211ull;
     h ^= (uint8_t)(v >> 8); h *= 1099511628211ull;
@@ -34,5 +36,9 @@ int main(void) {
         h = fnv1a_u16(h, (uint16_t)r);
     }
     printf("groovebox_render_fnv1a64=%016llx\n", (unsigned long long)h);
+    if (h != EXPECTED_RENDER_HASH) {
+        fprintf(stderr, "audio fingerprint changed: expected %016llx\n", (unsigned long long)EXPECTED_RENDER_HASH);
+        return 1;
+    }
     return 0;
 }
