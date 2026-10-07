@@ -33,10 +33,19 @@
 - [x] WASM C bridge using the exact same `refm_target` runtime
 - [x] reproducible Emscripten build script for the shared engine
 - [x] standalone `web/emu/index.html` WASM lab for browser testing without the final React application
-- [x] browser lab provides WebAudio playback, transport, ACID keyboards, 808 pads and live engine status
+- [x] browser lab provides WebAudio playback, transport, ACID keyboards and live engine status
 - [x] browser lab edits filter, ADSR and LFO state and renders the exact shared 64-point firmware graph model
+- [x] browser lab edits real A–H pattern memory
+- [x] browser lab exposes both 16-step ACID sequencers with gate/accent/slide/tie states
+- [x] browser lab exposes 808 and 909 11-lane × 16-step drum grids with hit/accent editing and live playhead
+- [x] WASM ABI exposes pattern select, acid-step get/set and drum-step get/set rather than duplicating sequencer state in JavaScript
 - [x] WASM artifact packages `index.html`, `refm.js`, `refm.wasm` and SHA-256 sums together
 - [x] GitHub Actions performs a browser-asset/export smoke check before publishing the WASM artifact
+- [x] redistributable sample allow-list exists in `samples/sources.json`
+- [x] initial 808 sample source is pinned to the Fischer/Loveall CC0 repository with per-file Git blob identities
+- [x] initial 909-style sample source is pinned to the Octal CC0 kit with per-file Git blob identities
+- [x] `tools/fetch_samples.py` refuses unapproved licenses/URLs, verifies source blobs and writes downloaded SHA-256 provenance
+- [x] CI validates the sample manifest structure without downloading or redistributing samples
 - [x] native host compilation/tests for target ABI and WASM bridge
 - [x] automated integration tests for the unified render path
 - [x] CI verifies the exact pinned Felucca audio/build integration anchors
@@ -56,6 +65,8 @@
 - [ ] expose the ReFmB1rth project save/load hooks through the physical FM-1 UI
 - [ ] finish dedicated labels/layout and secondary ACID edit page instead of reusing generic Felucca EDIT card labels
 - [ ] implement the physical FM-1 mixer/song/pattern/drum UI and complete ACID step editing
+- [ ] add sample-backed playback engine and hybrid synth/sample selection; do not embed fetched WAVs until processed-size/CPU/flash gates pass
+- [ ] expand approved sample manifests with processed target formats and committed SHA-256 lock data before release bundling
 - [ ] replace the WASM lab's main-thread `ScriptProcessorNode` with an AudioWorklet-based production browser audio path
 - [ ] build the full React editor around the validated WASM ABI
 - [ ] add deterministic audio render hashes to CI
