@@ -16,3 +16,11 @@ jobs:
         run: tools/bootstrap_felucca.sh .upstream/felucca
       - name: Verify Felucca integration anchors
         run: python3 tools/verify_felucca_integration.py .upstream/felucca
+      - name: Apply deterministic TheReFmB1rth overlay
+        run: python3 tools/apply_felucca_overlay.py .upstream/felucca --check
+      - name: Verify overlay stamp and patched anchors
+        run: |
+          test -s .upstream/felucca/.refm-overlay
+          grep -q 'refm_felucca_audio_block(out, n);' .upstream/felucca/firmware/src/audio.c
+          grep -q 'refm_felucca_midi_packet(pkt);' .upstream/felucca/firmware/src/usb.c
+          grep -q 'OUT / "refm.o"' .upstream/felucca/tools/build.py
