@@ -34,7 +34,7 @@ static void test_slide_is_legato_and_converges(void) {
     acid303_set_note(&s, 60, 0, 1);
     uint32_t target = s.slide_target_inc;
     assert(target > start);
-    assert(s.env == env_before); /* slide must not retrigger the 303 envelope */
+    assert(s.env == env_before);
     for (int i = 0; i < 4000; ++i) acid303_process(&s);
     assert(s.phase_inc > start);
     assert(s.phase_inc <= target);
@@ -84,6 +84,27 @@ static void test_lfo_runs_all_shapes(void) {
     assert(changed == 4);
 }
 
+static uint64_t render_shape_hash(uint8_t shape) {
+    acid303_t s; acid303_init(&s);
+    s.lfo_shape = shape; s.lfo_amount = 110u; s.lfo_rate = 90u;
+    acid303_set_note(&s, 48, 0, 0);
+    uint64_t h = 1469598103934665603ull;
+    for (int i = 0; i < 12000; ++i) {
+        uint16_t y = (uint16_t)acid303_process(&s);
+        h ^= (uint8_t)y; h *= 1099511628211ull;
+        h ^= (uint8_t)(y >> 8); h *= 1099511628211ull;
+    }
+    return h;
+}
+
+static void test_lfo_shapes_change_audio(void) {
+    uint64_t h[4];
+    for (uint8_t i = 0; i < 4u; ++i) h[i] = render_shape_hash(i);
+    for (unsigned i = 0; i < 4u; ++i)
+        for (unsigned j = i + 1u; j < 4u; ++j)
+            assert(h[i] != h[j]);
+}
+
 int main(void) {
     test_note_order();
     test_output_is_bounded();
@@ -93,6 +114,7 @@ int main(void) {
     test_accent_sweep_accumulates();
     test_saw_and_303_square_are_different();
     test_lfo_runs_all_shapes();
+    test_lfo_shapes_change_audio();
     puts("acid303 circuit-model tests: ok");
     return 0;
 }
