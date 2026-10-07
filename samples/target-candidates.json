@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "description": "Conservative FM-1 sample candidates. Full sample kits stay browser-only until target flash/CPU measurements justify more.",
+  "max_pcm_bytes": 98304,
+  "candidates": [
+    {"kit": "909", "role": "closed_hat"},
+    {"kit": "909", "role": "open_hat"},
+    {"kit": "909", "role": "crash"},
+    {"kit": "909", "role": "ride"}
+  ]
+}
