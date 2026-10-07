@@ -1,0 +1,16 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  host-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run host safety and DSP tests
+        run: tests/run_host_tests.sh
+      - name: Verify pinned Felucca commit is reachable
+        run: tools/bootstrap_felucca.sh .upstream/felucca
