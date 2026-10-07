@@ -5,7 +5,7 @@ Input is samples/sources.json after tools/fetch_samples.py has populated build/s
 The generated C unit is intended for WASM audition first; target firmware embedding is opt-in.
 """
 from __future__ import annotations
-import argparse, hashlib, json, math, struct, wave
+import argparse, hashlib, json, struct, wave
 from pathlib import Path
 
 ROLE_TO_VOICE = {
@@ -43,7 +43,6 @@ def trim(samples, threshold=96):
     last = len(samples) - 1
     while last > first and abs(samples[last]) <= threshold:
         last -= 1
-    # Keep 1 ms-ish lead/tail at 44.1k-equivalent to avoid clicks from hard trimming.
     pad = 48
     return samples[max(0, first - pad):min(len(samples), last + pad + 1)]
 
@@ -75,18 +74,33 @@ def ident(kit, role):
     return f"refm_{kit}_{role}".replace("-", "_")
 
 
+def select_entries(entries, selection):
+    if selection is None:
+        return list(entries)
+    wanted = {(str(x["kit"]), str(x["role"])) for x in selection.get("candidates", [])}
+    selected = [e for e in entries if (str(e.get("kit")), str(e.get("role"))) in wanted]
+    found = {(str(e["kit"]), str(e["role"])) for e in selected}
+    missing = sorted(wanted - found)
+    if missing:
+        raise ValueError(f"selection references missing manifest entries: {missing}")
+    return selected
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--manifest", default="samples/sources.json")
+    ap.add_argument("--selection", help="optional candidate JSON containing kit/role pairs")
     ap.add_argument("--rate", type=int, default=22050, choices=(11025, 22050, 44100))
     ap.add_argument("--out-dir", default="build/samples/processed")
     args = ap.parse_args()
     manifest = json.loads(Path(args.manifest).read_text(encoding="utf-8"))
+    selection = json.loads(Path(args.selection).read_text(encoding="utf-8")) if args.selection else None
+    entries = select_entries(manifest["sources"], selection)
     out = Path(args.out_dir); out.mkdir(parents=True, exist_ok=True)
     assets = []
     arrays = []
     table = {"808": [None] * 11, "909": [None] * 11}
-    for entry in manifest["sources"]:
+    for entry in entries:
         role = entry["role"]
         if role not in ROLE_TO_VOICE:
             continue
@@ -135,6 +149,7 @@ def main():
     c.write_text("\n".join(lines) + "\n", encoding="utf-8")
     report = {
         "version": 1, "target_rate": args.rate,
+        "selection": args.selection,
         "asset_count": len(assets), "total_pcm_bytes": sum(x["bytes"] for x in assets),
         "assets": assets,
     }
