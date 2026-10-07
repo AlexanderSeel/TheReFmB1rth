@@ -35,4 +35,16 @@ static inline void *memcpy(void *dst, const void *src, size_t count)
     return dst;
 }
 
+static inline int memcmp(const void *lhs, const void *rhs, size_t count)
+{
+    const unsigned char *a = (const unsigned char *)lhs;
+    const unsigned char *b = (const unsigned char *)rhs;
+    size_t i;
+    for (i = 0; i < count; ++i) {
+        if (a[i] != b[i])
+            return (int)a[i] - (int)b[i];
+    }
+    return 0;
+}
+
 #endif
