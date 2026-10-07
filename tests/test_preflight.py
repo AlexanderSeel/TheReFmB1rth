@@ -1,5 +1,6 @@
 import hashlib
 import importlib.util
+import unittest
 from pathlib import Path
 
 MODULE_PATH = Path(__file__).resolve().parents[1] / "tools" / "preflight.py"
@@ -16,20 +17,18 @@ def make_package(product: str) -> bytes:
     return bytes(raw)
 
 
-def test_product_of_roundtrip():
-    raw = make_package("FM-1_910")
-    assert preflight.product_of(raw) == "FM-1_910"
+class PreflightTests(unittest.TestCase):
+    def test_product_of_roundtrip(self):
+        self.assertEqual(preflight.product_of(make_package("FM-1_910")), "FM-1_910")
+
+    def test_product_rejects_short_file(self):
+        with self.assertRaisesRegex(ValueError, "too short"):
+            preflight.product_of(b"too short")
+
+    def test_sha256(self):
+        raw = b"TheReFmB1rth"
+        self.assertEqual(preflight.sha256(raw), hashlib.sha256(raw).hexdigest())
 
 
-def test_product_rejects_short_file():
-    try:
-        preflight.product_of(b"too short")
-    except ValueError as exc:
-        assert "too short" in str(exc)
-    else:
-        raise AssertionError("expected ValueError")
-
-
-def test_sha256():
-    raw = b"TheReFmB1rth"
-    assert preflight.sha256(raw) == hashlib.sha256(raw).hexdigest()
+if __name__ == "__main__":
+    unittest.main()
