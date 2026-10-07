@@ -37,7 +37,8 @@ int main(void) {
     }
     printf("groovebox_render_fnv1a64=%016llx\n", (unsigned long long)h);
     if (h != EXPECTED_RENDER_HASH) {
-        fprintf(stderr, "audio fingerprint changed: expected %016llx\n", (unsigned long long)EXPECTED_RENDER_HASH);
+        fprintf(stderr, "audio fingerprint changed: actual %016llx expected %016llx\n",
+                (unsigned long long)h, (unsigned long long)EXPECTED_RENDER_HASH);
         return 1;
     }
     return 0;
