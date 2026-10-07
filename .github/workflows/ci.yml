@@ -23,11 +23,18 @@ jobs:
           test -s .upstream/felucca/.refm-overlay
           grep -q 'refm_felucca_audio_block(out, n);' .upstream/felucca/firmware/src/audio.c
           grep -q 'refm_felucca_midi_packet(pkt);' .upstream/felucca/firmware/src/usb.c
-          grep -q 'OUT / "refm.o"' .upstream/felucca/tools/build.py
-      - name: Compile generated ReFmB1rth target unit with host compiler
+          grep -q 'refm_platform_storage_save' .upstream/felucca/firmware/src/felucca.c
+          grep -q '\*refm_objs' .upstream/felucca/tools/build.py
+      - name: Compile copied ReFmB1rth target sources as separate objects
         run: |
-          cc -std=c11 -Wall -Wextra -Werror -O2 \
-            -I.upstream/felucca/firmware/refm/proto \
-            -I.upstream/felucca/firmware/refm/integration \
-            -c .upstream/felucca/firmware/refm/refm_unit.c \
-            -o build/host/refm_overlay_unit.o
+          mkdir -p build/host/overlay
+          i=0
+          while IFS= read -r src; do
+            cc -std=c11 -Wall -Wextra -Werror -O2 \
+              -DREFM_FELUCCA_PLATFORM=1 \
+              -I.upstream/felucca/firmware/refm/proto \
+              -I.upstream/felucca/firmware/refm/integration \
+              -c ".upstream/felucca/firmware/refm/$src" \
+              -o "build/host/overlay/refm_$i.o"
+            i=$((i+1))
+          done < .upstream/felucca/firmware/refm/sources.txt
