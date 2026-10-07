@@ -19,5 +19,6 @@ cc $CFLAGS firmware/proto/drum_machine.c firmware/proto/midi_router.c tests/test
 cc $CFLAGS $COMMON $FEATURES tests/test_groovebox_features.c -o build/host/test_groovebox_features
 cc $CFLAGS $TARGET tests/test_refm_target.c -o build/host/test_refm_target
 cc $CFLAGS $TARGET web/emu/refm_wasm.c tests/test_wasm_bridge.c -o build/host/test_wasm_bridge
-for t in test_acid303 test_seq16 test_ui_graph_model test_song test_midi_transport test_project_store test_mixer_fx test_drum_machine test_groovebox test_pattern_bank test_midi_router test_groovebox_features test_refm_target test_wasm_bridge; do build/host/$t; done
+cc $CFLAGS $TARGET firmware/integration/refm_felucca_bridge.c tests/test_felucca_bridge.c -o build/host/test_felucca_bridge
+for t in test_acid303 test_seq16 test_ui_graph_model test_song test_midi_transport test_project_store test_mixer_fx test_drum_machine test_groovebox test_pattern_bank test_midi_router test_groovebox_features test_refm_target test_wasm_bridge test_felucca_bridge; do build/host/$t; done
 python3 -m unittest discover -s tests -p 'test_*.py'
