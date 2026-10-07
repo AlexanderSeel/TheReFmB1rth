@@ -1,0 +1,137 @@
+{
+  "version": 1,
+  "policy": "Only entries with explicit redistributable licenses may be fetched for bundling.",
+  "sources": [
+    {
+      "kit": "808",
+      "role": "kick",
+      "license": "CC0-1.0",
+      "repository": "tidalcycles/sounds-tr808-fischer",
+      "commit": "85fbecf1bec32553395625ea659e2a56dfd7c0e1",
+      "path": "bd8/BD5050.WAV",
+      "git_blob_sha1": "b6743fdf412b8620611983df5ee211488a54f385",
+      "destination": "build/samples/808/kick.wav"
+    },
+    {
+      "kit": "808",
+      "role": "snare",
+      "license": "CC0-1.0",
+      "repository": "tidalcycles/sounds-tr808-fischer",
+      "commit": "85fbecf1bec32553395625ea659e2a56dfd7c0e1",
+      "path": "sd8/SD5050.WAV",
+      "git_blob_sha1": "0eb2dc0dcc112847b265af4046fca88f6d0bc287",
+      "destination": "build/samples/808/snare.wav"
+    },
+    {
+      "kit": "808",
+      "role": "clap",
+      "license": "CC0-1.0",
+      "repository": "tidalcycles/sounds-tr808-fischer",
+      "commit": "85fbecf1bec32553395625ea659e2a56dfd7c0e1",
+      "path": "cp8/CP.WAV",
+      "git_blob_sha1": "6e2b7ea108f87133fcaa31f7ae5c9eaa40ae1f4b",
+      "destination": "build/samples/808/clap.wav"
+    },
+    {
+      "kit": "808",
+      "role": "closed_hat",
+      "license": "CC0-1.0",
+      "repository": "tidalcycles/sounds-tr808-fischer",
+      "commit": "85fbecf1bec32553395625ea659e2a56dfd7c0e1",
+      "path": "ch8/CH.WAV",
+      "git_blob_sha1": "ffc5951ddfc3801f947579f7994bcab2ca42edf1",
+      "destination": "build/samples/808/closed-hat.wav"
+    },
+    {
+      "kit": "808",
+      "role": "open_hat",
+      "license": "CC0-1.0",
+      "repository": "tidalcycles/sounds-tr808-fischer",
+      "commit": "85fbecf1bec32553395625ea659e2a56dfd7c0e1",
+      "path": "oh8/OH50.WAV",
+      "git_blob_sha1": "a0fde523e8b1a3142ddf70f806dd02422a8aad30",
+      "destination": "build/samples/808/open-hat.wav"
+    },
+    {
+      "kit": "808",
+      "role": "rim",
+      "license": "CC0-1.0",
+      "repository": "tidalcycles/sounds-tr808-fischer",
+      "commit": "85fbecf1bec32553395625ea659e2a56dfd7c0e1",
+      "path": "rs8/RS.WAV",
+      "git_blob_sha1": "c5a54c77a27ed9776b74890b4ffe1016b1202e13",
+      "destination": "build/samples/808/rim.wav"
+    },
+    {
+      "kit": "909",
+      "role": "kick",
+      "license": "CC0-1.0",
+      "repository": "octalmusic/octal-samples",
+      "commit": "22d222ce36e290ba3792c776811aa9c69dcc8776",
+      "path": "samples/kicks/punch-01.wav",
+      "git_blob_sha1": "d35618bb78014d62b94905912a6dccbabe69ae52",
+      "destination": "build/samples/909/kick.wav",
+      "note": "deterministic classic-machine-inspired synthesis, not a Roland factory sample"
+    },
+    {
+      "kit": "909",
+      "role": "snare",
+      "license": "CC0-1.0",
+      "repository": "octalmusic/octal-samples",
+      "commit": "22d222ce36e290ba3792c776811aa9c69dcc8776",
+      "path": "samples/snares/snap-01.wav",
+      "git_blob_sha1": "ac3d910b360e7622b1b13e096ca50f8ef0a53a84",
+      "destination": "build/samples/909/snare.wav"
+    },
+    {
+      "kit": "909",
+      "role": "clap",
+      "license": "CC0-1.0",
+      "repository": "octalmusic/octal-samples",
+      "commit": "22d222ce36e290ba3792c776811aa9c69dcc8776",
+      "path": "samples/claps/classic-01.wav",
+      "git_blob_sha1": "3b6f1a44006fa2c96394e3c7030be702b0b34843",
+      "destination": "build/samples/909/clap.wav"
+    },
+    {
+      "kit": "909",
+      "role": "closed_hat",
+      "license": "CC0-1.0",
+      "repository": "octalmusic/octal-samples",
+      "commit": "22d222ce36e290ba3792c776811aa9c69dcc8776",
+      "path": "samples/hats/closed-02.wav",
+      "git_blob_sha1": "f6c0e89a3c5ad4a88a25f788ec7df360a5a93c0c",
+      "destination": "build/samples/909/closed-hat.wav"
+    },
+    {
+      "kit": "909",
+      "role": "open_hat",
+      "license": "CC0-1.0",
+      "repository": "octalmusic/octal-samples",
+      "commit": "22d222ce36e290ba3792c776811aa9c69dcc8776",
+      "path": "samples/hats/open-02.wav",
+      "git_blob_sha1": "b6aedaed434072abd4fcc77f9ea47c75e6bfe484",
+      "destination": "build/samples/909/open-hat.wav"
+    },
+    {
+      "kit": "909",
+      "role": "crash",
+      "license": "CC0-1.0",
+      "repository": "octalmusic/octal-samples",
+      "commit": "22d222ce36e290ba3792c776811aa9c69dcc8776",
+      "path": "samples/cymbals/crash-01.wav",
+      "git_blob_sha1": "4716f0e0ca652ef8dace211e5d9676982b9014c1",
+      "destination": "build/samples/909/crash.wav"
+    },
+    {
+      "kit": "909",
+      "role": "ride",
+      "license": "CC0-1.0",
+      "repository": "octalmusic/octal-samples",
+      "commit": "22d222ce36e290ba3792c776811aa9c69dcc8776",
+      "path": "samples/cymbals/ride-01.wav",
+      "git_blob_sha1": "703a17dd1cf145da36cd600d03d16a08a2877e41",
+      "destination": "build/samples/909/ride.wav"
+    }
+  ]
+}
