@@ -85,6 +85,24 @@ REFM_EXPORT uint32_t refm_wasm_get_drum_step(uint8_t track, uint8_t step) {
     return (uint32_t)vm.groovebox.drum_hits[track][step] | ((uint32_t)vm.groovebox.drum_accents[track][step] << 16);
 }
 
+/* Stock 303 controls plus optional modern modulation extension. */
+REFM_EXPORT void refm_wasm_set_acid_wave(uint8_t track, uint8_t square) {
+    if (track >= 2u) return;
+    vm.groovebox.acid[track].square = square ? 1u : 0u;
+}
+REFM_EXPORT void refm_wasm_set_acid_accent(uint8_t track, uint8_t value) {
+    if (track >= 2u) return;
+    vm.groovebox.acid[track].accent = (uint16_t)(value > 127u ? 127u : value) * 258u;
+}
+REFM_EXPORT void refm_wasm_set_acid_drive(uint8_t track, uint8_t value) {
+    if (track >= 2u) return;
+    vm.groovebox.acid[track].drive = (uint16_t)(value > 127u ? 127u : value) * 128u;
+}
+REFM_EXPORT uint16_t refm_wasm_acid_cutoff_hz(uint8_t track) {
+    if (track >= 2u) return 0u;
+    return acid303_cutoff_hz(&vm.groovebox.acid[track]);
+}
+
 REFM_EXPORT void refm_wasm_set_acid_mod(uint8_t track, uint8_t param, uint8_t value) {
     acid303_t *s;
     if (track >= 2u) return;
@@ -103,12 +121,14 @@ REFM_EXPORT const int16_t *refm_wasm_graph(uint8_t track, uint8_t kind) {
     uint8_t c, r, e;
     if (track >= 2u) track = 0u;
     s = &vm.groovebox.acid[track];
-    if (kind == 1u) ui_graph_adsr(&graph_curve, s->amp_attack, s->amp_decay, s->amp_sustain, s->amp_release);
-    else if (kind == 2u) ui_graph_lfo(&graph_curve, (ui_lfo_shape_t)(s->lfo_shape & 3u), (uint8_t)(s->lfo_phase >> 24), s->lfo_amount);
+    if (kind == 1u) {
+        /* Authentic mode has a decay envelope rather than a user ADSR. */
+        ui_graph_adsr(&graph_curve, 0u, (uint8_t)(s->decay >> 8), 0u, 0u);
+    } else if (kind == 2u) ui_graph_lfo(&graph_curve, (ui_lfo_shape_t)(s->lfo_shape & 3u), (uint8_t)(s->lfo_phase >> 24), s->lfo_amount);
     else {
-        c = (uint8_t)(s->cutoff >> 9);
-        r = (uint8_t)(s->resonance >> 9);
-        e = (uint8_t)(s->env_mod >> 9);
+        c = (uint8_t)(s->cutoff >> 8);
+        r = (uint8_t)(s->resonance >> 8);
+        e = (uint8_t)(s->env_mod >> 8);
         ui_graph_filter(&graph_curve, c, r, e);
     }
     return graph_curve.y;
