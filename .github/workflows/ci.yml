@@ -19,14 +19,18 @@ jobs:
       - name: Verify Felucca integration anchors
         run: python3 tools/verify_felucca_integration.py .upstream/felucca
       - name: Apply deterministic TheReFmB1rth overlay
-        run: python3 tools/apply_felucca_overlay.py .upstream/felucca --check
+        run: |
+          python3 tools/apply_felucca_overlay.py .upstream/felucca --check
+          python3 tools/patch_fm1_rebirth_ui.py .upstream/felucca
       - name: Verify overlay stamp and patched anchors
         run: |
           test -s .upstream/felucca/.refm-overlay
+          test -s .upstream/felucca/.refm-ui-overlay
           grep -q 'refm_felucca_audio_block(out, n);' .upstream/felucca/firmware/src/audio.c
           grep -q 'REFM_MIRROR_MIDI(pkt);' .upstream/felucca/firmware/src/usb.c
           grep -q '#define REFM_APP 1' .upstream/felucca/firmware/src/felucca.c
           grep -q 'refm_platform_storage_save' .upstream/felucca/firmware/src/felucca.c
+          grep -q 'Compact dual-bassline visual language' .upstream/felucca/firmware/src/ui_graph.c
           grep -q '\*refm_objs' .upstream/felucca/tools/build.py
       - name: Compile and link copied ReFmB1rth target sources
         run: |
