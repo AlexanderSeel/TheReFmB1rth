@@ -28,6 +28,9 @@ emcc -O3 -std=c11 $SAMPLE_FLAGS \
   -o "$OUT/refm.js"
 cp "$ROOT/web/emu/index.html" "$OUT/index.html"
 cp "$ROOT/web/emu/sample_controls.js" "$OUT/sample_controls.js"
+cp "$ROOT/web/emu/worklet.html" "$OUT/worklet.html"
+cp "$ROOT/web/emu/worklet_client.js" "$OUT/worklet_client.js"
+cp "$ROOT/web/emu/refm_audio_worklet.js" "$OUT/refm_audio_worklet.js"
 python3 - "$OUT/index.html" <<'PY'
 from pathlib import Path
 import sys
@@ -37,5 +40,5 @@ insert='''\n<script type="module">\nimport {installSampleControls} from './sampl
 s=s.replace('</body>', insert+'</body>', 1)
 p.write_text(s, encoding='utf-8')
 PY
-echo "WASM groovebox built: $OUT/index.html + refm.js + refm.wasm"
+echo "WASM groovebox built: $OUT/index.html + worklet.html + refm.js + refm.wasm"
 if [ -n "$SAMPLE_SRC" ]; then echo "Bundled audition samples: enabled"; else echo "Bundled audition samples: not present (synth fallback)"; fi
