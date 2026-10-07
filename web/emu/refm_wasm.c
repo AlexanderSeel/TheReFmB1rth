@@ -4,6 +4,9 @@
 #include "../../firmware/integration/refm_target.h"
 #include "../../firmware/proto/groovebox_pattern.h"
 #include "../../firmware/proto/ui_graph_model.h"
+#ifdef REFM_BUNDLED_SAMPLES
+#include "refm_sample_assets.h"
+#endif
 
 #if defined(__EMSCRIPTEN__)
 #include <emscripten/emscripten.h>
@@ -19,6 +22,12 @@ static ui_graph_curve_t graph_curve;
 
 REFM_EXPORT void refm_wasm_init(uint16_t bpm) {
     refm_target_init(&vm, bpm);
+#ifdef REFM_BUNDLED_SAMPLES
+    refm_attach_bundled_samples(&vm.groovebox.drum[0], DRUM_MODEL_808);
+    refm_attach_bundled_samples(&vm.groovebox.drum[1], DRUM_MODEL_909);
+#endif
+    drum_machine_enable_samples(&vm.groovebox.drum[0], 0u);
+    drum_machine_enable_samples(&vm.groovebox.drum[1], 0u);
     project_size = 0u;
 }
 REFM_EXPORT void refm_wasm_external_clock(uint8_t enabled) { refm_target_set_external_clock(&vm, enabled); }
@@ -38,6 +47,15 @@ REFM_EXPORT int refm_wasm_restore(const uint8_t *data, uint32_t len) { return re
 REFM_EXPORT uint8_t refm_wasm_step(void) { return vm.groovebox.step; }
 REFM_EXPORT uint8_t refm_wasm_pattern(void) { return vm.groovebox.current_pattern; }
 REFM_EXPORT uint16_t refm_wasm_bpm(void) { return vm.groovebox.transport.bpm; }
+
+REFM_EXPORT void refm_wasm_enable_samples(uint8_t track, uint8_t enabled) {
+    if (track >= GROOVEBOX_DRUM_TRACKS) return;
+    drum_machine_enable_samples(&vm.groovebox.drum[track], enabled);
+}
+REFM_EXPORT uint16_t refm_wasm_sample_mask(uint8_t track) {
+    if (track >= GROOVEBOX_DRUM_TRACKS) return 0u;
+    return vm.groovebox.drum[track].sample_mask;
+}
 
 REFM_EXPORT void refm_wasm_select_pattern(uint8_t pattern) {
     pattern &= 7u;
@@ -67,9 +85,6 @@ REFM_EXPORT uint32_t refm_wasm_get_drum_step(uint8_t track, uint8_t step) {
     return (uint32_t)vm.groovebox.drum_hits[track][step] | ((uint32_t)vm.groovebox.drum_accents[track][step] << 16);
 }
 
-/* Browser/developer controls that map directly to real ACID modulation state.
- * param: 0 attack, 1 decay, 2 sustain, 3 release, 4 lfo rate,
- *        5 lfo amount, 6 lfo shape. Values are 0..127 except shape 0..3. */
 REFM_EXPORT void refm_wasm_set_acid_mod(uint8_t track, uint8_t param, uint8_t value) {
     acid303_t *s;
     if (track >= 2u) return;
@@ -83,7 +98,6 @@ REFM_EXPORT void refm_wasm_set_acid_mod(uint8_t track, uint8_t param, uint8_t va
     else if (param == 6u) s->lfo_shape = (uint8_t)(value & 3u);
 }
 
-/* kind: 0 filter response, 1 ADSR, 2 LFO. Returns 64 signed Q15-ish points. */
 REFM_EXPORT const int16_t *refm_wasm_graph(uint8_t track, uint8_t kind) {
     acid303_t *s;
     uint8_t c, r, e;
