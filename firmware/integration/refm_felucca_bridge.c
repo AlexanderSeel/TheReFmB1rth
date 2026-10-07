@@ -4,13 +4,18 @@
 #include <stdint.h>
 
 /*
- * Narrow ABI used by the Felucca integration overlay.  This compilation unit
- * is intentionally built separately from Felucca's monolithic felucca.c so
- * both projects may keep their internal type names without collisions.
+ * Narrow ABI used by the Felucca integration overlay. This unit is built
+ * separately from Felucca's monolithic felucca.c to avoid internal type-name
+ * collisions while retaining a small, auditable integration surface.
  */
 static refm_target_t g_refm;
 static uint8_t g_refm_ready;
 static uint8_t g_external_clock_seen;
+
+#ifdef REFM_FELUCCA_PLATFORM
+extern int refm_platform_storage_save(uint32_t slot, const void *src, uint32_t len);
+extern int refm_platform_storage_load(uint32_t slot, void *dst, uint32_t max);
+#endif
 
 static void ensure_ready(void) {
     if (!g_refm_ready) {
@@ -83,6 +88,28 @@ int refm_felucca_load(const uint8_t *blob, size_t blob_len) {
     ensure_ready();
     return refm_target_load(&g_refm, blob, blob_len);
 }
+
+#ifdef REFM_FELUCCA_PLATFORM
+int refm_felucca_storage_save(uint8_t slot) {
+    uint8_t blob[1024];
+    size_t written = 0u;
+    int rc;
+    if (slot >= 4u) return -1;
+    ensure_ready();
+    rc = refm_target_save(&g_refm, blob, sizeof(blob), &written);
+    if (rc != PROJECT_OK) return -2;
+    return refm_platform_storage_save(slot, blob, (uint32_t)written);
+}
+
+int refm_felucca_storage_load(uint8_t slot) {
+    uint8_t blob[1024];
+    int n;
+    if (slot >= 4u) return -1;
+    n = refm_platform_storage_load(slot, blob, sizeof(blob));
+    if (n <= 0) return -2;
+    return refm_target_load(&g_refm, blob, (size_t)n);
+}
+#endif
 
 uint16_t refm_felucca_bpm(void) {
     ensure_ready();
