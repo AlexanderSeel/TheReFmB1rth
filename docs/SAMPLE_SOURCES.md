@@ -1,96 +1,47 @@
 # Sample sources and redistribution policy
 
-TheReFmB1rth must only ship audio assets whose redistribution rights are clear and auditable.
+TheReFmB1rth only ships audio assets whose redistribution rights are clear and auditable.
 
 ## Policy
 
-For every bundled sample keep:
+For every bundled sample keep the source repository, exact commit, original path, declared license, Git blob identity, downloaded SHA-256, processing steps and processed SHA-256. A sample without provenance does not ship.
 
-- source project/repository;
-- exact source URL and commit/tag where possible;
-- original filename;
-- declared license;
-- original SHA-256;
-- processing steps;
-- processed SHA-256;
-- attribution text when required.
+`free`, `royalty-free`, or `free for music production` is not enough for firmware redistribution. User permission is useful for user-owned material, but it cannot grant rights that belong to an unrelated third party. User-supplied samples may be imported locally when the user has the required rights; they are not automatically committed or redistributed by this project.
 
-A sample without provenance does not ship.
+## Approved source manifest
 
-`free`, `royalty-free`, or `free for music production` is **not** enough for firmware redistribution. Many sample packs allow use in songs but forbid repackaging/redistribution of the raw samples.
+`samples/sources.json` is now the allow-list used by `tools/fetch_samples.py`. The fetcher accepts no arbitrary URL, requires a redistribution-compatible license, pins source commits, verifies the exact Git blob bytes, and writes a `build/samples.lock.json` containing SHA-256 hashes for the downloaded files.
 
-## 808 candidates
+### 808 — Fischer/Loveall CC0 set
 
-### Michael Fischer / Edward Loveall TR-808 sample lineage
+Pinned upstream: `tidalcycles/sounds-tr808-fischer@85fbecf1bec32553395625ea659e2a56dfd7c0e1`.
 
-Open-source music projects distribute the Fischer/Loveall TR-808 recordings as public-domain/CC0 material. Candidate upstreams include the TidalCycles ecosystem and mirrors that explicitly retain the public-domain/CC0 provenance.
+The upstream repository carries CC0-1.0 and preserves the Michael Fischer TR-808 sample lineage. The initial approved subset includes kick, snare, clap, closed/open hat and rim. More tone/decay variants can be added to the manifest when they are useful enough to justify firmware space.
 
-Status: **candidate for bundling after exact upstream files + license provenance are pinned and hashes recorded.**
+### 909-style — Octal house-core CC0 set
 
-Use cases if accepted:
+Pinned upstream: `octalmusic/octal-samples@22d222ce36e290ba3792c776811aa9c69dcc8776`.
 
-- cymbal / hi-hat reference or optional sample-backed voices;
-- A/B validation against synthesized 808-style voices.
+The pack is CC0-1.0. Most selected voices are deterministically synthesized from classic 808/909-style recipes; crash and ride are deterministic derivatives of public-domain/Unlicense cymbal recordings with provenance retained by the upstream project. The initial subset includes kick, snare, clap, closed/open hat, crash and ride.
 
-Preferred production direction remains original synthesis for kick, snare, clap, toms and cowbell.
+These are independent redistributable assets. They are not Roland factory samples and must not be presented as such.
 
-## 909 candidates
+## Oramics TR-909 Detroit
 
-### Oramics sampled — TR-909 Detroit
+The Oramics collection is still useful for A/B listening research, but the repository describes collections as having individual licenses and the Detroit collection metadata points to an external source without an explicit collection-level redistribution license in its README. It therefore remains **research-only** until an exact asset license is pinned. It is not part of `samples/sources.json`.
 
-The Oramics `sampled` project is a collection of sampled instruments with open/public-domain-style licenses and includes a `TR-909 Detroit` collection.
+## Fetching approved samples
 
-Status: **preferred 909 sample research candidate.** Before importing, pin the exact collection metadata/license and hashes.
-
-Most useful for:
-
-- ride;
-- crash;
-- potentially hats where a sample-backed implementation gives materially better authenticity/CPU usage.
-
-Kick/snare/toms/clap should first be attempted as original synthesis.
-
-## CC0 synthesis reference
-
-### octalmusic/octal-samples
-
-This project states that its shipped house-core samples are either synthesized from scratch or derived from verified public-domain material and are released under CC0-1.0. Its classic-machine-inspired drum synthesis recipes are valuable references for creating our own redistributable assets.
-
-Status: **strong reference candidate**, subject to respecting its source-code license separately from the generated audio asset license.
-
-## Sources not suitable for bundling by default
-
-SampleRadar/MusicRadar and similar packs may be royalty-free for musical use while explicitly prohibiting redistribution. Do not put such raw samples in firmware, release ZIPs, Git history, or automated fetch scripts unless the license expressly permits redistribution.
-
-Users may optionally import their own legally obtained samples in the future, but those files are not part of TheReFmB1rth.
-
-## Preferred strategy
-
-For v1:
-
-1. synthesize 808-style kick, snare, clap, toms, cowbell and metallic voices in firmware;
-2. synthesize 909-style kick, snare, toms and clap;
-3. benchmark synthesized hats/cymbals against small openly licensed sample assets;
-4. use samples only where they improve sound enough to justify flash storage;
-5. preprocess all assets to the firmware's actual requirements rather than storing oversized WAV files.
-
-## Planned tooling
-
-`tools/fetch_samples.py` will use a manifest rather than arbitrary URLs. Each entry should contain fields similar to:
-
-```json
-{
-  "id": "909-ride",
-  "source": "...",
-  "commit": "...",
-  "license": "Public-Domain",
-  "sha256": "...",
-  "target_rate": 44100,
-  "channels": 1,
-  "trim": true
-}
+```bash
+python3 tools/fetch_samples.py --validate-only
+python3 tools/fetch_samples.py --kit 808
+python3 tools/fetch_samples.py --kit 909
 ```
 
-The fetch step must fail on checksum mismatch.
+Downloaded files live under `build/samples/` and the resolved SHA-256 provenance is written to `build/samples.lock.json`.
 
-Release builds must fail if a bundled audio asset is not represented in the provenance manifest.
+## Firmware strategy
+
+The synthesized 808/909 engines remain available as the zero-asset fallback. Sample-backed voices will be introduced selectively, beginning with hats/cymbals and A/B comparison in the browser. This avoids spending scarce FM-1 flash/RAM on samples that do not materially improve sound quality.
+
+Before any sample is embedded into the `.fwsc` target build, the release gate must verify that every bundled asset appears in the approved manifest and resolved lock and that its processed payload fits the target memory/CPU budget.
