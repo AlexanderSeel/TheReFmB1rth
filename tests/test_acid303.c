@@ -18,36 +18,56 @@ static void test_output_is_bounded(void) {
     }
 }
 
-static void test_slide_converges(void) {
+static void test_cutoff_mapping(void) {
+    acid303_t s; acid303_init(&s);
+    s.cutoff = 0u;
+    assert(acid303_cutoff_hz(&s) >= 240u && acid303_cutoff_hz(&s) <= 300u);
+    s.cutoff = 32767u;
+    assert(acid303_cutoff_hz(&s) >= 2300u && acid303_cutoff_hz(&s) <= 2500u);
+}
+
+static void test_slide_is_legato_and_converges(void) {
     acid303_t s; acid303_init(&s); acid303_set_note(&s, 48, 0, 0);
+    for (int i = 0; i < 100; ++i) acid303_process(&s);
+    int32_t env_before = s.env;
     uint32_t start = s.phase_inc;
     acid303_set_note(&s, 60, 0, 1);
     uint32_t target = s.slide_target_inc;
     assert(target > start);
+    assert(s.env == env_before); /* slide must not retrigger the 303 envelope */
     for (int i = 0; i < 4000; ++i) acid303_process(&s);
     assert(s.phase_inc > start);
     assert(s.phase_inc <= target);
 }
 
-static void test_release_decays(void) {
+static void test_note_off_closes_vca(void) {
     acid303_t s; acid303_init(&s); acid303_set_note(&s, 52, 0, 0);
     for (int i = 0; i < 100; ++i) acid303_process(&s);
     acid303_note_off(&s);
-    for (int i = 0; i < 1000; ++i) acid303_process(&s);
+    for (int i = 0; i < 20000; ++i) acid303_process(&s);
     assert(s.amp == 0);
     assert(s.amp_stage == ACID_ENV_OFF);
 }
 
-static void test_adsr_sustain(void) {
+static void test_accent_sweep_accumulates(void) {
     acid303_t s; acid303_init(&s);
-    s.amp_attack = 30u;
-    s.amp_decay = 20u;
-    s.amp_sustain = 64u;
-    acid303_set_note(&s, 52, 0, 0);
-    assert(s.amp_stage == ACID_ENV_ATTACK);
-    for (int i = 0; i < 12000; ++i) acid303_process(&s);
-    assert(s.amp_stage == ACID_ENV_SUSTAIN || s.amp_stage == ACID_ENV_DECAY);
-    assert(s.amp > 15000 && s.amp < 20000);
+    acid303_set_note(&s, 48, 1, 0);
+    int32_t first = s.accent_sweep;
+    for (int i = 0; i < 1000; ++i) acid303_process(&s);
+    acid303_note_off(&s);
+    acid303_set_note(&s, 48, 1, 0);
+    assert(s.accent_sweep > first);
+}
+
+static void test_saw_and_303_square_are_different(void) {
+    acid303_t a, b; acid303_init(&a); acid303_init(&b);
+    a.square = 0u; b.square = 1u;
+    acid303_set_note(&a, 48, 0, 0); acid303_set_note(&b, 48, 0, 0);
+    int different = 0;
+    for (int i = 0; i < 512; ++i) {
+        if (acid303_process(&a) != acid303_process(&b)) { different = 1; break; }
+    }
+    assert(different);
 }
 
 static void test_lfo_runs_all_shapes(void) {
@@ -67,10 +87,12 @@ static void test_lfo_runs_all_shapes(void) {
 int main(void) {
     test_note_order();
     test_output_is_bounded();
-    test_slide_converges();
-    test_release_decays();
-    test_adsr_sustain();
+    test_cutoff_mapping();
+    test_slide_is_legato_and_converges();
+    test_note_off_closes_vca();
+    test_accent_sweep_accumulates();
+    test_saw_and_303_square_are_different();
     test_lfo_runs_all_shapes();
-    puts("acid303 prototype tests: ok");
+    puts("acid303 circuit-model tests: ok");
     return 0;
 }
