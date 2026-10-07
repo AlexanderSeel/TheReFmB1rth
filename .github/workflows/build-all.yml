@@ -30,6 +30,10 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y emscripten
+      - name: Fetch approved CC0 drum samples
+        run: python3 tools/fetch_samples.py
+      - name: Preprocess compact audition assets
+        run: python3 tools/preprocess_samples.py --rate 22050
       - name: Build shared ReFmB1rth WASM runtime
         run: sh web/emu/build_wasm.sh
       - name: Smoke-check browser harness
@@ -37,11 +41,13 @@ jobs:
           test -s build/wasm/index.html
           test -s build/wasm/refm.js
           test -s build/wasm/refm.wasm
+          test -s build/wasm/sample-manifest.json
+          test -s build/wasm/sample-lock.json
           grep -q "import createRefm from './refm.js'" build/wasm/index.html
           grep -q "_refm_wasm_render" build/wasm/refm.js
-          grep -q "_refm_wasm_midi" build/wasm/refm.js
+          grep -q "_refm_wasm_enable_samples" build/wasm/refm.js
       - name: Record checksums
-        run: sha256sum build/wasm/index.html build/wasm/refm.js build/wasm/refm.wasm > build/wasm/SHA256SUMS
+        run: sha256sum build/wasm/index.html build/wasm/refm.js build/wasm/refm.wasm build/wasm/sample-manifest.json build/wasm/sample-lock.json > build/wasm/SHA256SUMS
       - uses: actions/upload-artifact@v4
         with:
           name: refm-wasm-${{ github.sha }}
@@ -49,6 +55,8 @@ jobs:
             build/wasm/index.html
             build/wasm/refm.js
             build/wasm/refm.wasm
+            build/wasm/sample-manifest.json
+            build/wasm/sample-lock.json
             build/wasm/SHA256SUMS
           if-no-files-found: error
           retention-days: 30
@@ -81,8 +89,7 @@ jobs:
           SDK_DIR="$RUNNER_TEMP/ac79"
           for attempt in 1 2 3; do
             rm -rf "$SDK_DIR"
-            if git -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=120 \
-              clone --depth 1 --single-branch --branch "$SDK_TAG" "$SDK_URL" "$SDK_DIR"; then
+            if git -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=120 clone --depth 1 --single-branch --branch "$SDK_TAG" "$SDK_URL" "$SDK_DIR"; then
               git -C "$SDK_DIR" rev-parse HEAD
               exit 0
             fi
@@ -103,21 +110,16 @@ jobs:
         run: |
           mkdir -p build/target
           "$JIELI_TOOLCHAIN/common/bin/objdump" -t .upstream/felucca/build/felucca.elf > build/target/felucca.syms
-          python3 tools/check_target_budget.py \
-            .upstream/felucca/build/felucca.bin build/target/felucca.syms \
-            --output build/target/target-memory.json
+          python3 tools/check_target_budget.py .upstream/felucca/build/felucca.bin build/target/felucca.syms --output build/target/target-memory.json
       - name: Create and verify experimental release manifest
         run: |
           cp .upstream/felucca/build/felucca.fwsc build/target/TheReFmB1rth-experimental.fwsc
           cp .upstream/felucca/build/felucca.bin build/target/TheReFmB1rth-app.bin
           cp .upstream/felucca/build/loader/ota.bin build/target/ota.bin
           cp .upstream/felucca/.refm-overlay build/target/refm-overlay.txt
-          python3 tools/release_manifest.py build/target/TheReFmB1rth-experimental.fwsc \
-            --commit "${GITHUB_SHA}" --output build/target/manifest.json
-          python3 tools/release_manifest.py build/target/TheReFmB1rth-experimental.fwsc \
-            --verify build/target/manifest.json
-          sha256sum build/target/TheReFmB1rth-experimental.fwsc \
-            build/target/TheReFmB1rth-app.bin build/target/ota.bin > build/target/SHA256SUMS
+          python3 tools/release_manifest.py build/target/TheReFmB1rth-experimental.fwsc --commit "${GITHUB_SHA}" --output build/target/manifest.json
+          python3 tools/release_manifest.py build/target/TheReFmB1rth-experimental.fwsc --verify build/target/manifest.json
+          sha256sum build/target/TheReFmB1rth-experimental.fwsc build/target/TheReFmB1rth-app.bin build/target/ota.bin > build/target/SHA256SUMS
       - uses: actions/upload-artifact@v4
         with:
           name: refm-fm1-experimental-${{ github.sha }}
