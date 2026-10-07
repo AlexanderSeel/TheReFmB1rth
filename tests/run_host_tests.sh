@@ -10,8 +10,8 @@ cc $CFLAGS firmware/proto/midi_transport.c tests/test_midi_transport.c -o build/
 cc $CFLAGS firmware/proto/project_store.c tests/test_project_store.c -o build/host/test_project_store
 cc $CFLAGS firmware/proto/mixer_fx.c tests/test_mixer_fx.c -o build/host/test_mixer_fx
 cc $CFLAGS firmware/proto/drum_machine.c tests/test_drum_machine.c -o build/host/test_drum_machine
-COMMON='firmware/proto/acid303.c firmware/proto/seq16.c firmware/proto/drum_machine.c firmware/proto/mixer_fx.c firmware/proto/midi_transport.c firmware/proto/song.c firmware/proto/project_store.c firmware/proto/groovebox.c'
-FEATURES='firmware/proto/pattern_bank.c firmware/proto/groovebox_pattern.c firmware/proto/midi_router.c firmware/proto/groovebox_midi.c'
+COMMON='firmware/proto/acid303.c firmware/proto/seq16.c firmware/proto/drum_machine.c firmware/proto/mixer_fx.c firmware/proto/midi_transport.c firmware/proto/song.c firmware/proto/project_store.c firmware/proto/pattern_bank.c firmware/proto/groovebox.c'
+FEATURES='firmware/proto/groovebox_pattern.c firmware/proto/midi_router.c firmware/proto/groovebox_midi.c'
 TARGET="$COMMON $FEATURES firmware/integration/refm_target.c"
 cc $CFLAGS $COMMON tests/test_groovebox.c -o build/host/test_groovebox
 cc $CFLAGS firmware/proto/pattern_bank.c tests/test_pattern_bank.c -o build/host/test_pattern_bank
