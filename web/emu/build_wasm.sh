@@ -24,10 +24,12 @@ emcc -O3 -std=c11 $SAMPLE_FLAGS \
   -s ENVIRONMENT=web,worker \
   -s ALLOW_MEMORY_GROWTH=1 \
   -s EXPORTED_RUNTIME_METHODS='["HEAP8","HEAPU8","HEAP16","HEAP32"]' \
-  -s EXPORTED_FUNCTIONS='["_malloc","_free","_refm_wasm_init","_refm_wasm_external_clock","_refm_wasm_midi","_refm_wasm_panic","_refm_wasm_render","_refm_wasm_snapshot","_refm_wasm_snapshot_ptr","_refm_wasm_snapshot_size","_refm_wasm_restore","_refm_wasm_step","_refm_wasm_pattern","_refm_wasm_bpm","_refm_wasm_enable_samples","_refm_wasm_sample_mask","_refm_wasm_select_pattern","_refm_wasm_set_acid_step","_refm_wasm_get_acid_step","_refm_wasm_set_drum_step","_refm_wasm_get_drum_step","_refm_wasm_set_acid_wave","_refm_wasm_set_acid_accent","_refm_wasm_set_acid_drive","_refm_wasm_acid_cutoff_hz","_refm_wasm_set_acid_mod","_refm_wasm_graph"]' \
+  -s EXPORTED_FUNCTIONS='["_malloc","_free","_refm_wasm_init","_refm_wasm_external_clock","_refm_wasm_midi","_refm_wasm_panic","_refm_wasm_render","_refm_wasm_snapshot","_refm_wasm_snapshot_ptr","_refm_wasm_snapshot_size","_refm_wasm_restore","_refm_wasm_step","_refm_wasm_pattern","_refm_wasm_bpm","_refm_wasm_enable_samples","_refm_wasm_sample_mask","_refm_wasm_select_pattern","_refm_wasm_set_acid_step","_refm_wasm_get_acid_step","_refm_wasm_set_drum_step","_refm_wasm_get_drum_step","_refm_wasm_set_acid_wave","_refm_wasm_set_acid_tune","_refm_wasm_set_acid_accent","_refm_wasm_set_acid_drive","_refm_wasm_acid_cutoff_hz","_refm_wasm_set_acid_mod","_refm_wasm_graph"]' \
   -o "$OUT/refm.js"
 cp "$ROOT/web/emu/index.html" "$OUT/index.html"
 cp "$ROOT/web/emu/sample_controls.js" "$OUT/sample_controls.js"
+cp "$ROOT/web/emu/rebirth_skin.css" "$OUT/rebirth_skin.css"
+cp "$ROOT/web/emu/rebirth_skin.js" "$OUT/rebirth_skin.js"
 cp "$ROOT/web/emu/worklet.html" "$OUT/worklet.html"
 cp "$ROOT/web/emu/worklet_client.js" "$OUT/worklet_client.js"
 cp "$ROOT/web/emu/refm_audio_worklet.js" "$OUT/refm_audio_worklet.js"
@@ -35,8 +37,9 @@ python3 - "$OUT/index.html" <<'PY'
 from pathlib import Path
 import sys
 p=Path(sys.argv[1]); s=p.read_text(encoding='utf-8')
+s=s.replace('</head>', '<link rel="stylesheet" href="./rebirth_skin.css"></head>', 1)
 s=s.replace("mod=await createRefm(", "window.__refm=mod=await createRefm(", 1)
-insert='''\n<script type="module">\nimport {installSampleControls} from './sample_controls.js';\nconst wait=()=>window.__refm?installSampleControls(window.__refm):setTimeout(wait,25); wait();\n</script>\n'''
+insert='''\n<script type="module">\nimport {installSampleControls} from './sample_controls.js';\nimport {installRebirthSkin} from './rebirth_skin.js';\nconst wait=()=>window.__refm?(installSampleControls(window.__refm),installRebirthSkin(window.__refm)):setTimeout(wait,25); wait();\n</script>\n'''
 s=s.replace('</body>', insert+'</body>', 1)
 p.write_text(s, encoding='utf-8')
 PY
