@@ -45,7 +45,12 @@
 - [x] initial 808 sample source is pinned to the Fischer/Loveall CC0 repository with per-file Git blob identities
 - [x] initial 909-style sample source is pinned to the Octal CC0 kit with per-file Git blob identities
 - [x] `tools/fetch_samples.py` refuses unapproved licenses/URLs, verifies source blobs and writes downloaded SHA-256 provenance
-- [x] CI validates the sample manifest structure without downloading or redistributing samples
+- [x] deterministic PCM16 preprocessing/downmix/trim/resample pipeline generates auditable C/PCM assets and per-asset SHA-256 metadata
+- [x] allocation-free hybrid drum engine supports per-lane sample playback with synthesized fallback and sample open-hat choking
+- [x] sample-backed WASM audition build can A/B 808 and 909 synth/sample paths without embedding samples in the FM-1 image
+- [x] full browser audition set is measured independently from a conservative FM-1 candidate set
+- [x] `samples/target-candidates.json` and `tools/check_sample_budget.py` enforce a separate target PCM budget before target embedding is even considered
+- [x] AudioWorklet timing lab exists alongside the main WASM lab; its realtime callback consumes buffered stereo blocks and reports underflows
 - [x] native host compilation/tests for target ABI and WASM bridge
 - [x] automated integration tests for the unified render path
 - [x] CI verifies the exact pinned Felucca audio/build integration anchors
@@ -59,17 +64,18 @@
 - [x] complete pinned JieLi/AC79 target compile + link succeeds in GitHub Actions
 - [x] large ReFmB1rth runtime/project work buffers are placed in Felucca's dedicated `.pool` region rather than exhausting 96 KiB general RAM
 - [x] GitHub target build emits machine-readable XIP/RAM/pool usage and refuses release artifacts below conservative headroom thresholds
+- [x] deterministic groovebox render-fingerprint probe is emitted in host CI as the precursor to a locked audio hash gate
 
 **M5 target integration still open:**
 
 - [ ] expose the ReFmB1rth project save/load hooks through the physical FM-1 UI
 - [ ] finish dedicated labels/layout and secondary ACID edit page instead of reusing generic Felucca EDIT card labels
 - [ ] implement the physical FM-1 mixer/song/pattern/drum UI and complete ACID step editing
-- [ ] add sample-backed playback engine and hybrid synth/sample selection; do not embed fetched WAVs until processed-size/CPU/flash gates pass
-- [ ] expand approved sample manifests with processed target formats and committed SHA-256 lock data before release bundling
-- [ ] replace the WASM lab's main-thread `ScriptProcessorNode` with an AudioWorklet-based production browser audio path
+- [ ] listen/measure and explicitly approve the small FM-1 sample candidate set; full browser sample kits must not be copied automatically into target flash
+- [ ] embed only approved target sample candidates and re-run XIP/CPU/audio-underrun gates
+- [ ] move WASM DSP production fully off main-thread scheduling (the current AudioWorklet sink is a buffered timing prototype, not the final Worker/Worklet architecture)
 - [ ] build the full React editor around the validated WASM ABI
-- [ ] add deterministic audio render hashes to CI
+- [ ] lock the deterministic audio render fingerprint after its canonical CI value is captured
 - [ ] add full four-machine CPU-budget/audio-underrun regression measurements on target-equivalent and physical builds
 - [ ] add an explicit stack-watermark/runtime stack gate in addition to the static RAM/pool gate
 
@@ -98,7 +104,7 @@
 **M6 remains intentionally blocked from being called complete until:**
 
 - [ ] inherited Felucca host/update/loader/emulator regression suites are run against the integrated overlay, not only the target build
-- [ ] the browser emulator UI passes with the integrated runtime under AudioWorklet timing
+- [ ] the browser emulator UI passes with the integrated runtime under final Worker/AudioWorklet timing
 - [ ] worst-case CPU/audio-underrun gates pass
 - [ ] runtime stack watermark/headroom is measured under worst-case UI + audio + MIDI activity
 - [ ] return-to-stock and FM-1-transporter recovery preparation is confirmed for the test unit
