@@ -28,7 +28,7 @@ jobs:
           grep -q '#define REFM_APP 1' .upstream/felucca/firmware/src/felucca.c
           grep -q 'refm_platform_storage_save' .upstream/felucca/firmware/src/felucca.c
           grep -q '\*refm_objs' .upstream/felucca/tools/build.py
-      - name: Compile copied ReFmB1rth target sources as separate objects
+      - name: Compile and link copied ReFmB1rth target sources
         run: |
           mkdir -p build/host/overlay
           i=0
@@ -41,3 +41,14 @@ jobs:
               -o "build/host/overlay/refm_$i.o"
             i=$((i+1))
           done < .upstream/felucca/firmware/refm/sources.txt
+          cat > build/host/overlay/platform_stubs.c <<'EOF'
+          #include <stdint.h>
+          int refm_platform_storage_save(uint32_t slot, const void *src, uint32_t len) { (void)slot; (void)src; (void)len; return -1; }
+          int refm_platform_storage_load(uint32_t slot, void *dst, uint32_t max) { (void)slot; (void)dst; (void)max; return -1; }
+          EOF
+          cc -std=c11 -Wall -Wextra -Werror -O2 \
+            -I.upstream/felucca/firmware/refm/proto \
+            -I.upstream/felucca/firmware/refm/integration \
+            tests/test_felucca_bridge.c build/host/overlay/platform_stubs.c \
+            build/host/overlay/refm_*.o -o build/host/overlay/test_overlay_link
+          build/host/overlay/test_overlay_link
