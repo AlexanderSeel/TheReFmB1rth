@@ -5,7 +5,6 @@
   "candidates": [
     {"kit": "909", "role": "closed_hat"},
     {"kit": "909", "role": "open_hat"},
-    {"kit": "909", "role": "crash"},
     {"kit": "909", "role": "ride"}
   ]
 }
