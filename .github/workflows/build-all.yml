@@ -8,6 +8,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: build-all-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   host:
     name: Host tests
@@ -27,7 +31,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y emscripten
       - name: Build shared ReFmB1rth WASM runtime
-        run: web/emu/build_wasm.sh
+        run: sh web/emu/build_wasm.sh
       - name: Record checksums
         run: sha256sum build/wasm/refm.js build/wasm/refm.wasm > build/wasm/SHA256SUMS
       - uses: actions/upload-artifact@v4
