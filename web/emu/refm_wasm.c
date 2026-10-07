@@ -11,7 +11,7 @@
 #endif
 
 static refm_target_t vm;
-static uint8_t project_buffer[2048];
+static uint8_t project_buffer[PROJECT_STORE_MAX_PAYLOAD];
 static size_t project_size;
 
 REFM_EXPORT void refm_wasm_init(uint16_t bpm) {
