@@ -25,18 +25,22 @@
 - [x] native host compilation/tests for target ABI and WASM bridge
 - [x] automated integration tests for the unified render path
 - [x] CI verifies the exact pinned Felucca audio/build integration anchors
+- [x] deterministic overlay patches Felucca `audio_block()` to the ReFmB1rth Q15 renderer
+- [x] Felucca USB and TRS MIDI converge through `midi_enqueue()` and are mirrored into the ReFmB1rth MIDI path
+- [x] ReFmB1rth is compiled as isolated target objects to avoid Felucca/internal C namespace collisions
+- [x] ReFmB1rth project slots are wired to Felucca's CRC-checked A/B atomic storage mechanism
+- [x] copied target sources compile cleanly with strict host warnings in CI after the overlay is applied
 
 **M5 target integration still open:**
 
 - [ ] store all A–H pattern-bank data in the production project format, not only active runtime state
 - [ ] connect quantized song changes directly to pattern-bank loading
-- [ ] integrate `refm_target_render_q15()` into Felucca's real `audio_block()`/I2S path
-- [ ] bind project save/load to Felucca flash sectors atomically
-- [ ] feed Felucca USB/TRS MIDI byte sources into `refm_target_midi_byte()`
+- [ ] expose the ReFmB1rth project save/load hooks through the physical FM-1 UI
 - [ ] implement the physical FM-1 mixer/song/pattern UI
 - [ ] add the browser UI/audio-worklet shell around the new WASM bridge
 - [ ] build the Emscripten artifact in CI and add deterministic render hashes
 - [ ] add full four-machine CPU-budget/underrun regression measurements on target-equivalent builds
+- [ ] run the complete JieLi target compile/link and resolve XIP/RAM/pool placement
 
 ## M6 — hardware beta
 
@@ -52,6 +56,8 @@
 - [x] automated negative tests for tampering/wrong-device/missing-confirmation
 - [x] Python safety tests execute under the actual CI `unittest` runner
 - [x] pinned Felucca commit and source integration anchors validated on every CI run
+- [x] overlay application is deterministic and refuses a non-pinned Felucca checkout
+- [x] target-side audio/MIDI/storage integration remains behind the guarded overlay/build process; CI never flashes hardware
 
 **M6 remains intentionally blocked from being called complete until:**
 
