@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "refm_target.h"
+#include "../proto/ui_graph_model.h"
 #include <stddef.h>
 #include <stdint.h>
 
@@ -20,6 +21,13 @@
 #define REFM_POOL
 #endif
 
+enum {
+    REFM_UI_ADSR = 1,
+    REFM_UI_LFO = 2,
+    REFM_UI_LFO_FILTER = 3,
+    REFM_UI_FILTER = 4
+};
+
 static refm_target_t g_refm REFM_POOL;
 static uint8_t g_refm_ready;
 static uint8_t g_external_clock_seen;
@@ -29,6 +37,12 @@ static uint8_t g_project_io[REFM_PROJECT_IO_CAPACITY] REFM_POOL;
 extern int refm_platform_storage_save(uint32_t slot, const void *src, uint32_t len);
 extern int refm_platform_storage_load(uint32_t slot, void *dst, uint32_t max);
 #endif
+
+static uint8_t clamp_u7(int32_t v) {
+    if (v < 0) return 0u;
+    if (v > 127) return 127u;
+    return (uint8_t)v;
+}
 
 static void ensure_ready(void) {
     if (!g_refm_ready) {
@@ -90,6 +104,65 @@ void refm_felucca_use_internal_clock(uint16_t bpm) {
 void refm_felucca_panic(void) {
     ensure_ready();
     refm_target_panic(&g_refm);
+}
+
+/* Called by the pinned Felucca UI overlay after a physical encoder edit. */
+void refm_felucca_ui_param(uint8_t track, uint8_t kind, uint8_t slot, int16_t value) {
+    acid303_t *a;
+    uint8_t v;
+    if (track >= 2u) return;
+    ensure_ready();
+    a = &g_refm.groovebox.acid[track];
+    v = clamp_u7(value);
+    switch (kind) {
+    case REFM_UI_ADSR:
+        if (slot == 0u) a->amp_attack = v;
+        else if (slot == 1u) a->amp_decay = v;
+        else if (slot == 2u) a->amp_sustain = v;
+        else if (slot == 3u) a->amp_release = v;
+        break;
+    case REFM_UI_LFO:
+        if (slot == 0u) a->lfo_rate = v;
+        else if (slot == 1u) a->lfo_shape = (uint8_t)(v & 3u);
+        else if (slot == 2u) a->lfo_phase = (uint32_t)v << 25;
+        break;
+    case REFM_UI_LFO_FILTER: {
+        int32_t n = value < 0 ? -(int32_t)value : (int32_t)value;
+        if (n > 64) n = 64;
+        a->lfo_amount = (uint8_t)(n * 127 / 64);
+        break;
+    }
+    case REFM_UI_FILTER:
+        if (slot == 0u) a->cutoff = (uint16_t)((uint32_t)v * 30000u / 127u);
+        else if (slot == 1u) a->resonance = (uint16_t)((uint32_t)v * 30000u / 127u);
+        else if (slot == 2u) a->env_mod = (uint16_t)((uint32_t)v * 30000u / 127u);
+        else if (slot == 3u) a->decay = (uint16_t)((uint32_t)v * 32767u / 127u);
+        break;
+    default:
+        break;
+    }
+}
+
+int refm_felucca_ui_curve(uint8_t track, uint8_t kind, int16_t *out, uint32_t count) {
+    acid303_t *a;
+    ui_graph_curve_t g;
+    uint32_t i;
+    if (track >= 2u || !out || count < UI_GRAPH_POINTS) return 0;
+    ensure_ready();
+    a = &g_refm.groovebox.acid[track];
+    if (kind == REFM_UI_ADSR) {
+        ui_graph_adsr(&g, a->amp_attack, a->amp_decay, a->amp_sustain, a->amp_release);
+    } else if (kind == REFM_UI_LFO) {
+        ui_graph_lfo(&g, (ui_lfo_shape_t)(a->lfo_shape & 3u), (uint8_t)(a->lfo_phase >> 24), a->lfo_amount);
+    } else if (kind == REFM_UI_FILTER) {
+        ui_graph_filter(&g, (uint8_t)((uint32_t)a->cutoff * 127u / 30000u),
+                        (uint8_t)((uint32_t)a->resonance * 127u / 30000u),
+                        (uint8_t)((uint32_t)a->env_mod * 127u / 30000u));
+    } else {
+        return 0;
+    }
+    for (i = 0; i < UI_GRAPH_POINTS; ++i) out[i] = g.y[i];
+    return UI_GRAPH_POINTS;
 }
 
 int refm_felucca_save(uint8_t *out, size_t capacity, size_t *written) {
