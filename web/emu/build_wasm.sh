@@ -27,5 +27,15 @@ emcc -O3 -std=c11 $SAMPLE_FLAGS \
   -s EXPORTED_FUNCTIONS='["_malloc","_free","_refm_wasm_init","_refm_wasm_external_clock","_refm_wasm_midi","_refm_wasm_panic","_refm_wasm_render","_refm_wasm_snapshot","_refm_wasm_snapshot_ptr","_refm_wasm_snapshot_size","_refm_wasm_restore","_refm_wasm_step","_refm_wasm_pattern","_refm_wasm_bpm","_refm_wasm_enable_samples","_refm_wasm_sample_mask","_refm_wasm_select_pattern","_refm_wasm_set_acid_step","_refm_wasm_get_acid_step","_refm_wasm_set_drum_step","_refm_wasm_get_drum_step","_refm_wasm_set_acid_mod","_refm_wasm_graph"]' \
   -o "$OUT/refm.js"
 cp "$ROOT/web/emu/index.html" "$OUT/index.html"
+cp "$ROOT/web/emu/sample_controls.js" "$OUT/sample_controls.js"
+python3 - "$OUT/index.html" <<'PY'
+from pathlib import Path
+import sys
+p=Path(sys.argv[1]); s=p.read_text(encoding='utf-8')
+s=s.replace("mod=await createRefm(", "window.__refm=mod=await createRefm(", 1)
+insert='''\n<script type="module">\nimport {installSampleControls} from './sample_controls.js';\nconst wait=()=>window.__refm?installSampleControls(window.__refm):setTimeout(wait,25); wait();\n</script>\n'''
+s=s.replace('</body>', insert+'</body>', 1)
+p.write_text(s, encoding='utf-8')
+PY
 echo "WASM groovebox built: $OUT/index.html + refm.js + refm.wasm"
 if [ -n "$SAMPLE_SRC" ]; then echo "Bundled audition samples: enabled"; else echo "Bundled audition samples: not present (synth fallback)"; fi
