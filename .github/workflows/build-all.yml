@@ -73,9 +73,17 @@ jobs:
           JIELI_TOOLCHAIN: ${{ runner.temp }}/jieli/toolchain
           AC79_SDK: ${{ runner.temp }}/ac79
         run: ./build.sh
-      - name: Create and verify experimental release manifest
+      - name: Enforce FM-1 target memory budgets
+        env:
+          JIELI_TOOLCHAIN: ${{ runner.temp }}/jieli/toolchain
         run: |
           mkdir -p build/target
+          "$JIELI_TOOLCHAIN/common/bin/objdump" -t .upstream/felucca/build/felucca.elf > build/target/felucca.syms
+          python3 tools/check_target_budget.py \
+            .upstream/felucca/build/felucca.bin build/target/felucca.syms \
+            --output build/target/target-memory.json
+      - name: Create and verify experimental release manifest
+        run: |
           cp .upstream/felucca/build/felucca.fwsc build/target/TheReFmB1rth-experimental.fwsc
           cp .upstream/felucca/build/felucca.bin build/target/TheReFmB1rth-app.bin
           cp .upstream/felucca/build/loader/ota.bin build/target/ota.bin
@@ -96,5 +104,7 @@ jobs:
             build/target/manifest.json
             build/target/refm-overlay.txt
             build/target/SHA256SUMS
+            build/target/target-memory.json
+            build/target/felucca.syms
           if-no-files-found: error
           retention-days: 14
