@@ -22,7 +22,8 @@ jobs:
         run: |
           test -s .upstream/felucca/.refm-overlay
           grep -q 'refm_felucca_audio_block(out, n);' .upstream/felucca/firmware/src/audio.c
-          grep -q 'refm_felucca_midi_packet(pkt);' .upstream/felucca/firmware/src/usb.c
+          grep -q 'REFM_MIRROR_MIDI(pkt);' .upstream/felucca/firmware/src/usb.c
+          grep -q '#define REFM_APP 1' .upstream/felucca/firmware/src/felucca.c
           grep -q 'refm_platform_storage_save' .upstream/felucca/firmware/src/felucca.c
           grep -q '\*refm_objs' .upstream/felucca/tools/build.py
       - name: Compile copied ReFmB1rth target sources as separate objects
