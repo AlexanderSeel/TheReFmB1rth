@@ -5,7 +5,7 @@
 This does not flash hardware. It prepares a build tree by copying the shared
 runtime into Felucca, compiling each ReFmB1rth C source as a separate object,
 switching the Felucca audio path to the ReFmB1rth renderer, mirroring normalized
-USB/TRS MIDI, and exposing Felucca's proven atomic A/B project storage.
+USB/TRS MIDI in the application only, and exposing Felucca's atomic A/B storage.
 """
 from __future__ import annotations
 
@@ -68,9 +68,20 @@ def patch_midi(dst: Path) -> None:
     replace_once(
         usb,
         "static int midi_enqueue(uint32_t pkt, uint32_t source)\n{\n",
+        "#ifdef REFM_APP\n"
         "extern void refm_felucca_midi_packet(uint32_t packet);\n"
+        "#define REFM_MIRROR_MIDI(pkt) refm_felucca_midi_packet(pkt)\n"
+        "#else\n"
+        "#define REFM_MIRROR_MIDI(pkt) ((void)0)\n"
+        "#endif\n"
         "static int midi_enqueue(uint32_t pkt, uint32_t source)\n{\n"
-        "    refm_felucca_midi_packet(pkt);\n",
+        "    REFM_MIRROR_MIDI(pkt);\n",
+    )
+    felucca = dst / "firmware" / "src" / "felucca.c"
+    replace_once(
+        felucca,
+        '#include "usb.c"\n',
+        '#define REFM_APP 1\n#include "usb.c"\n#undef REFM_APP\n',
     )
 
 
