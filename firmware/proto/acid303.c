@@ -10,6 +10,7 @@
 #include <string.h>
 
 #define SR 44100u
+#define OS_SR 88200u
 #define Q15_ONE 32767
 #define Q20_ONE 1048576ll
 
@@ -84,10 +85,12 @@ static int32_t resonance_skew_q15(uint16_t resonance) {
     return (int32_t)lut[i] + (int32_t)(((int64_t)((int32_t)lut[i+1] - lut[i]) * frac) >> 15);
 }
 
+/* Open303's TB coefficient shape evaluated for the 2x internal sample rate. */
 static int32_t tb_b0_q15(uint32_t hz) {
     if (hz < 80u) hz = 80u;
     if (hz > 12000u) hz = 12000u;
-    int64_t fx = ((int64_t)hz << 20) / 62367ll;
+    /* OS_SR * sqrt(2) ~= 124734. */
+    int64_t fx = ((int64_t)hz << 20) / 124734ll;
     int64_t fx2 = (fx * fx) >> 20;
     int64_t num = 477ll + ((6493013ll * fx) >> 20);
     int64_t den = Q20_ONE + ((12958674ll * fx) >> 20) + ((4630128ll * fx2) >> 20);
@@ -98,7 +101,7 @@ static int32_t tb_b0_q15(uint32_t hz) {
 static int32_t tb_kbase_q12(uint32_t hz) {
     if (hz < 80u) hz = 80u;
     if (hz > 12000u) hz = 12000u;
-    int64_t x = ((int64_t)hz << 20) / 62367ll;
+    int64_t x = ((int64_t)hz << 20) / 124734ll;
     int64_t y = 4096ll;
     y = 29485874ll + ((y * x) >> 20);
     y = -23911595ll + ((y * x) >> 20);
@@ -170,11 +173,40 @@ int16_t acid303_lfo_value(const acid303_t *s) {
     }
 }
 
-static int32_t oscillator(acid303_t *s) {
-    s->phase += s->phase_inc;
-    int32_t saw = (int32_t)(s->phase >> 16) - 32768;
-    if (!s->square) return saw;
-    return (s->phase < 0xA6666666u) ? 25000 : -32000;
+/* Fixed-point PolyBLEP correction in Q15. phase and dt are Q32 cycles.
+   This removes most of the hard-discontinuity aliasing without tables/libm. */
+static int32_t poly_blep_q15(uint32_t phase, uint32_t dt) {
+    if (!dt) return 0;
+    if (phase < dt) {
+        int32_t x = (int32_t)(((uint64_t)phase << 15) / dt);
+        /* 2x - x^2 - 1 */
+        return (x << 1) - (int32_t)(((int64_t)x * x) >> 15) - 32768;
+    }
+    if (phase > 0xffffffffu - dt) {
+        uint32_t remain = 0xffffffffu - phase;
+        int32_t x = -(int32_t)(((uint64_t)remain << 15) / dt);
+        /* x^2 + 2x + 1, x in [-1,0] */
+        return (int32_t)(((int64_t)x * x) >> 15) + (x << 1) + 32768;
+    }
+    return 0;
+}
+
+static int32_t oscillator_substep(acid303_t *s, uint32_t sub_inc) {
+    const uint32_t duty = 0xA6666666u; /* intentionally asymmetric ~65% */
+    s->phase += sub_inc;
+    int32_t blep_wrap = poly_blep_q15(s->phase, sub_inc);
+    if (!s->square) {
+        int32_t saw = (int32_t)(s->phase >> 16) - 32768;
+        return clamp32((int64_t)saw - blep_wrap, -32768, 32767);
+    }
+
+    int32_t sq = s->phase < duty ? 25000 : -32000;
+    /* Smooth both the cycle wrap and the falling duty-cycle edge. */
+    sq += (int32_t)(((int64_t)blep_wrap * 57000) >> 16);
+    uint32_t rel = s->phase - duty;
+    int32_t blep_duty = poly_blep_q15(rel, sub_inc);
+    sq -= (int32_t)(((int64_t)blep_duty * 57000) >> 16);
+    return clamp32(sq, -32768, 32767);
 }
 
 static void slide_step(acid303_t *s) {
@@ -197,11 +229,12 @@ static void envelope_step(acid303_t *s) {
 
 static int32_t feedback_highpass(acid303_t *s, int32_t x) {
     int32_t d = x - s->resonance_hp_lp;
-    s->resonance_hp_lp += (int32_t)(((int64_t)d * 685) >> 15);
+    /* ~150 Hz at the 88.2 kHz internal ladder rate. */
+    s->resonance_hp_lp += (int32_t)(((int64_t)d * 346) >> 15);
     return x - s->resonance_hp_lp;
 }
 
-static int32_t teebee_ladder(acid303_t *s, int32_t in, uint32_t cutoff_hz) {
+static int32_t teebee_ladder_substep(acid303_t *s, int32_t in, uint32_t cutoff_hz) {
     int32_t b0 = tb_b0_q15(cutoff_hz);
     int32_t r = resonance_skew_q15(s->resonance);
     int32_t kbase = tb_kbase_q12(cutoff_hz);
@@ -230,17 +263,15 @@ static int32_t output_highpass(acid303_t *s, int32_t x) {
     return y;
 }
 
-int32_t acid303_process(acid303_t *s) {
-    slide_step(s);
-    if (s->lfo_amount) s->lfo_phase += 4870u + (uint32_t)s->lfo_rate * 15310u;
-    envelope_step(s);
-    int32_t osc = oscillator(s);
+static uint32_t modulated_cutoff(acid303_t *s) {
     uint32_t fc = acid303_cutoff_hz(s);
     fc += (uint32_t)(((int64_t)s->env * s->env_mod * 6200) >> 30);
     if (s->accented || s->accent_sweep > 0) {
         int32_t sweep = (int32_t)(((int64_t)s->accent_sweep * s->accent) >> 15);
-        sweep = (int32_t)(((int64_t)sweep * (8192 + s->resonance)) >> 15);
-        if (sweep > 0) fc += (uint32_t)(((int64_t)sweep * 5200) >> 15);
+        /* Accent/filter interaction increases with resonance, but is intentionally
+           bounded to avoid the exaggerated modern-synth 'laser' sweep. */
+        sweep = (int32_t)(((int64_t)sweep * (7000 + (s->resonance * 3u) / 4u)) >> 15);
+        if (sweep > 0) fc += (uint32_t)(((int64_t)sweep * 4700) >> 15);
     }
     if (s->lfo_amount) {
         int16_t lfo = acid303_lfo_value(s);
@@ -249,11 +280,29 @@ int32_t acid303_process(acid303_t *s) {
         fc = (uint32_t)(m < 80 ? 80 : m > 12000 ? 12000 : m);
     }
     if (fc > 12000u) fc = 12000u;
-    int32_t y = teebee_ladder(s, osc, fc);
+    return fc;
+}
+
+int32_t acid303_process(acid303_t *s) {
+    slide_step(s);
+    if (s->lfo_amount) s->lfo_phase += 4870u + (uint32_t)s->lfo_rate * 15310u;
+    envelope_step(s);
+
+    uint32_t fc = modulated_cutoff(s);
+    uint32_t sub_inc = s->phase_inc >> 1;
+    if (!sub_inc && s->phase_inc) sub_inc = 1u;
+
+    /* 2x oscillator/filter processing dramatically reduces harsh high-frequency
+       aliases and improves stability/shape near strong resonance. The two
+       internal samples are averaged before the VCA/output stage. */
+    int32_t y0 = teebee_ladder_substep(s, oscillator_substep(s, sub_inc), fc);
+    int32_t y1 = teebee_ladder_substep(s, oscillator_substep(s, sub_inc), fc);
+    int32_t y = (y0 + y1) / 2;
+
     int32_t gain = s->amp;
     if (s->accented || s->accent_env > 0) {
         int32_t ag = (int32_t)(((int64_t)s->accent_env * s->accent) >> 16);
-        gain = clamp32((int64_t)gain + ag, 0, 42000);
+        gain = clamp32((int64_t)gain + ag, 0, 41000);
     }
     y = (int32_t)(((int64_t)y * gain) >> 15);
     if (s->drive) {
