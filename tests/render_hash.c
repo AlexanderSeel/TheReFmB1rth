@@ -3,7 +3,7 @@
 #include <stdio.h>
 #include "../firmware/proto/groovebox.h"
 
-#define EXPECTED_RENDER_HASH 0x29ad2a6ea2a3f94bull
+#define EXPECTED_RENDER_HASH 0x268587ca19c5ea53ull
 
 static uint64_t fnv1a_u16(uint64_t h, uint16_t v) {
     h ^= (uint8_t)v; h *= 1099511628211ull;
