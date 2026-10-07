@@ -1,0 +1,7 @@
+// SPDX-License-Identifier: GPL-3.0-only
+#include "ui_graph_model.h"
+static int32_t clampi(int32_t v,int32_t lo,int32_t hi){return v<lo?lo:v>hi?hi:v;}
+void ui_graph_adsr(ui_graph_curve_t *g,uint8_t a,uint8_t d,uint8_t s,uint8_t r){ int ai=2+a*18/127, di=2+d*18/127, ri=2+r*20/127; int si=UI_GRAPH_POINTS-ri; int32_t sus=s*32767/127; for(int x=0;x<UI_GRAPH_POINTS;x++){int32_t y;if(x<ai)y=x*32767/ai; else if(x<ai+di)y=32767-(32767-sus)*(x-ai)/di; else if(x<si)y=sus; else y=sus*(UI_GRAPH_POINTS-1-x)/(ri?ri:1); g->y[x]=(int16_t)clampi(y,0,32767);} }
+static int16_t tri(uint32_t p){ uint32_t q=p&0xffffu; int32_t v=q<32768u?(int32_t)q*2:(int32_t)(65535u-q)*2; return (int16_t)(v-32768); }
+void ui_graph_lfo(ui_graph_curve_t *g,ui_lfo_shape_t sh,uint8_t phase,uint8_t amount){ uint32_t p=(uint32_t)phase<<8; int32_t amp=amount*32767/127; for(int x=0;x<UI_GRAPH_POINTS;x++,p+=2048u){ int32_t v; uint32_t q=p&0xffffu; switch(sh){case UI_LFO_TRI:v=tri(q);break;case UI_LFO_SAW:v=(int32_t)q-32768;break;case UI_LFO_SQUARE:v=q<32768u?32767:-32768;break;default:{int32_t t=tri(q); v=(t*(49152-(t<0?-t:t)/2))/49152; break;}} g->y[x]=(int16_t)clampi((v*amp)/32767,-32768,32767);} }
+void ui_graph_filter(ui_graph_curve_t *g,uint8_t cutoff,uint8_t resonance,uint8_t env){ int32_t c=4+cutoff*54/127; int32_t q=resonance*12000/127; int32_t boost=env*5000/127; for(int x=0;x<UI_GRAPH_POINTS;x++){ int32_t dx=x-c; int32_t roll=dx<=0?28000:28000-(dx*dx*36); int32_t peak=(q*(10-(dx<0?-dx:dx)))/10; if(peak<0)peak=0; int32_t y=roll+peak+boost/4; g->y[x]=(int16_t)clampi(y,0,32767);} }
