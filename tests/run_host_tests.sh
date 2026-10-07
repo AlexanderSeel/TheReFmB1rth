@@ -10,14 +10,10 @@ cc $CFLAGS firmware/proto/midi_transport.c tests/test_midi_transport.c -o build/
 cc $CFLAGS firmware/proto/project_store.c tests/test_project_store.c -o build/host/test_project_store
 cc $CFLAGS firmware/proto/mixer_fx.c tests/test_mixer_fx.c -o build/host/test_mixer_fx
 cc $CFLAGS firmware/proto/drum_machine.c tests/test_drum_machine.c -o build/host/test_drum_machine
-cc $CFLAGS firmware/proto/acid303.c firmware/proto/seq16.c firmware/proto/drum_machine.c firmware/proto/mixer_fx.c firmware/proto/midi_transport.c firmware/proto/song.c firmware/proto/project_store.c firmware/proto/groovebox.c tests/test_groovebox.c -o build/host/test_groovebox
-build/host/test_acid303
-build/host/test_seq16
-build/host/test_ui_graph_model
-build/host/test_song
-build/host/test_midi_transport
-build/host/test_project_store
-build/host/test_mixer_fx
-build/host/test_drum_machine
-build/host/test_groovebox
+COMMON='firmware/proto/acid303.c firmware/proto/seq16.c firmware/proto/drum_machine.c firmware/proto/mixer_fx.c firmware/proto/midi_transport.c firmware/proto/song.c firmware/proto/project_store.c firmware/proto/groovebox.c'
+cc $CFLAGS $COMMON tests/test_groovebox.c -o build/host/test_groovebox
+cc $CFLAGS firmware/proto/pattern_bank.c tests/test_pattern_bank.c -o build/host/test_pattern_bank
+cc $CFLAGS firmware/proto/drum_machine.c firmware/proto/midi_router.c tests/test_midi_router.c -o build/host/test_midi_router
+cc $CFLAGS $COMMON firmware/proto/pattern_bank.c firmware/proto/groovebox_pattern.c firmware/proto/midi_router.c firmware/proto/groovebox_midi.c tests/test_groovebox_features.c -o build/host/test_groovebox_features
+for t in test_acid303 test_seq16 test_ui_graph_model test_song test_midi_transport test_project_store test_mixer_fx test_drum_machine test_groovebox test_pattern_bank test_midi_router test_groovebox_features; do build/host/$t; done
 python3 -m unittest discover -s tests -p 'test_*.py'

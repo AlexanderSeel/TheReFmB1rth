@@ -1,0 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+#include "pattern_bank.h"
+#include <string.h>
+void pattern_bank_clear(pattern_bank_t*b,uint8_t p){if(p>=PATTERN_BANK_COUNT)return;for(unsigned t=0;t<PATTERN_ACID_TRACKS;t++){memset(b->acid[t][p],0,sizeof(b->acid[t][p]));for(unsigned s=0;s<SEQ16_STEPS;s++)b->acid[t][p][s].probability=100u;}for(unsigned d=0;d<PATTERN_DRUM_TRACKS;d++){memset(b->drum_hits[d][p],0,sizeof(b->drum_hits[d][p]));memset(b->drum_accents[d][p],0,sizeof(b->drum_accents[d][p]));}}
+void pattern_bank_init(pattern_bank_t*b){memset(b,0,sizeof(*b));for(unsigned p=0;p<PATTERN_BANK_COUNT;p++)pattern_bank_clear(b,(uint8_t)p);}void pattern_bank_copy(pattern_bank_t*b,uint8_t dst,uint8_t src){if(dst>=PATTERN_BANK_COUNT||src>=PATTERN_BANK_COUNT)return;for(unsigned t=0;t<PATTERN_ACID_TRACKS;t++)memcpy(b->acid[t][dst],b->acid[t][src],sizeof(b->acid[t][dst]));for(unsigned d=0;d<PATTERN_DRUM_TRACKS;d++){memcpy(b->drum_hits[d][dst],b->drum_hits[d][src],sizeof(b->drum_hits[d][dst]));memcpy(b->drum_accents[d][dst],b->drum_accents[d][src],sizeof(b->drum_accents[d][dst]));}}
