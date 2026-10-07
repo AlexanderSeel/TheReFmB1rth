@@ -60,8 +60,6 @@ static void test_lfo_runs_all_shapes(void) {
         for (int i = 0; i < 4096; ++i) acid303_process(&s);
         int16_t later = acid303_lfo_value(&s);
         if (later != first) changed++;
-        assert(first >= -32768 && first <= 32767);
-        assert(later >= -32768 && later <= 32767);
     }
     assert(changed == 4);
 }
