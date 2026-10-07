@@ -34,32 +34,44 @@ jobs:
         run: python3 tools/fetch_samples.py
       - name: Preprocess compact audition assets
         run: python3 tools/preprocess_samples.py --rate 22050
+      - name: Enforce conservative FM-1 sample candidate budget
+        run: python3 tools/check_sample_budget.py build/samples/processed/manifest.json --output build/wasm/target-sample-budget.json
       - name: Build shared ReFmB1rth WASM runtime
         run: sh web/emu/build_wasm.sh
       - name: Smoke-check browser harness
         run: |
           test -s build/wasm/index.html
+          test -s build/wasm/worklet.html
+          test -s build/wasm/worklet_client.js
+          test -s build/wasm/refm_audio_worklet.js
           test -s build/wasm/refm.js
           test -s build/wasm/refm.wasm
           test -s build/wasm/sample_controls.js
           test -s build/wasm/sample-manifest.json
           test -s build/wasm/sample-lock.json
+          test -s build/wasm/target-sample-budget.json
           grep -q "import createRefm from './refm.js'" build/wasm/index.html
           grep -q "sample_controls.js" build/wasm/index.html
+          grep -q "ReFmWorkletClient" build/wasm/worklet.html
+          grep -q "registerProcessor('refm-audio'" build/wasm/refm_audio_worklet.js
           grep -q "_refm_wasm_render" build/wasm/refm.js
           grep -q "_refm_wasm_enable_samples" build/wasm/refm.js
       - name: Record checksums
-        run: sha256sum build/wasm/index.html build/wasm/refm.js build/wasm/refm.wasm build/wasm/sample_controls.js build/wasm/sample-manifest.json build/wasm/sample-lock.json > build/wasm/SHA256SUMS
+        run: sha256sum build/wasm/index.html build/wasm/worklet.html build/wasm/worklet_client.js build/wasm/refm_audio_worklet.js build/wasm/refm.js build/wasm/refm.wasm build/wasm/sample_controls.js build/wasm/sample-manifest.json build/wasm/sample-lock.json build/wasm/target-sample-budget.json > build/wasm/SHA256SUMS
       - uses: actions/upload-artifact@v4
         with:
           name: refm-wasm-${{ github.sha }}
           path: |
             build/wasm/index.html
+            build/wasm/worklet.html
+            build/wasm/worklet_client.js
+            build/wasm/refm_audio_worklet.js
             build/wasm/refm.js
             build/wasm/refm.wasm
             build/wasm/sample_controls.js
             build/wasm/sample-manifest.json
             build/wasm/sample-lock.json
+            build/wasm/target-sample-budget.json
             build/wasm/SHA256SUMS
           if-no-files-found: error
           retention-days: 30
