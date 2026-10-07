@@ -2,10 +2,10 @@
 # SPDX-License-Identifier: GPL-3.0-only
 """Apply TheReFmB1rth to the exact pinned Felucca checkout.
 
-This does not flash hardware.  It prepares a build tree by copying the shared
-runtime into Felucca, compiling it as a separate object, and switching the
-Felucca audio path to the ReFmB1rth block renderer while mirroring normalized
-USB/TRS MIDI packets into the ReFmB1rth MIDI parser.
+This does not flash hardware. It prepares a build tree by copying the shared
+runtime into Felucca, compiling it as a separate object, switching the Felucca
+audio path to the ReFmB1rth renderer, mirroring normalized USB/TRS MIDI, and
+exposing Felucca's proven atomic A/B project storage through a narrow ABI.
 """
 from __future__ import annotations
 
@@ -75,6 +75,13 @@ def patch_midi(dst: Path) -> None:
     )
 
 
+def patch_storage(dst: Path) -> None:
+    felucca = dst / "firmware" / "src" / "felucca.c"
+    anchor = '#include "storage.c"\n'
+    wrappers = '''#include "storage.c"\n/* ReFmB1rth project slots reuse Felucca's CRC-checked A/B commit protocol. */\nint refm_platform_storage_save(uint32_t slot, const void *src, uint32_t len)\n{\n    if (slot >= 4u) return -1;\n    return st_save(OBJ_PROJECT0 + slot, src, len);\n}\nint refm_platform_storage_load(uint32_t slot, void *dst, uint32_t max)\n{\n    if (slot >= 4u) return -1;\n    return st_load(OBJ_PROJECT0 + slot, dst, max);\n}\n'''
+    replace_once(felucca, anchor, wrappers)
+
+
 def patch_build(dst: Path) -> None:
     build = dst / "tools" / "build.py"
     text = build.read_text()
@@ -83,7 +90,7 @@ def patch_build(dst: Path) -> None:
         raise SystemExit("build.py compile anchor changed")
     text = text.replace(
         compile_anchor,
-        '    tc("cc", *flags, "-Ifirmware/refm/proto", "-Ifirmware/refm/integration", "-c",\n'
+        '    tc("cc", *flags, "-DREFM_FELUCCA_PLATFORM=1", "-Ifirmware/refm/proto", "-Ifirmware/refm/integration", "-c",\n'
         '       FW / "refm" / "refm_unit.c", "-o", OUT / "refm.o")\n'
         + compile_anchor,
         1,
@@ -99,6 +106,7 @@ def write_stamp(dst: Path) -> None:
     files = [
         dst / "firmware" / "src" / "audio.c",
         dst / "firmware" / "src" / "usb.c",
+        dst / "firmware" / "src" / "felucca.c",
         dst / "tools" / "build.py",
         dst / "firmware" / "refm" / "refm_unit.c",
     ]
@@ -119,6 +127,7 @@ def main() -> int:
     copy_runtime(dst)
     patch_audio(dst)
     patch_midi(dst)
+    patch_storage(dst)
     patch_build(dst)
     write_stamp(dst)
     print(f"TheReFmB1rth overlay applied to Felucca {PIN}")
