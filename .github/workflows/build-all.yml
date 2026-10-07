@@ -41,13 +41,15 @@ jobs:
           test -s build/wasm/index.html
           test -s build/wasm/refm.js
           test -s build/wasm/refm.wasm
+          test -s build/wasm/sample_controls.js
           test -s build/wasm/sample-manifest.json
           test -s build/wasm/sample-lock.json
           grep -q "import createRefm from './refm.js'" build/wasm/index.html
+          grep -q "sample_controls.js" build/wasm/index.html
           grep -q "_refm_wasm_render" build/wasm/refm.js
           grep -q "_refm_wasm_enable_samples" build/wasm/refm.js
       - name: Record checksums
-        run: sha256sum build/wasm/index.html build/wasm/refm.js build/wasm/refm.wasm build/wasm/sample-manifest.json build/wasm/sample-lock.json > build/wasm/SHA256SUMS
+        run: sha256sum build/wasm/index.html build/wasm/refm.js build/wasm/refm.wasm build/wasm/sample_controls.js build/wasm/sample-manifest.json build/wasm/sample-lock.json > build/wasm/SHA256SUMS
       - uses: actions/upload-artifact@v4
         with:
           name: refm-wasm-${{ github.sha }}
@@ -55,6 +57,7 @@ jobs:
             build/wasm/index.html
             build/wasm/refm.js
             build/wasm/refm.wasm
+            build/wasm/sample_controls.js
             build/wasm/sample-manifest.json
             build/wasm/sample-lock.json
             build/wasm/SHA256SUMS
