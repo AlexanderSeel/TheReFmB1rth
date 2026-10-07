@@ -1,0 +1,96 @@
+name: Build all artifacts
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  host:
+    name: Host tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run DSP, integration and safety tests
+        run: tests/run_host_tests.sh
+
+  wasm:
+    name: WASM engine
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Emscripten
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y emscripten
+      - name: Build shared ReFmB1rth WASM runtime
+        run: web/emu/build_wasm.sh
+      - name: Record checksums
+        run: sha256sum build/wasm/refm.js build/wasm/refm.wasm > build/wasm/SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: refm-wasm-${{ github.sha }}
+          path: |
+            build/wasm/refm.js
+            build/wasm/refm.wasm
+            build/wasm/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 30
+
+  fm1-target:
+    name: FM-1 target package
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y curl git xz-utils python3-pip
+          python3 -m pip install --user Pillow fonttools
+      - name: Prepare exact Felucca 1.0.5 foundation
+        run: tools/bootstrap_felucca.sh .upstream/felucca
+      - name: Verify pinned Felucca integration anchors
+        run: python3 tools/verify_felucca_integration.py .upstream/felucca
+      - name: Apply deterministic ReFmB1rth overlay
+        run: python3 tools/apply_felucca_overlay.py .upstream/felucca --check
+      - name: Download JieLi pi32v2 toolchain
+        run: .upstream/felucca/tools/get_toolchain.sh "$RUNNER_TEMP/jieli"
+      - name: Fetch AC79 SDK
+        run: |
+          git clone --depth 1 --branch AC79NN_SDK_V1.2.1_2023-12-13 \
+            https://gitee.com/Jieli-Tech/fw-AC79_AIoT_SDK.git "$RUNNER_TEMP/ac79"
+      - name: Build FM-1 app, loader and FWSC package
+        working-directory: .upstream/felucca
+        env:
+          JIELI_TOOLCHAIN: ${{ runner.temp }}/jieli/toolchain
+          AC79_SDK: ${{ runner.temp }}/ac79
+        run: ./build.sh
+      - name: Create and verify experimental release manifest
+        run: |
+          mkdir -p build/target
+          cp .upstream/felucca/build/felucca.fwsc build/target/TheReFmB1rth-experimental.fwsc
+          cp .upstream/felucca/build/felucca.bin build/target/TheReFmB1rth-app.bin
+          cp .upstream/felucca/build/loader/ota.bin build/target/ota.bin
+          cp .upstream/felucca/.refm-overlay build/target/refm-overlay.txt
+          python3 tools/release_manifest.py build/target/TheReFmB1rth-experimental.fwsc \
+            --commit "${GITHUB_SHA}" --output build/target/manifest.json
+          python3 tools/release_manifest.py build/target/TheReFmB1rth-experimental.fwsc \
+            --verify build/target/manifest.json
+          sha256sum build/target/TheReFmB1rth-experimental.fwsc \
+            build/target/TheReFmB1rth-app.bin build/target/ota.bin > build/target/SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: refm-fm1-experimental-${{ github.sha }}
+          path: |
+            build/target/TheReFmB1rth-experimental.fwsc
+            build/target/TheReFmB1rth-app.bin
+            build/target/ota.bin
+            build/target/manifest.json
+            build/target/refm-overlay.txt
+            build/target/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 14
