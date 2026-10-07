@@ -2,6 +2,7 @@
 #include <assert.h>
 #include <stdint.h>
 #include <stddef.h>
+#include "../firmware/proto/project_store.h"
 
 void refm_felucca_init(uint16_t bpm);
 void refm_felucca_audio_block(int32_t *out, uint32_t frames);
@@ -21,20 +22,17 @@ static uint32_t usb_midi(uint8_t status, uint8_t d1, uint8_t d2) {
 
 int main(void) {
     int32_t audio[128 * 2];
-    uint8_t blob[1024];
+    uint8_t blob[PROJECT_STORE_MAX_PAYLOAD];
     size_t written = 0;
 
     refm_felucca_init(132u);
     assert(refm_felucca_bpm() == 132u);
-
-    /* ACID 1 note on through Felucca's normalized USB-MIDI packet format. */
     refm_felucca_midi_packet(usb_midi(0x90u, 60u, 110u));
     refm_felucca_audio_block(audio, 128u);
     int nonzero = 0;
     for (unsigned i = 0; i < 256u; ++i) if (audio[i]) { nonzero = 1; break; }
     assert(nonzero);
 
-    /* Realtime clock is mirrored without losing channel running state. */
     refm_felucca_midi_packet((uint32_t)0xF8u << 8 | 0x0Fu);
     refm_felucca_midi_packet((uint32_t)0xFAu << 8 | 0x0Fu);
     for (unsigned i = 0; i < 6u; ++i)
@@ -45,7 +43,7 @@ int main(void) {
     assert(refm_felucca_bpm() == 140u);
 
     assert(refm_felucca_save(blob, sizeof(blob), &written) == 0);
-    assert(written > 16u);
+    assert(written > 2000u);
     refm_felucca_init(90u);
     assert(refm_felucca_load(blob, written) == 0);
     assert(refm_felucca_bpm() == 140u);
