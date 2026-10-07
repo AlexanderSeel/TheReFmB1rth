@@ -7,12 +7,25 @@
  * Narrow ABI used by the Felucca integration overlay. This unit is built
  * separately from Felucca's monolithic felucca.c to avoid internal type-name
  * collisions while retaining a small, auditable integration surface.
+ *
+ * The FM-1 has only 96 KiB of general .data/.bss RAM. Felucca reserves a
+ * separate .pool region specifically for large zero-initialised DSP buffers.
+ * Keep the full ReFm runtime and project I/O workspace there on hardware so
+ * future UI and transport work does not consume the last bytes of general RAM.
  */
-static refm_target_t g_refm;
+#ifdef REFM_FELUCCA_PLATFORM
+#define REFM_POOL __attribute__((section(".pool.refm"), aligned(4)))
+#define REFM_PROJECT_IO_CAPACITY 8192u
+#else
+#define REFM_POOL
+#endif
+
+static refm_target_t g_refm REFM_POOL;
 static uint8_t g_refm_ready;
 static uint8_t g_external_clock_seen;
 
 #ifdef REFM_FELUCCA_PLATFORM
+static uint8_t g_project_io[REFM_PROJECT_IO_CAPACITY] REFM_POOL;
 extern int refm_platform_storage_save(uint32_t slot, const void *src, uint32_t len);
 extern int refm_platform_storage_load(uint32_t slot, void *dst, uint32_t max);
 #endif
@@ -91,23 +104,21 @@ int refm_felucca_load(const uint8_t *blob, size_t blob_len) {
 
 #ifdef REFM_FELUCCA_PLATFORM
 int refm_felucca_storage_save(uint8_t slot) {
-    uint8_t blob[1024];
     size_t written = 0u;
     int rc;
     if (slot >= 4u) return -1;
     ensure_ready();
-    rc = refm_target_save(&g_refm, blob, sizeof(blob), &written);
+    rc = refm_target_save(&g_refm, g_project_io, sizeof(g_project_io), &written);
     if (rc != PROJECT_OK) return -2;
-    return refm_platform_storage_save(slot, blob, (uint32_t)written);
+    return refm_platform_storage_save(slot, g_project_io, (uint32_t)written);
 }
 
 int refm_felucca_storage_load(uint8_t slot) {
-    uint8_t blob[1024];
     int n;
     if (slot >= 4u) return -1;
-    n = refm_platform_storage_load(slot, blob, sizeof(blob));
+    n = refm_platform_storage_load(slot, g_project_io, sizeof(g_project_io));
     if (n <= 0) return -2;
-    return refm_target_load(&g_refm, blob, (size_t)n);
+    return refm_target_load(&g_refm, g_project_io, (size_t)n);
 }
 #endif
 
