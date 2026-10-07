@@ -19,6 +19,11 @@ void refm_wasm_set_acid_step(uint8_t track, uint8_t step, uint8_t note, uint8_t 
 uint32_t refm_wasm_get_acid_step(uint8_t track, uint8_t step);
 void refm_wasm_set_drum_step(uint8_t track, uint8_t step, uint16_t hits, uint16_t accents);
 uint32_t refm_wasm_get_drum_step(uint8_t track, uint8_t step);
+void refm_wasm_set_acid_wave(uint8_t track, uint8_t square);
+void refm_wasm_set_acid_accent(uint8_t track, uint8_t value);
+void refm_wasm_set_acid_drive(uint8_t track, uint8_t value);
+uint16_t refm_wasm_acid_cutoff_hz(uint8_t track);
+void refm_wasm_set_acid_mod(uint8_t track, uint8_t param, uint8_t value);
 
 static void test_pattern_roundtrip(void) {
     uint32_t packed;
@@ -34,7 +39,6 @@ static void test_pattern_roundtrip(void) {
     assert((packed & 0xffffu) == ((1u << 0) | (1u << 4)));
     assert(((packed >> 16) & 0xffffu) == (1u << 4));
 
-    /* Selecting another pattern stores A first. Editing B must not mutate A. */
     refm_wasm_select_pattern(1u);
     assert(refm_wasm_pattern() == 1u);
     refm_wasm_set_acid_step(0u, 3u, 55u, 1u, 100u);
@@ -54,6 +58,25 @@ static void test_pattern_roundtrip(void) {
     assert((packed & 0xffffu) == (1u << 1));
 }
 
+static void test_303_controls(void) {
+    int32_t a[256], b[256];
+    refm_wasm_init(128u);
+    assert(refm_wasm_acid_cutoff_hz(0u) >= 250u);
+    refm_wasm_set_acid_accent(0u, 110u);
+    refm_wasm_set_acid_drive(0u, 20u);
+    refm_wasm_set_acid_mod(0u, 5u, 0u);
+    refm_wasm_set_acid_wave(0u, 0u);
+    refm_wasm_midi(0x90u); refm_wasm_midi(48u); refm_wasm_midi(110u);
+    refm_wasm_render(a, 128u);
+    refm_wasm_init(128u);
+    refm_wasm_set_acid_wave(0u, 1u);
+    refm_wasm_midi(0x90u); refm_wasm_midi(48u); refm_wasm_midi(110u);
+    refm_wasm_render(b, 128u);
+    int different = 0;
+    for (unsigned i = 0; i < 256u; ++i) if (a[i] != b[i]) { different = 1; break; }
+    assert(different);
+}
+
 int main(void) {
     int32_t audio[64 * 2];
     refm_wasm_init(142u);
@@ -71,6 +94,7 @@ int main(void) {
     assert(refm_wasm_snapshot_size() > 0u);
     assert(refm_wasm_restore(refm_wasm_snapshot_ptr(), refm_wasm_snapshot_size()) == 0);
     test_pattern_roundtrip();
+    test_303_controls();
     puts("WASM bridge tests: ok");
     return 0;
 }
