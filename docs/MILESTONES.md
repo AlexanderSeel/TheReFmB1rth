@@ -16,18 +16,26 @@
 - [x] integer internal BPM clock
 - [x] MIDI note/CC/program routing for both acid tracks and both drum machines
 - [x] channel-10 drum routing plus dedicated drum channels
+- [x] raw MIDI byte parser with running status and realtime-message interleaving
 - [x] versioned project envelope + CRC32 corruption rejection
 - [x] groovebox state save/load for active sequencers, drum grids, mixer/FX and song data
+- [x] hardware-neutral `refm_target` ABI for render/MIDI/transport/persistence
+- [x] WASM C bridge using the exact same `refm_target` runtime
+- [x] reproducible Emscripten build script for the shared engine
+- [x] native host compilation/tests for target ABI and WASM bridge
 - [x] automated integration tests for the unified render path
+- [x] CI verifies the exact pinned Felucca audio/build integration anchors
 
 **M5 target integration still open:**
 
 - [ ] store all A–H pattern-bank data in the production project format, not only active runtime state
 - [ ] connect quantized song changes directly to pattern-bank loading
-- [ ] integrate the runtime into Felucca's real FM-1 audio callback
+- [ ] integrate `refm_target_render_q15()` into Felucca's real `audio_block()`/I2S path
 - [ ] bind project save/load to Felucca flash sectors atomically
-- [ ] feed USB/TRS MIDI adapters into the host-tested routing layer
-- [ ] implement the physical FM-1 mixer/song/pattern UI and WASM equivalents
+- [ ] feed Felucca USB/TRS MIDI byte sources into `refm_target_midi_byte()`
+- [ ] implement the physical FM-1 mixer/song/pattern UI
+- [ ] add the browser UI/audio-worklet shell around the new WASM bridge
+- [ ] build the Emscripten artifact in CI and add deterministic render hashes
 - [ ] add full four-machine CPU-budget/underrun regression measurements on target-equivalent builds
 
 ## M6 — hardware beta
@@ -43,6 +51,7 @@
 - [x] recovery prerequisites documented
 - [x] automated negative tests for tampering/wrong-device/missing-confirmation
 - [x] Python safety tests execute under the actual CI `unittest` runner
+- [x] pinned Felucca commit and source integration anchors validated on every CI run
 
 **M6 remains intentionally blocked from being called complete until:**
 
