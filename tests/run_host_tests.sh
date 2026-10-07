@@ -9,14 +9,14 @@ cc $CFLAGS firmware/proto/song.c tests/test_song.c -o build/host/test_song
 cc $CFLAGS firmware/proto/midi_transport.c tests/test_midi_transport.c -o build/host/test_midi_transport
 cc $CFLAGS firmware/proto/project_store.c tests/test_project_store.c -o build/host/test_project_store
 cc $CFLAGS firmware/proto/mixer_fx.c tests/test_mixer_fx.c -o build/host/test_mixer_fx
-cc $CFLAGS firmware/proto/drum_machine.c tests/test_drum_machine.c -o build/host/test_drum_machine
+cc $CFLAGS firmware/proto/sample_voice.c firmware/proto/drum_machine.c tests/test_drum_machine.c -o build/host/test_drum_machine
 cc $CFLAGS firmware/proto/sample_voice.c tests/test_sample_voice.c -o build/host/test_sample_voice
-COMMON='firmware/proto/acid303.c firmware/proto/seq16.c firmware/proto/drum_machine.c firmware/proto/mixer_fx.c firmware/proto/midi_transport.c firmware/proto/song.c firmware/proto/project_store.c firmware/proto/pattern_bank.c firmware/proto/ui_graph_model.c firmware/proto/groovebox.c'
+COMMON='firmware/proto/acid303.c firmware/proto/seq16.c firmware/proto/sample_voice.c firmware/proto/drum_machine.c firmware/proto/mixer_fx.c firmware/proto/midi_transport.c firmware/proto/song.c firmware/proto/project_store.c firmware/proto/pattern_bank.c firmware/proto/ui_graph_model.c firmware/proto/groovebox.c'
 FEATURES='firmware/proto/groovebox_pattern.c firmware/proto/midi_router.c firmware/proto/groovebox_midi.c'
 TARGET="$COMMON $FEATURES firmware/integration/refm_target.c"
 cc $CFLAGS $COMMON tests/test_groovebox.c -o build/host/test_groovebox
 cc $CFLAGS firmware/proto/pattern_bank.c tests/test_pattern_bank.c -o build/host/test_pattern_bank
-cc $CFLAGS firmware/proto/drum_machine.c firmware/proto/midi_router.c tests/test_midi_router.c -o build/host/test_midi_router
+cc $CFLAGS firmware/proto/sample_voice.c firmware/proto/drum_machine.c firmware/proto/midi_router.c tests/test_midi_router.c -o build/host/test_midi_router
 cc $CFLAGS $COMMON $FEATURES tests/test_groovebox_features.c -o build/host/test_groovebox_features
 cc $CFLAGS $TARGET tests/test_refm_target.c -o build/host/test_refm_target
 cc $CFLAGS $TARGET web/emu/refm_wasm.c tests/test_wasm_bridge.c -o build/host/test_wasm_bridge
