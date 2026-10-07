@@ -135,6 +135,38 @@ jobs:
           python3 tools/release_manifest.py build/target/TheReFmB1rth-experimental.fwsc --commit "${GITHUB_SHA}" --output build/target/manifest.json
           python3 tools/release_manifest.py build/target/TheReFmB1rth-experimental.fwsc --verify build/target/manifest.json
           sha256sum build/target/TheReFmB1rth-experimental.fwsc build/target/TheReFmB1rth-app.bin build/target/ota.bin > build/target/SHA256SUMS
+      - name: Prepare conservative sample link-size experiment
+        run: |
+          python3 tools/fetch_samples.py
+          python3 tools/preprocess_samples.py --rate 22050 --selection samples/target-candidates.json --out-dir build/target-samples
+          python3 tools/check_sample_budget.py build/target-samples/manifest.json --output build/target/sample-experiment-selection.json
+          tools/bootstrap_felucca.sh .upstream/felucca-samples
+          python3 tools/verify_felucca_integration.py .upstream/felucca-samples
+          python3 tools/apply_felucca_overlay.py .upstream/felucca-samples --check
+          python3 tools/inject_target_sample_experiment.py .upstream/felucca-samples build/target-samples
+      - name: Build sample link-size experiment (not a release package)
+        working-directory: .upstream/felucca-samples
+        env:
+          JIELI_TOOLCHAIN: ${{ runner.temp }}/jieli/toolchain
+          AC79_SDK: ${{ runner.temp }}/ac79
+        run: ./build.sh
+      - name: Measure sample candidate target delta
+        env:
+          JIELI_TOOLCHAIN: ${{ runner.temp }}/jieli/toolchain
+        run: |
+          "$JIELI_TOOLCHAIN/common/bin/objdump" -t .upstream/felucca-samples/build/felucca.elf > build/target/felucca-sample-experiment.syms
+          python3 tools/check_target_budget.py .upstream/felucca-samples/build/felucca.bin build/target/felucca-sample-experiment.syms --output build/target/sample-experiment-memory.json
+          cp .upstream/felucca-samples/build/felucca.bin build/target/TheReFmB1rth-sample-link-experiment.bin
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          a=json.loads(Path('build/target/target-memory.json').read_text())
+          b=json.loads(Path('build/target/sample-experiment-memory.json').read_text())
+          s=json.loads(Path('build/target/sample-experiment-selection.json').read_text())
+          out={'pcm_bytes':s['candidate_pcm_bytes'],'xip_delta':b['xip']['used']-a['xip']['used'],'ram_delta':b['ram']['used']-a['ram']['used'],'pool_delta':b['pool']['used']-a['pool']['used'],'baseline':a,'sample_experiment':b}
+          Path('build/target/sample-experiment-delta.json').write_text(json.dumps(out,indent=2,sort_keys=True)+'\n')
+          print(json.dumps({k:out[k] for k in ('pcm_bytes','xip_delta','ram_delta','pool_delta')},sort_keys=True))
+          PY
       - uses: actions/upload-artifact@v4
         with:
           name: refm-fm1-experimental-${{ github.sha }}
@@ -147,5 +179,10 @@ jobs:
             build/target/SHA256SUMS
             build/target/target-memory.json
             build/target/felucca.syms
+            build/target/sample-experiment-selection.json
+            build/target/sample-experiment-memory.json
+            build/target/sample-experiment-delta.json
+            build/target/TheReFmB1rth-sample-link-experiment.bin
+            build/target/felucca-sample-experiment.syms
           if-no-files-found: error
           retention-days: 14
