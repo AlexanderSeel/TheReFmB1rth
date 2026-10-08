@@ -2,6 +2,7 @@
 #include <assert.h>
 #include <stdint.h>
 #include <stdio.h>
+#include "../firmware/proto/drum_machine.h"
 
 void refm_wasm_init(uint16_t bpm);
 void refm_wasm_external_clock(uint8_t enabled);
@@ -46,10 +47,8 @@ static void test_pattern_roundtrip(void) {
     packed = refm_wasm_get_drum_step(0u, 4u);
     assert((packed & 0xffffu) == ((1u << 0) | (1u << 4)));
     assert(((packed >> 16) & 0xffffu) == (1u << 4));
-    refm_wasm_select_pattern(1u);
-    assert(refm_wasm_pattern() == 1u);
-    refm_wasm_set_acid_step(0u, 3u, 55u, 1u, 100u);
-    refm_wasm_set_drum_step(0u, 4u, (uint16_t)(1u << 1), 0u);
+    refm_wasm_select_pattern(1u); assert(refm_wasm_pattern() == 1u);
+    refm_wasm_set_acid_step(0u, 3u, 55u, 1u, 100u); refm_wasm_set_drum_step(0u, 4u, (uint16_t)(1u << 1), 0u);
     refm_wasm_select_pattern(0u);
     packed = refm_wasm_get_acid_step(0u, 3u); assert((packed & 0xffu) == 48u); assert(((packed >> 8) & 0xffu) == 3u);
     packed = refm_wasm_get_drum_step(0u, 4u); assert((packed & 0xffffu) == ((1u << 0) | (1u << 4)));
@@ -60,8 +59,7 @@ static void test_pattern_roundtrip(void) {
 
 static void test_303_controls(void) {
     int32_t a[256], b[256];
-    refm_wasm_init(128u);
-    assert(refm_wasm_acid_cutoff_hz(0u) >= 250u);
+    refm_wasm_init(128u); assert(refm_wasm_acid_cutoff_hz(0u) >= 250u);
     refm_wasm_set_acid_accent(0u, 110u); refm_wasm_set_acid_drive(0u, 20u); refm_wasm_set_acid_mod(0u, 5u, 0u); refm_wasm_set_acid_wave(0u, 0u);
     refm_wasm_midi(0x90u); refm_wasm_midi(48u); refm_wasm_midi(110u); refm_wasm_render(a, 128u);
     refm_wasm_init(128u); refm_wasm_set_acid_wave(0u, 1u); refm_wasm_midi(0x90u); refm_wasm_midi(48u); refm_wasm_midi(110u); refm_wasm_render(b, 128u);
@@ -79,9 +77,7 @@ static void test_mixer_bridge(void) {
 }
 
 static void test_sample_bridge_no_assets(void) {
-    refm_wasm_init(128u);
-    refm_wasm_enable_samples(0u,1u);
-    refm_wasm_set_sample_use_mask(0u,0x7ffu);
+    refm_wasm_init(128u); refm_wasm_enable_samples(0u,1u); refm_wasm_set_sample_use_mask(0u,0x7ffu);
     assert(refm_wasm_sample_use_mask(0u)==0x7ffu);
     assert(refm_wasm_sample_active_mask(0u)==(refm_wasm_sample_mask(0u)&0x7ffu));
     refm_wasm_set_sample_lane(0u,DRUM_VOICES-1u,0u);
