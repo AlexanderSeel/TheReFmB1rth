@@ -66,6 +66,8 @@ REFM_EXPORT void refm_wasm_set_acid_accent(uint8_t track, uint8_t value) { if (t
 REFM_EXPORT void refm_wasm_set_acid_drive(uint8_t track, uint8_t value) { if (track < 2u) vm.groovebox.acid[track].drive = (uint16_t)(value > 127u ? 127u : value) * 128u; }
 REFM_EXPORT uint16_t refm_wasm_acid_cutoff_hz(uint8_t track) { return track < 2u ? acid303_cutoff_hz(&vm.groovebox.acid[track]) : 0u; }
 
+/* Retained for project/backward ABI compatibility. These are no longer exposed
+   in the stock 303 WASM UI because the original TB-303 has no LFO/ADSR panel. */
 REFM_EXPORT void refm_wasm_set_acid_mod(uint8_t track, uint8_t param, uint8_t value) {
     acid303_t *s; if (track >= 2u) return; s = &vm.groovebox.acid[track];
     if (param == 0u) s->amp_attack = value; else if (param == 1u) s->amp_decay = value; else if (param == 2u) s->amp_sustain = value; else if (param == 3u) s->amp_release = value;
@@ -79,6 +81,7 @@ REFM_EXPORT void refm_wasm_set_mix_track(uint8_t track, uint8_t param, int16_t v
     else if (param == 2u) t->mute = value ? 1u : 0u;
     else if (param == 3u) t->solo = value ? 1u : 0u;
     else if (param == 4u) t->delay_send = (uint8_t)(value < 0 ? 0 : value > 127 ? 127 : value);
+    else if (param == 5u) t->reverb_send = (uint8_t)(value < 0 ? 0 : value > 127 ? 127 : value);
 }
 REFM_EXPORT void refm_wasm_set_fx(uint8_t param, int16_t value) {
     mixer_fx_t *m=&vm.groovebox.mixer;
@@ -88,6 +91,9 @@ REFM_EXPORT void refm_wasm_set_fx(uint8_t param, int16_t value) {
     else if (param == 3u) mixer_fx_set_delay(m, m->delay_len, value, m->delay_mix);
     else if (param == 4u) mixer_fx_set_delay(m, m->delay_len, m->delay_feedback, value);
     else if (param == 5u) mixer_fx_set_delay(m, (uint16_t)(value < 1 ? 1 : value), m->delay_feedback, m->delay_mix);
+    else if (param == 6u) mixer_fx_set_reverb(m, value, m->reverb_mix, m->reverb_damp);
+    else if (param == 7u) mixer_fx_set_reverb(m, m->reverb_feedback, value, m->reverb_damp);
+    else if (param == 8u) mixer_fx_set_reverb(m, m->reverb_feedback, m->reverb_mix, value);
 }
 REFM_EXPORT int16_t refm_wasm_get_mix_track(uint8_t track, uint8_t param) {
     const mixer_track_t *t;
@@ -98,6 +104,7 @@ REFM_EXPORT int16_t refm_wasm_get_mix_track(uint8_t track, uint8_t param) {
     if (param == 2u) return t->mute;
     if (param == 3u) return t->solo;
     if (param == 4u) return t->delay_send;
+    if (param == 5u) return t->reverb_send;
     return 0;
 }
 REFM_EXPORT int16_t refm_wasm_get_fx(uint8_t param) {
@@ -108,6 +115,9 @@ REFM_EXPORT int16_t refm_wasm_get_fx(uint8_t param) {
     if (param == 3u) return m->delay_feedback;
     if (param == 4u) return m->delay_mix;
     if (param == 5u) return (int16_t)m->delay_len;
+    if (param == 6u) return m->reverb_feedback;
+    if (param == 7u) return m->reverb_mix;
+    if (param == 8u) return m->reverb_damp;
     return 0;
 }
 
