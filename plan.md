@@ -623,12 +623,20 @@ Worst-case benchmark:
 
 Keep headroom; do not ship at 99–100% theoretical budget.
 
+Current implementation adds two distinct gates:
+
+- host regression benchmark: `tests/bench_groovebox.c` runs both dense ACID engines, all 22 drum voices and master FX together; this is for commit-to-commit cost comparison only;
+- physical FM-1 gate: `tools/target_cpu_report.py` evaluates captured Felucca `felucca_dbg` timing and requires zero DMA `late` events with conservative sustained/peak margin below Felucca's 85% emergency shedding threshold.
+
+See `docs/TARGET_CPU_PROFILING.md`. A host `realtime_x` number must never be treated as an FM-1 CPU percentage.
+
 ## Storage
 
 - interrupted write simulation
 - corrupted CRC
 - invalid format version
 - full pattern banks
+- zero/out-of-range mixer delay state must be normalized before delay-buffer indexing
 
 ## Installer
 
@@ -741,13 +749,38 @@ Never test a new loader and new application image simultaneously.
 
 ---
 
+# Current implementation checkpoint — 2026-10-08
+
+Implemented in the active `main` line:
+
+- pinned Felucca overlay with reproducible JieLi/AC79 GitHub target build;
+- two ACID engines, two 11-voice drum machines, A–H pattern banks, song, MIDI, persistence and four-track mixer/FX;
+- browser/WASM hardware-rack editor with x0x-style ACID note programming, dual 808/909 grids, per-lane sample/synth routing and real mixer/master-FX controls;
+- Open303-informed 303 signal path with measured cutoff/env mapping, 44.486 Hz pre-ladder HPF, four-stage nonlinear ladder, 150 Hz feedback HPF, 24 Hz post conditioning and 200 Hz two-stage gain de-click;
+- Open303-informed VCA articulation coupling (~0.45× main envelope plus accent-scaled envelope gain) and tests for stock-style slide/accent timing;
+- deterministic current groovebox audio fingerprint `93117892d0a0d7a7`;
+- defensive mixer delay-length normalization discovered by the new full-system stress benchmark;
+- host four-machine stress benchmark baseline around 97× realtime on the GitHub x86 runner; this is a regression number, not target proof;
+- physical CPU/underrun report tooling based on Felucca `felucca_dbg` with zero-late and conservative sustained/peak acceptance limits;
+- static XIP/RAM/pool gates and separate target sample link-size experiments.
+
+Still blocking physical beta:
+
+- physical FM-1 CPU/underrun capture under the exact four-machine stress pattern plus UI/MIDI interaction;
+- runtime stack watermark under worst-case load;
+- controlled listening/reference A/B of oscillator level, resonance, accent/VCA and slide against Open303/js303 references;
+- compact physical mixer/song/drum/ACID note UI and physical project save/load controls;
+- final Worker/AudioWorklet browser timing architecture;
+- recovery preparation and a controlled first hardware installation.
+
+---
+
 # Immediate next tasks
 
-1. Import/pin Felucca upstream foundation and preserve its license tree.
-2. Add `docs/FLASH_SAFETY.md` and `docs/SAMPLE_SOURCES.md`.
-3. Reproduce a clean Felucca build before changing DSP.
-4. Add CI for host tests and artifact-size checks.
-5. Implement machine-neutral 16-step pattern representation.
-6. Implement the first ACID oscillator/envelope/filter prototype on host/WASM.
-7. Add deterministic acid DSP golden tests.
-8. Only after emulator validation, begin FM-1 package testing.
+1. Complete one clean GitHub host/WASM/JieLi build at the current Open303-coupled DSP baseline and record the new target-memory numbers/artifacts.
+2. Build a repeatable reference-render comparison set for normal note, accent, slide, accent+slide, low-cutoff envelope and high-resonance cases; do not add further analog coloration without evidence from those comparisons.
+3. Add a practical capture path for the physical Felucca `felucca_dbg` snapshot and run `tools/target_cpu_report.py` on a real FM-1 before calling CPU headroom proven.
+4. Implement a runtime stack-watermark diagnostic/gate for the FM-1 target.
+5. Transfer the browser x0x ACID programming workflow plus mixer/drum/song/project controls to the compact physical FM-1 UI.
+6. Finish the Worker/AudioWorklet architecture and then grow the browser rack into the full React/Web MIDI editor.
+7. Keep target drum samples opt-in until listening approval and repeat the XIP/CPU gates for any sample set considered for firmware.
