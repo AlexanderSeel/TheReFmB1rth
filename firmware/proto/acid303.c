@@ -2,11 +2,10 @@
 /*
  * TB-303-inspired fixed-point voice for the FM-1.
  *
- * The four-stage filter topology, measured cutoff/envelope mapping and timing
- * are fixed-point adaptations informed by Robin Schmidt's Open303 (MIT).
- * The optional band-limited oscillator tables are generated locally from
- * tools/generate_303_wavetables.py; the idea of precomputing pitch-dependent
- * tables was informed by js303 but this implementation/data is independent.
+ * The oscillator prototypes, four-stage filter topology, measured cutoff /
+ * envelope mapping and timing are fixed-point adaptations informed by Robin
+ * Schmidt's Open303 (MIT). The optional band-limited oscillator tables are
+ * generated locally by tools/generate_303_wavetables.py.
  */
 #include "acid303.h"
 #include <string.h>
@@ -55,22 +54,28 @@ uint32_t acid303_apply_tune(uint32_t phase_inc, int8_t tune) {
 
 static int32_t shape_q15(int32_t x) {
     x = clamp32(x, -46340, 46340);
-    int64_t x2 = ((int64_t)x * x) >> 15;
-    int64_t x3 = (x2 * x) >> 15;
-    return clamp32((int64_t)x - x3 / 6, -49152, 49152);
+    {
+        int64_t x2 = ((int64_t)x * x) >> 15;
+        int64_t x3 = (x2 * x) >> 15;
+        return clamp32((int64_t)x - x3 / 6, -49152, 49152);
+    }
 }
 
 static uint32_t decay_tau_samples(uint16_t decay, uint8_t accented) {
     if (accented) return (SR * 200u) / 1000u;
-    uint32_t ms = 200u + ((uint32_t)decay * 1800u) / 32767u;
-    return (SR * ms) / 1000u;
+    {
+        uint32_t ms = 200u + ((uint32_t)decay * 1800u) / 32767u;
+        return (SR * ms) / 1000u;
+    }
 }
 
 static void decay_env(int32_t *env, uint32_t tau_samples) {
     if (*env <= 0) { *env = 0; return; }
-    int32_t step = *env / (int32_t)(tau_samples ? tau_samples : 1u);
-    if (step < 1) step = 1;
-    *env -= step;
+    {
+        int32_t step = *env / (int32_t)(tau_samples ? tau_samples : 1u);
+        if (step < 1) step = 1;
+        *env -= step;
+    }
     if (*env < 8) *env = 0;
 }
 
@@ -102,29 +107,34 @@ static int32_t resonance_skew_q15(uint16_t resonance) {
     return (int32_t)lut[i] + (int32_t)(((int64_t)((int32_t)lut[i + 1u] - lut[i]) * frac) >> 15);
 }
 
+/* Open303 TB_303 coefficient formulas evaluated for our 2x (88.2 kHz) ladder. */
 static int32_t tb_b0_q15(uint32_t hz) {
-    if (hz < 80u) hz = 80u;
-    if (hz > 12000u) hz = 12000u;
-    int64_t fx = ((int64_t)hz << 20) / 124734ll;
-    int64_t fx2 = (fx * fx) >> 20;
-    int64_t num = 477ll + ((6493013ll * fx) >> 20);
-    int64_t den = Q20_ONE + ((12958674ll * fx) >> 20) + ((4630128ll * fx2) >> 20);
-    if (den <= 0) return 1;
-    return clamp32((num << 15) / den, 1, 16384);
+    if (hz < 200u) hz = 200u;
+    if (hz > 20000u) hz = 20000u;
+    {
+        int64_t fx = ((int64_t)hz << 20) / 124734ll;
+        int64_t fx2 = (fx * fx) >> 20;
+        int64_t num = 477ll + ((6493013ll * fx) >> 20);
+        int64_t den = Q20_ONE + ((12958674ll * fx) >> 20) + ((4630128ll * fx2) >> 20);
+        if (den <= 0) return 1;
+        return clamp32((num << 15) / den, 1, 16384);
+    }
 }
 
 static int32_t tb_kbase_q12(uint32_t hz) {
-    if (hz < 80u) hz = 80u;
-    if (hz > 12000u) hz = 12000u;
-    int64_t x = ((int64_t)hz << 20) / 124734ll;
-    int64_t y = 4096ll;
-    y = 29485874ll + ((y * x) >> 20);
-    y = -23911595ll + ((y * x) >> 20);
-    y = -1951634ll + ((y * x) >> 20);
-    y = 2518860ll + ((y * x) >> 20);
-    y = 876017ll + ((y * x) >> 20);
-    y = 69627ll + ((y * x) >> 20);
-    return clamp32(y, 4096, 131072);
+    if (hz < 200u) hz = 200u;
+    if (hz > 20000u) hz = 20000u;
+    {
+        int64_t x = ((int64_t)hz << 20) / 124734ll;
+        int64_t y = 4096ll;
+        y = 29485874ll + ((y * x) >> 20);
+        y = -23911595ll + ((y * x) >> 20);
+        y = -1951634ll + ((y * x) >> 20);
+        y = 2518860ll + ((y * x) >> 20);
+        y = 876017ll + ((y * x) >> 20);
+        y = 69627ll + ((y * x) >> 20);
+        return clamp32(y, 4096, 131072);
+    }
 }
 
 static void reset_analog_path(acid303_t *s) {
@@ -138,6 +148,8 @@ static void reset_analog_path(acid303_t *s) {
     s->gain_smooth1 = 0;
     s->gain_smooth2 = 0;
     s->env_rc = 0;
+    s->accent_env = 0;
+    s->accent_sweep = 0;
     s->coeff_valid = 0u;
     s->coeff_countdown = 0u;
 }
@@ -163,13 +175,11 @@ void acid303_init(acid303_t *s) {
 void acid303_set_note(acid303_t *s, uint8_t note, uint8_t accent, uint8_t slide) {
     uint32_t inc = acid303_apply_tune(acid303_note_to_phase_inc(note), s->tune);
     if (slide && s->gate) {
+        /* Open303 slideToNote changes only pitch target + accent/release mode;
+           the main filter/VCA envelopes are deliberately not retriggered. */
         s->slide_target_inc = inc;
         s->sliding = 1u;
         s->accented = accent ? 1u : 0u;
-        if (accent) {
-            s->accent_env = Q15_ONE;
-            s->accent_sweep += (Q15_ONE - s->accent_sweep) / 2;
-        } else s->accent_env = 0;
     } else {
         if (s->idle) reset_analog_path(s);
         s->phase_inc = inc;
@@ -178,10 +188,6 @@ void acid303_set_note(acid303_t *s, uint8_t note, uint8_t accent, uint8_t slide)
         s->env = Q15_ONE;
         s->amp = Q15_ONE;
         s->amp_stage = ACID_ENV_DECAY;
-        if (accent) {
-            s->accent_env = Q15_ONE;
-            s->accent_sweep += (Q15_ONE - s->accent_sweep) / 2;
-        } else s->accent_env = 0;
         s->accented = accent ? 1u : 0u;
     }
     s->gate = 1u;
@@ -228,54 +234,67 @@ static int32_t poly_blep_q15(uint32_t phase, uint32_t dt) {
 static int32_t oscillator_substep(acid303_t *s, uint32_t sub_inc) {
     s->phase += sub_inc;
 #if REFM_ACID_WAVETABLE
-    uint32_t band = 0u;
-    while (band + 1u < REFM_ACID_WT_BANDS && s->phase_inc > refm_acid_wt_threshold_inc[band]) ++band;
-    const int16_t *table = s->square ? refm_acid_wt_square[band] : refm_acid_wt_saw[band];
-    uint32_t idx = s->phase >> 25;
-    uint32_t frac = (s->phase >> 10) & 32767u;
-    int32_t a = table[idx & REFM_ACID_WT_MASK];
-    int32_t b = table[(idx + 1u) & REFM_ACID_WT_MASK];
-    return a + (int32_t)(((int64_t)(b - a) * frac) >> 15);
-#else
-    const uint32_t duty = 0xA6666666u;
-    int32_t blep_wrap = poly_blep_q15(s->phase, sub_inc);
-    if (!s->square) {
-        int32_t saw = (int32_t)(s->phase >> 16) - 32768;
-        return clamp32((int64_t)saw - blep_wrap, -32768, 32767);
+    {
+        uint32_t band = 0u;
+        uint32_t idx;
+        uint32_t frac;
+        const int16_t *table;
+        int32_t a, b;
+        while (band + 1u < REFM_ACID_WT_BANDS && s->phase_inc > refm_acid_wt_threshold_inc[band]) ++band;
+        table = s->square ? refm_acid_wt_square[band] : refm_acid_wt_saw[band];
+        idx = s->phase >> (32u - REFM_ACID_WT_BITS);
+        frac = (s->phase >> (17u - REFM_ACID_WT_BITS)) & 32767u;
+        a = table[idx & REFM_ACID_WT_MASK];
+        b = table[(idx + 1u) & REFM_ACID_WT_MASK];
+        return a + (int32_t)(((int64_t)(b - a) * frac) >> 15);
     }
-    int32_t sq = s->phase < duty ? 25000 : -32000;
-    sq += (int32_t)(((int64_t)blep_wrap * 57000) >> 16);
-    uint32_t rel = s->phase - duty;
-    int32_t blep_duty = poly_blep_q15(rel, sub_inc);
-    sq -= (int32_t)(((int64_t)blep_duty * 57000) >> 16);
-    return clamp32(sq, -32768, 32767);
+#else
+    {
+        const uint32_t duty = 0x80000000u;
+        int32_t blep_wrap = poly_blep_q15(s->phase, sub_inc);
+        if (!s->square) {
+            int32_t saw = (int32_t)(s->phase >> 16) - 32768;
+            return clamp32((int64_t)saw - blep_wrap, -32768, 32767);
+        }
+        {
+            int32_t sq = s->phase < duty ? 16000 : -16000;
+            uint32_t rel = s->phase - duty;
+            int32_t blep_duty = poly_blep_q15(rel, sub_inc);
+            sq += (int32_t)(((int64_t)blep_wrap * 32000) >> 16);
+            sq -= (int32_t)(((int64_t)blep_duty * 32000) >> 16);
+            return clamp32(sq, -32768, 32767);
+        }
+    }
 #endif
 }
 
 static void slide_step(acid303_t *s) {
     if (!s->sliding) return;
-    int64_t d = (int64_t)s->slide_target_inc - (int64_t)s->phase_inc;
-    /* Open303's stock 60 ms slide uses a slew time constant of 0.2 * slide,
-       i.e. about 12 ms. 529 output samples at 44.1 kHz is 11.995 ms. */
-    int64_t step = d / 529;
-    if (!step && d) step = d > 0 ? 1 : -1;
-    s->phase_inc = (uint32_t)((int64_t)s->phase_inc + step);
-    if (d < 3 && d > -3) { s->phase_inc = s->slide_target_inc; s->sliding = 0u; }
+    {
+        int64_t d = (int64_t)s->slide_target_inc - (int64_t)s->phase_inc;
+        int64_t step = d / 529;
+        if (!step && d) step = d > 0 ? 1 : -1;
+        s->phase_inc = (uint32_t)((int64_t)s->phase_inc + step);
+        if (d < 3 && d > -3) { s->phase_inc = s->slide_target_inc; s->sliding = 0u; }
+    }
 }
 
 static void envelope_step(acid303_t *s) {
     decay_env(&s->env, decay_tau_samples(s->decay, s->accented));
-    s->env_rc += (int32_t)(((int64_t)(s->env - s->env_rc) * 50) >> 15);
-    decay_env(&s->accent_env, (SR * 200u) / 1000u);
+
+    /* Open303 default rc1 is effectively direct; rc2 is a 15 ms leaky
+       integrator driven only while accentGain is non-zero. */
+    s->env_rc = s->env;
+    {
+        int32_t accent_target = (s->accented && s->accent) ? s->env : 0;
+        s->accent_env += (int32_t)(((int64_t)(accent_target - s->accent_env) * 50) >> 15);
+    }
+
     if (s->gate) decay_env(&s->amp, (SR * 1230u) / 1000u);
     else decay_env(&s->amp, (SR * (s->accented ? 50u : 1u)) / 1000u);
     if (!s->amp) {
         s->amp_stage = ACID_ENV_OFF;
         if (!s->gate) s->idle = 1u;
-    }
-    {
-        uint32_t base = 7000u + ((uint32_t)s->resonance * 22000u) / 32767u;
-        decay_env(&s->accent_sweep, base);
     }
 }
 
@@ -286,27 +305,31 @@ static int32_t feedback_highpass(acid303_t *s, int32_t x) {
 }
 
 static int32_t pre_ladder_highpass(acid303_t *s, int32_t x) {
-    /* js303/Open303: ~44.486 Hz before the ladder. This runs at 88.2 kHz. */
-    int32_t y = x - s->output_hp_x + (int32_t)(((int64_t)s->output_hp_y * 32664) >> 15);
+    /* Open303 OnePoleFilter HIGHPASS at 44.486 Hz / 88.2 kHz. */
+    int32_t diff = x - s->output_hp_x;
+    int32_t y = (int32_t)(((int64_t)diff * 32716) >> 15) +
+                (int32_t)(((int64_t)s->output_hp_y * 32664) >> 15);
     s->output_hp_x = x;
     s->output_hp_y = y;
     return y;
 }
 
 static int32_t post_ladder_highpass(acid303_t *s, int32_t x) {
-    /* Retain the inexpensive ~24.167 Hz post-ladder DC/rumble conditioning. */
-    int32_t y = x - s->post_hp_x + (int32_t)(((int64_t)s->post_hp_y * 32655) >> 15);
+    /* Open303 OnePoleFilter HIGHPASS at 24.167 Hz / 44.1 kHz. */
+    int32_t diff = x - s->post_hp_x;
+    int32_t y = (int32_t)(((int64_t)diff * 32712) >> 15) +
+                (int32_t)(((int64_t)s->post_hp_y * 32655) >> 15);
     s->post_hp_x = x;
     s->post_hp_y = y;
     return y;
 }
 
 static int32_t declick_gain(acid303_t *s, int32_t target) {
-    /* Two cascaded ~200 Hz one-poles approximate js303/Open303's 12 dB VCA
-       de-click low-pass without a floating-point biquad on the target. */
+    /* Two cascaded ~200 Hz one-poles approximate Open303's 12 dB low-pass.
+       Its configured gain is sqrt(0.5), so preserve that level relationship. */
     s->gain_smooth1 += (int32_t)(((int64_t)(target - s->gain_smooth1) * 920) >> 15);
     s->gain_smooth2 += (int32_t)(((int64_t)(s->gain_smooth1 - s->gain_smooth2) * 920) >> 15);
-    return s->gain_smooth2;
+    return (int32_t)(((int64_t)s->gain_smooth2 * 23170) >> 15);
 }
 
 static void set_filter_coeff_target(acid303_t *s, uint32_t cutoff_hz) {
@@ -338,8 +361,9 @@ static void advance_filter_coeffs(acid303_t *s) {
 }
 
 static int32_t teebee_ladder_substep(acid303_t *s, int32_t in) {
-    int32_t fb_shape = shape_q15(s->lp4);
-    int32_t fb = clamp32(((int64_t)fb_shape * s->coeff_k) >> 15, -262144, 262144);
+    /* Open303's current TB_303 path uses linear y4 feedback here; the cubic
+       shaper is deliberately not active in this mode. */
+    int32_t fb = clamp32(((int64_t)s->lp4 * s->coeff_k) >> 15, -262144, 262144);
     int32_t y0 = clamp32((int64_t)in - feedback_highpass(s, fb), -196608, 196608);
     int32_t d1 = clamp32((int64_t)y0 - s->lp1 + s->lp2, -262144, 262144);
     s->lp1 = clamp32((int64_t)s->lp1 + (((int64_t)2 * s->coeff_b0 * d1) >> 15), -262144, 262144);
@@ -358,33 +382,57 @@ static int32_t teebee_ladder_substep(acid303_t *s, int32_t in) {
     return clamp32(((int64_t)2 * s->coeff_g * s->lp4) >> 15, -131072, 131072);
 }
 
+/* Q15 approximation of 2^x for x in roughly -2..5 octaves. The polynomial is
+   evaluated only at control rate, avoiding libm and large lookup tables. */
+static int32_t exp2_q15(int32_t x_q15) {
+    int32_t ip;
+    int32_t frac;
+    int64_t f, f2, f3, f4, y;
+    if (x_q15 < -(2 << 15)) x_q15 = -(2 << 15);
+    if (x_q15 >  (5 << 15)) x_q15 =  (5 << 15);
+    if (x_q15 >= 0) ip = x_q15 >> 15;
+    else ip = -(int32_t)(((uint32_t)(-x_q15) + 32767u) >> 15);
+    frac = x_q15 - ip * 32768;
+    f = frac;
+    f2 = (f * f) >> 15;
+    f3 = (f2 * f) >> 15;
+    f4 = (f3 * f) >> 15;
+    y = 32768ll + ((22713ll * f) >> 15) + ((7874ll * f2) >> 15) +
+        ((1819ll * f3) >> 15) + ((315ll * f4) >> 15);
+    if (ip >= 0) y <<= ip;
+    else y >>= -ip;
+    return clamp32(y, 4096, 1048576);
+}
+
 static uint32_t measured_env_cutoff(acid303_t *s) {
+    /* Direct fixed-point translation of Open303's measured mapping:
+       tmp1 = envScaler * (mainEnv - envOffset)
+       tmp2 = accentGain * rc2(mainEnv)
+       cutoff = nominalCutoff * 2^(tmp1 + tmp2) */
     int32_t c = s->cutoff > 32767u ? 32767 : (int32_t)s->cutoff;
     int32_t e = s->env_mod > 32767u ? 32767 : (int32_t)s->env_mod;
     int32_t s_lo = 24149 + (int32_t)(((int64_t)123666 * e) >> 15);
     int32_t s_hi = 28323 + (int32_t)(((int64_t)137447 * e) >> 15);
     int32_t scaler = s_lo + (int32_t)(((int64_t)(s_hi - s_lo) * c) >> 15);
     int32_t offset = 9647 + (int32_t)(((int64_t)1582 * c) >> 15);
-    int32_t factor = offset + (int32_t)(((int64_t)scaler * s->env_rc) >> 15);
+    int32_t tmp1 = (int32_t)(((int64_t)scaler * (s->env_rc - offset)) >> 15);
+    int32_t tmp2 = (s->accented && s->accent) ?
+        (int32_t)(((int64_t)s->accent * s->accent_env) >> 15) : 0;
+    int32_t factor = exp2_q15(tmp1 + tmp2);
     uint32_t fc = (uint32_t)(((int64_t)acid303_cutoff_hz(s) * factor) >> 15);
-    if (fc < 80u) fc = 80u;
-    if (fc > 12000u) fc = 12000u;
+    if (fc < 200u) fc = 200u;
+    if (fc > 20000u) fc = 20000u;
     return fc;
 }
 
 static uint32_t modulated_cutoff(acid303_t *s) {
     uint32_t fc = measured_env_cutoff(s);
-    if (s->accent_sweep > 0 && s->accent) {
-        int32_t sweep = (int32_t)(((int64_t)s->accent_sweep * s->accent) >> 15);
-        fc += (uint32_t)(((int64_t)acid303_cutoff_hz(s) * sweep) >> 17);
-    }
     if (s->lfo_amount) {
         int16_t lfo = acid303_lfo_value(s);
         int32_t delta = (int32_t)(((int64_t)lfo * s->lfo_amount * 1600) >> 22);
         int32_t m = (int32_t)fc + delta;
-        fc = (uint32_t)(m < 80 ? 80 : m > 12000 ? 12000 : m);
+        fc = (uint32_t)(m < 200 ? 200 : m > 20000 ? 20000 : m);
     }
-    if (fc > 12000u) fc = 12000u;
     return fc;
 }
 
@@ -403,15 +451,12 @@ int32_t acid303_process(acid303_t *s) {
         uint32_t sub_inc = s->phase_inc >> 1;
         int32_t y0, y1, y, gain;
         if (!sub_inc && s->phase_inc) sub_inc = 1u;
-        y0 = teebee_ladder_substep(s, pre_ladder_highpass(s, oscillator_substep(s, sub_inc)));
-        y1 = teebee_ladder_substep(s, pre_ladder_highpass(s, oscillator_substep(s, sub_inc)));
+
+        /* Open303 negates the oscillator before the pre-filter HPF. */
+        y0 = teebee_ladder_substep(s, pre_ladder_highpass(s, -oscillator_substep(s, sub_inc)));
+        y1 = teebee_ladder_substep(s, pre_ladder_highpass(s, -oscillator_substep(s, sub_inc)));
         y = post_ladder_highpass(s, (y0 + y1) / 2);
 
-        /* Open303 couples the main filter envelope into the VCA while the note
-           is held: about 0.45x on every note, plus up to 4x on accents. This is
-           a major part of the short, forward 303 articulation and is distinct
-           from the slower accent-cutoff sweep. Keep it before the 200 Hz
-           de-click stage, matching the reference signal ordering. */
         gain = s->amp;
         if (s->gate) {
             gain += (int32_t)(((int64_t)s->env * 14746) >> 15); /* ~= 0.45 */
