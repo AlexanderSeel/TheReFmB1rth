@@ -14,8 +14,10 @@ export function installSampleControls(mod){
       b.title=a?(on?'Bundled sample is active':'Sample available; click to select'):'No bundled sample for this lane; synthesis fallback';
     });
     const c=root.querySelector('[data-count]');if(c)c.textContent=`${NAMES.filter((_,i)=>bit(active,i)).length} sample lanes active`;
+    const s=root.closest('[data-refm-drum-track]')?.querySelector('.refm-drum-source-status');if(s)s.textContent=active?'HYBRID':'SYNTH';
   };
-  document.querySelectorAll('.drums').forEach((host,track)=>{
+  document.querySelectorAll('[data-refm-drum-track]').forEach(host=>{
+    const track=+host.dataset.refmDrumTrack;
     const panel=document.createElement('div');panel.className='refm-source-panel';panel.dataset.sourceTrack=track;
     panel.innerHTML=`<div class="refm-source-head"><b>${track?'909':'808'} SOURCES</b><span data-count></span><button class="refm-source-all">HYBRID ALL</button><button class="refm-source-synth">SYNTH ALL</button></div><div class="refm-source-lanes"></div>`;
     const lanes=panel.querySelector('.refm-source-lanes');
