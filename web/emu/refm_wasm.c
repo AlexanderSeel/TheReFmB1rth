@@ -26,8 +26,10 @@ REFM_EXPORT void refm_wasm_init(uint16_t bpm) {
     refm_attach_bundled_samples(&vm.groovebox.drum[0], DRUM_MODEL_808);
     refm_attach_bundled_samples(&vm.groovebox.drum[1], DRUM_MODEL_909);
 #endif
-    drum_machine_enable_samples(&vm.groovebox.drum[0], 0u);
-    drum_machine_enable_samples(&vm.groovebox.drum[1], 0u);
+    /* Browser audition defaults to hybrid: every physically available sample lane
+       is selected, while missing lanes remain synth fallback. */
+    drum_machine_enable_samples(&vm.groovebox.drum[0], 1u);
+    drum_machine_enable_samples(&vm.groovebox.drum[1], 1u);
     project_size = 0u;
 }
 REFM_EXPORT void refm_wasm_external_clock(uint8_t enabled) { refm_target_set_external_clock(&vm, enabled); }
@@ -45,6 +47,10 @@ REFM_EXPORT uint16_t refm_wasm_bpm(void) { return vm.groovebox.transport.bpm; }
 
 REFM_EXPORT void refm_wasm_enable_samples(uint8_t track, uint8_t enabled) { if (track < GROOVEBOX_DRUM_TRACKS) drum_machine_enable_samples(&vm.groovebox.drum[track], enabled); }
 REFM_EXPORT uint16_t refm_wasm_sample_mask(uint8_t track) { return track < GROOVEBOX_DRUM_TRACKS ? vm.groovebox.drum[track].sample_mask : 0u; }
+REFM_EXPORT uint16_t refm_wasm_sample_use_mask(uint8_t track) { return track < GROOVEBOX_DRUM_TRACKS ? vm.groovebox.drum[track].sample_use_mask : 0u; }
+REFM_EXPORT uint16_t refm_wasm_sample_active_mask(uint8_t track) { return track < GROOVEBOX_DRUM_TRACKS ? drum_machine_sample_active_mask(&vm.groovebox.drum[track]) : 0u; }
+REFM_EXPORT void refm_wasm_set_sample_lane(uint8_t track, uint8_t lane, uint8_t enabled) { if (track < GROOVEBOX_DRUM_TRACKS && lane < DRUM_VOICES) drum_machine_set_sample_lane(&vm.groovebox.drum[track], (drum_voice_id_t)lane, enabled); }
+REFM_EXPORT void refm_wasm_set_sample_use_mask(uint8_t track, uint16_t mask) { if (track < GROOVEBOX_DRUM_TRACKS) drum_machine_set_sample_use_mask(&vm.groovebox.drum[track], mask); }
 REFM_EXPORT void refm_wasm_select_pattern(uint8_t pattern) { pattern &= 7u; groovebox_pattern_store(&vm.groovebox.patterns, &vm.groovebox, vm.groovebox.current_pattern); groovebox_pattern_load(&vm.groovebox.patterns, &vm.groovebox, pattern); }
 
 REFM_EXPORT void refm_wasm_set_acid_step(uint8_t track, uint8_t step, uint8_t note, uint8_t flags, uint8_t probability) {
@@ -65,6 +71,29 @@ REFM_EXPORT void refm_wasm_set_acid_mod(uint8_t track, uint8_t param, uint8_t va
     acid303_t *s; if (track >= 2u) return; s = &vm.groovebox.acid[track];
     if (param == 0u) s->amp_attack = value; else if (param == 1u) s->amp_decay = value; else if (param == 2u) s->amp_sustain = value; else if (param == 3u) s->amp_release = value;
     else if (param == 4u) s->lfo_rate = value; else if (param == 5u) s->lfo_amount = value; else if (param == 6u) s->lfo_shape = (uint8_t)(value & 3u);
+}
+
+/* Browser mixer/FX controls directly edit the same mixer state used by firmware. */
+REFM_EXPORT void refm_wasm_set_mix_track(uint8_t track, uint8_t param, int16_t value) {
+    mixer_track_t *t; if (track >= MIX_TRACKS) return; t=&vm.groovebox.mixer.track[track];
+    if (param == 0u) t->level = value < 0 ? 0 : value;
+    else if (param == 1u) t->pan = value;
+    else if (param == 2u) t->mute = value ? 1u : 0u;
+    else if (param == 3u) t->solo = value ? 1u : 0u;
+    else if (param == 4u) t->delay_send = (uint8_t)(value < 0 ? 0 : value > 127 ? 127 : value);
+}
+REFM_EXPORT void refm_wasm_set_fx(uint8_t param, int16_t value) {
+    mixer_fx_t *m=&vm.groovebox.mixer;
+    if (param == 0u) m->drive = value < 0 ? 0 : value;
+    else if (param == 1u) m->compressor_threshold = value < 512 ? 512 : value;
+    else if (param == 2u) m->filter_cutoff = value < 256 ? 256 : value;
+    else if (param == 3u) mixer_fx_set_delay(m, m->delay_len, value, m->delay_mix);
+    else if (param == 4u) mixer_fx_set_delay(m, m->delay_len, m->delay_feedback, value);
+    else if (param == 5u) mixer_fx_set_delay(m, (uint16_t)(value < 1 ? 1 : value), m->delay_feedback, m->delay_mix);
+}
+REFM_EXPORT int16_t refm_wasm_get_mix_track(uint8_t track, uint8_t param) {
+    const mixer_track_t *t; if (track >= MIX_TRACKS) return 0; t=&vm.groovebox.mixer.track[track];
+    if (param == 0u) return t->level; if (param == 1u) return t->pan; if (param == 2u) return t->mute; if (param == 3u) return t->solo; if (param == 4u) return t->delay_send; return 0;
 }
 
 REFM_EXPORT const int16_t *refm_wasm_graph(uint8_t track, uint8_t kind) {
