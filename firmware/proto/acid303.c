@@ -133,6 +133,10 @@ static void reset_analog_path(acid303_t *s) {
     s->resonance_hp_lp = 0;
     s->output_hp_x = 0;
     s->output_hp_y = 0;
+    s->post_hp_x = 0;
+    s->post_hp_y = 0;
+    s->gain_smooth1 = 0;
+    s->gain_smooth2 = 0;
     s->env_rc = 0;
     s->coeff_valid = 0u;
     s->coeff_countdown = 0u;
@@ -267,14 +271,40 @@ static void envelope_step(acid303_t *s) {
         s->amp_stage = ACID_ENV_OFF;
         if (!s->gate) s->idle = 1u;
     }
-    uint32_t base = 7000u + ((uint32_t)s->resonance * 22000u) / 32767u;
-    decay_env(&s->accent_sweep, base);
+    {
+        uint32_t base = 7000u + ((uint32_t)s->resonance * 22000u) / 32767u;
+        decay_env(&s->accent_sweep, base);
+    }
 }
 
 static int32_t feedback_highpass(acid303_t *s, int32_t x) {
     int32_t d = x - s->resonance_hp_lp;
     s->resonance_hp_lp += (int32_t)(((int64_t)d * 346) >> 15);
     return x - s->resonance_hp_lp;
+}
+
+static int32_t pre_ladder_highpass(acid303_t *s, int32_t x) {
+    /* js303/Open303: ~44.486 Hz before the ladder. This runs at 88.2 kHz. */
+    int32_t y = x - s->output_hp_x + (int32_t)(((int64_t)s->output_hp_y * 32664) >> 15);
+    s->output_hp_x = x;
+    s->output_hp_y = y;
+    return y;
+}
+
+static int32_t post_ladder_highpass(acid303_t *s, int32_t x) {
+    /* Retain the inexpensive ~24.167 Hz post-ladder DC/rumble conditioning. */
+    int32_t y = x - s->post_hp_x + (int32_t)(((int64_t)s->post_hp_y * 32655) >> 15);
+    s->post_hp_x = x;
+    s->post_hp_y = y;
+    return y;
+}
+
+static int32_t declick_gain(acid303_t *s, int32_t target) {
+    /* Two cascaded ~200 Hz one-poles approximate js303/Open303's 12 dB VCA
+       de-click low-pass without a floating-point biquad on the target. */
+    s->gain_smooth1 += (int32_t)(((int64_t)(target - s->gain_smooth1) * 920) >> 15);
+    s->gain_smooth2 += (int32_t)(((int64_t)(s->gain_smooth1 - s->gain_smooth2) * 920) >> 15);
+    return s->gain_smooth2;
 }
 
 static void set_filter_coeff_target(acid303_t *s, uint32_t cutoff_hz) {
@@ -311,20 +341,19 @@ static int32_t teebee_ladder_substep(acid303_t *s, int32_t in) {
     int32_t y0 = clamp32((int64_t)in - feedback_highpass(s, fb), -196608, 196608);
     int32_t d1 = clamp32((int64_t)y0 - s->lp1 + s->lp2, -262144, 262144);
     s->lp1 = clamp32((int64_t)s->lp1 + (((int64_t)2 * s->coeff_b0 * d1) >> 15), -262144, 262144);
-    int32_t d2 = clamp32((int64_t)s->lp1 - 2ll * s->lp2 + s->lp3, -262144, 262144);
-    s->lp2 = clamp32((int64_t)s->lp2 + (((int64_t)s->coeff_b0 * d2) >> 15), -262144, 262144);
-    int32_t d3 = clamp32((int64_t)s->lp2 - 2ll * s->lp3 + s->lp4, -262144, 262144);
-    s->lp3 = clamp32((int64_t)s->lp3 + (((int64_t)s->coeff_b0 * d3) >> 15), -262144, 262144);
-    int32_t d4 = clamp32((int64_t)s->lp3 - 2ll * s->lp4, -262144, 262144);
-    s->lp4 = clamp32((int64_t)s->lp4 + (((int64_t)s->coeff_b0 * d4) >> 15), -262144, 262144);
+    {
+        int32_t d2 = clamp32((int64_t)s->lp1 - 2ll * s->lp2 + s->lp3, -262144, 262144);
+        s->lp2 = clamp32((int64_t)s->lp2 + (((int64_t)s->coeff_b0 * d2) >> 15), -262144, 262144);
+    }
+    {
+        int32_t d3 = clamp32((int64_t)s->lp2 - 2ll * s->lp3 + s->lp4, -262144, 262144);
+        s->lp3 = clamp32((int64_t)s->lp3 + (((int64_t)s->coeff_b0 * d3) >> 15), -262144, 262144);
+    }
+    {
+        int32_t d4 = clamp32((int64_t)s->lp3 - 2ll * s->lp4, -262144, 262144);
+        s->lp4 = clamp32((int64_t)s->lp4 + (((int64_t)s->coeff_b0 * d4) >> 15), -262144, 262144);
+    }
     return clamp32(((int64_t)2 * s->coeff_g * s->lp4) >> 15, -131072, 131072);
-}
-
-static int32_t output_highpass(acid303_t *s, int32_t x) {
-    int32_t y = x - s->output_hp_x + (int32_t)(((int64_t)s->output_hp_y * 32561) >> 15);
-    s->output_hp_x = x;
-    s->output_hp_y = y;
-    return y;
 }
 
 static uint32_t measured_env_cutoff(acid303_t *s) {
@@ -362,26 +391,31 @@ int32_t acid303_process(acid303_t *s) {
     if (s->lfo_amount) s->lfo_phase += 4870u + (uint32_t)s->lfo_rate * 15310u;
     envelope_step(s);
 
-    uint32_t fc = modulated_cutoff(s);
-    if (!s->coeff_countdown) set_filter_coeff_target(s, fc);
-    advance_filter_coeffs(s);
-
-    uint32_t sub_inc = s->phase_inc >> 1;
-    if (!sub_inc && s->phase_inc) sub_inc = 1u;
-    int32_t y0 = teebee_ladder_substep(s, oscillator_substep(s, sub_inc));
-    int32_t y1 = teebee_ladder_substep(s, oscillator_substep(s, sub_inc));
-    int32_t y = (y0 + y1) / 2;
-
-    int32_t gain = s->amp;
-    if (s->accented || s->accent_env > 0) {
-        int32_t ag = (int32_t)(((int64_t)s->accent_env * s->accent) >> 16);
-        gain = clamp32((int64_t)gain + ag, 0, 41000);
+    {
+        uint32_t fc = modulated_cutoff(s);
+        if (!s->coeff_countdown) set_filter_coeff_target(s, fc);
+        advance_filter_coeffs(s);
     }
-    y = (int32_t)(((int64_t)y * gain) >> 15);
-    if (s->drive) {
-        int32_t k = 32768 + s->drive;
-        y = shape_q15((int32_t)(((int64_t)y * k) >> 15));
+
+    {
+        uint32_t sub_inc = s->phase_inc >> 1;
+        int32_t y0, y1, y, gain;
+        if (!sub_inc && s->phase_inc) sub_inc = 1u;
+        y0 = teebee_ladder_substep(s, pre_ladder_highpass(s, oscillator_substep(s, sub_inc)));
+        y1 = teebee_ladder_substep(s, pre_ladder_highpass(s, oscillator_substep(s, sub_inc)));
+        y = post_ladder_highpass(s, (y0 + y1) / 2);
+
+        gain = s->amp;
+        if (s->accented || s->accent_env > 0) {
+            int32_t ag = (int32_t)(((int64_t)s->accent_env * s->accent) >> 16);
+            gain = clamp32((int64_t)gain + ag, 0, 41000);
+        }
+        gain = declick_gain(s, gain);
+        y = (int32_t)(((int64_t)y * gain) >> 15);
+        if (s->drive) {
+            int32_t k = 32768 + s->drive;
+            y = shape_q15((int32_t)(((int64_t)y * k) >> 15));
+        }
+        return clamp32(y, -32768, 32767);
     }
-    y = output_highpass(s, y);
-    return clamp32(y, -32768, 32767);
 }
