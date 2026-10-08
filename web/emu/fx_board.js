@@ -1,5 +1,23 @@
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 
+function ensureFxStyles(){
+  if(document.querySelector('#refm-fx-board-style'))return;
+  const s=document.createElement('style');s.id='refm-fx-board-style';s.textContent=`
+    .refm-fx-board{display:grid!important;grid-template-columns:.8fr 1.45fr 1.45fr 1fr!important;gap:8px!important;padding:8px!important;align-items:stretch}
+    .refm-fx-group{position:relative;padding:8px 7px 10px;border:1px solid #080909;border-radius:5px;background:linear-gradient(#353b3f,#171b1e 55%,#0e1113);box-shadow:inset 0 1px #626a6f,inset 0 -1px #050606,0 2px 5px #000;color:#eee;min-width:0}
+    .refm-fx-group:before{content:'';position:absolute;inset:4px;border:1px solid rgba(255,255,255,.08);pointer-events:none}
+    .refm-fx-group h3{margin:0 0 6px!important;padding:3px 5px;border-bottom:1px solid #555;font:900 10px Arial;letter-spacing:.12em;color:#ffb04d;text-shadow:0 1px #000}
+    .refm-fx-group:nth-child(3) h3{color:#79d7ff}.refm-fx-group:nth-child(4) h3{color:#7fe78e}
+    .refm-fx-group-controls{display:grid;grid-template-columns:repeat(auto-fit,minmax(64px,1fr));gap:4px;align-items:start}
+    .refm-fx-board .refm-fx-control{min-width:60px;padding:2px 1px;text-align:center}
+    .refm-fx-board .refm-fx-control>span{font:800 8px Arial;letter-spacing:.05em;color:#c8cdd0}
+    .refm-fx-board .refm-knob{margin-bottom:15px}
+    .refm-channel label{margin-top:4px}.refm-channel [data-reverb-send]{accent-color:#69b9df!important}
+    @media(max-width:1200px){.refm-fx-board{grid-template-columns:repeat(2,1fr)!important}}
+    @media(max-width:760px){.refm-fx-board{grid-template-columns:1fr!important}}
+  `;document.head.appendChild(s);
+}
+
 function knobify(input,format){
   const min=Number(input.min||0),max=Number(input.max||100),range=Math.max(1,max-min);
   const step=Math.max(Number(input.step||0)||range/127,range/1000);
@@ -35,6 +53,7 @@ function fxControl(mod,name,param,min,max,format){
 }
 
 export function installFxBoard(mod){
+  ensureFxStyles();
   /* Keep the ACID panels stock-focused. These controls are not present on a
      TB-303 and were confusing the product concept. The ABI remains compatible
      with old projects, but the stock rack no longer exposes them. */
