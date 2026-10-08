@@ -13,10 +13,11 @@ typedef struct {
     const int16_t *sample_pcm[DRUM_VOICES];
     uint32_t sample_frames[DRUM_VOICES];
     uint32_t sample_rate[DRUM_VOICES];
-    uint16_t sample_mask;
+    uint16_t sample_mask;      /* assets physically available */
+    uint16_t sample_use_mask;  /* lanes explicitly routed to samples */
     drum_model_t model;
     uint32_t noise;
-    uint8_t samples_enabled;
+    uint8_t samples_enabled;   /* global audition/master switch */
 } drum_machine_t;
 void drum_machine_init(drum_machine_t *d, drum_model_t model);
 void drum_machine_trigger(drum_machine_t *d, drum_voice_id_t voice, uint8_t velocity);
@@ -24,5 +25,8 @@ int16_t drum_machine_process(drum_machine_t *d);
 void drum_machine_clear_samples(drum_machine_t *d);
 void drum_machine_set_sample(drum_machine_t *d, drum_voice_id_t voice, const int16_t *pcm, uint32_t frames, uint32_t sample_rate);
 void drum_machine_enable_samples(drum_machine_t *d, uint8_t enabled);
+void drum_machine_set_sample_lane(drum_machine_t *d, drum_voice_id_t voice, uint8_t enabled);
+void drum_machine_set_sample_use_mask(drum_machine_t *d, uint16_t mask);
+uint16_t drum_machine_sample_active_mask(const drum_machine_t *d);
 uint8_t drum_machine_sample_available(const drum_machine_t *d, drum_voice_id_t voice);
 #endif
