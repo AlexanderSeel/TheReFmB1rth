@@ -15,6 +15,8 @@ The pinned Felucca `audio.c` records these fields in `felucca_dbg`:
 
 Felucca's own voice-shedding path is triggered after two consecutive half-buffers exceed roughly **85%** of their deadline. TheReFmB1rth must pass with meaningful margin below that emergency threshold.
 
+The currently pinned Felucca baseline defines `HALF_FRAMES` as **128**. Keep passing the value explicitly to the checker so a future upstream change cannot silently alter the calculated deadline.
+
 ## Required stress pattern
 
 Use the same logical load as `tests/bench_groovebox.c`:
@@ -55,10 +57,10 @@ Create a JSON snapshot with the Felucca diagnostic values, for example:
 }
 ```
 
-Then run the checker using the build's actual `HALF_FRAMES` value:
+Then run the checker using the build's actual `HALF_FRAMES` value. For the currently pinned Felucca baseline this is 128:
 
 ```sh
-python3 tools/target_cpu_report.py fm1-cpu.json --half-frames 64 --output build/target/cpu-report.json
+python3 tools/target_cpu_report.py fm1-cpu.json --half-frames 128 --output build/target/cpu-report.json
 ```
 
 The script calculates the half-buffer deadline from 44.1 kHz, reports sustained/last/peak percentages, and exits non-zero when the physical gate fails.
