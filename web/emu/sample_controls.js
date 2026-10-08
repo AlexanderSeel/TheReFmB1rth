@@ -1,3 +1,5 @@
+import {installFxBoard} from './fx_board.js';
+
 // Browser auxiliary controls. No shadow musical state: all truth comes from WASM.
 const NAMES=['BD','SD','CP','RS','CH','OH','LT','MT','HT','CR','RD'];
 const NOTE_NAMES=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
@@ -43,8 +45,6 @@ function installAcidTimingControls(mod){
       else if(mode==='tie'){s.flags=TIE;}
       else{s.flags=0;}
       write(track,step,s);paintStep(track,step);refresh(editor,track);
-      /* TB-303-style time entry: REST and TIE consume the current step and
-         move the write cursor. NOTE stays put until a pitch is chosen. */
       if(mode!=='note')advanceStep(track,step);
     });
     flags.querySelectorAll('[data-modifier]').forEach(b=>b.onclick=()=>{
@@ -57,15 +57,10 @@ function installAcidTimingControls(mod){
       const noteKey=e.target.closest('[data-note]');
       if(noteKey)queueMicrotask(()=>{
         const step=selectedStep(track),s=read(track,step);
-        /* The hardware-style piano already wrote the chosen pitch. Force the
-           step into NOTE mode, preserve ACCENT/SLIDE, then advance exactly one
-           position. Step 16 wraps to step 1. */
         s.flags=(s.flags&(ACCENT|SLIDE))|GATE;
         write(track,step,s);paintStep(track,step);refresh(editor,track);
         advanceStep(track,step);
       });
-      /* OCT +/- is an edit of the current note, not a new note-entry action,
-         so it intentionally does not advance the cursor. */
       if(e.target.closest('[data-oct]'))queueMicrotask(()=>{const step=selectedStep(track),s=read(track,step);s.flags=(s.flags&(ACCENT|SLIDE))|GATE;write(track,step,s);paintStep(track,step);refresh(editor,track);});
       if(e.target.closest('.step'))queueMicrotask(()=>refresh(editor,track));
     });
@@ -77,6 +72,7 @@ function installAcidTimingControls(mod){
 
 export function installSampleControls(mod){
   installAcidTimingControls(mod);
+  installFxBoard(mod);
   if(!mod?._refm_wasm_sample_mask||!mod?._refm_wasm_set_sample_lane)return;
   const refresh=(track,root)=>{
     const avail=mod._refm_wasm_sample_mask(track)>>>0;
