@@ -4,6 +4,11 @@
 #include <time.h>
 #include "../firmware/proto/groovebox.h"
 
+/* Mirrors the target lifetime: the real FM-1 runtime lives in .pool, not on
+   the tiny call stack. Keeping the stress instance static also makes host CI
+   exercise the same long-lived object model. */
+static groovebox_t g_stress;
+
 static void fill_worst_case(groovebox_t *g) {
     const uint16_t all = (uint16_t)((1u << DRUM_VOICES) - 1u);
     for (unsigned a = 0; a < 2u; ++a) {
@@ -41,15 +46,14 @@ static void fill_worst_case(groovebox_t *g) {
 
 int main(void) {
     enum { FRAMES = 1000000 };
-    groovebox_t g;
     uint32_t checksum = 0u;
     int16_t l = 0, r = 0;
-    groovebox_init(&g, 150u);
-    fill_worst_case(&g);
+    groovebox_init(&g_stress, 150u);
+    fill_worst_case(&g_stress);
 
     clock_t begin = clock();
     for (uint32_t i = 0; i < FRAMES; ++i) {
-        groovebox_process(&g, &l, &r);
+        groovebox_process(&g_stress, &l, &r);
         checksum = checksum * 33u + (uint16_t)l;
         checksum = checksum * 33u + (uint16_t)r;
     }
