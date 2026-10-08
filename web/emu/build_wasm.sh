@@ -41,7 +41,7 @@ import sys
 p=Path(sys.argv[1]); s=p.read_text(encoding='utf-8')
 s=s.replace('</head>', '<link rel="stylesheet" href="./rebirth_skin.css"></head>', 1)
 s=s.replace("mod=await createRefm(", "window.__refm=mod=await createRefm(", 1)
-insert='''\n<script type="module">\nimport {installSampleControls} from './sample_controls.js';\nimport {installRebirthSkin} from './rebirth_skin.js';\nconst wait=()=>window.__refm?(installSampleControls(window.__refm),installRebirthSkin(window.__refm)):setTimeout(wait,25); wait();\n</script>\n'''
+insert='''\n<script type="module">\nimport {installSampleControls} from './sample_controls.js';\nimport {installRebirthSkin} from './rebirth_skin.js';\nconst wait=()=>window.__refm?(installRebirthSkin(window.__refm),installSampleControls(window.__refm)):setTimeout(wait,25); wait();\n</script>\n'''
 s=s.replace('</body>', insert+'</body>', 1)
 p.write_text(s, encoding='utf-8')
 PY
