@@ -14,6 +14,7 @@ import argparse
 import hashlib
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 PIN = "3dd2b0852bc310a2c1bf00c2d443ac19202c2140"
@@ -41,6 +42,11 @@ def verify_pin(dst: Path) -> None:
         raise SystemExit(f"refusing overlay: Felucca HEAD is {actual}, expected {PIN}")
 
 
+def generate_runtime_assets() -> None:
+    subprocess.run([sys.executable, str(ROOT / "tools" / "generate_303_wavetables.py")], cwd=ROOT, check=True)
+    subprocess.run([sys.executable, str(ROOT / "tools" / "generate_303_wavetables.py"), "--check"], cwd=ROOT, check=True)
+
+
 def copy_runtime(dst: Path) -> None:
     target = dst / "firmware" / "refm"
     if target.exists():
@@ -57,33 +63,14 @@ def copy_runtime(dst: Path) -> None:
 def patch_audio(dst: Path) -> None:
     audio = dst / "firmware" / "src" / "audio.c"
     replace_once(audio, "    mix_block(out, n);\n", "    refm_felucca_audio_block(out, n);\n")
-    replace_once(
-        audio,
-        "#define HALF_WORDS (HALF_FRAMES * 2u)\n",
-        "#define HALF_WORDS (HALF_FRAMES * 2u)\nextern void refm_felucca_audio_block(int32_t *out, uint32_t frames);\n",
-    )
+    replace_once(audio, "#define HALF_WORDS (HALF_FRAMES * 2u)\n", "#define HALF_WORDS (HALF_FRAMES * 2u)\nextern void refm_felucca_audio_block(int32_t *out, uint32_t frames);\n")
 
 
 def patch_midi(dst: Path) -> None:
     usb = dst / "firmware" / "src" / "usb.c"
-    replace_once(
-        usb,
-        "static int midi_enqueue(uint32_t pkt, uint32_t source)\n{\n",
-        "#ifdef REFM_APP\n"
-        "extern void refm_felucca_midi_packet(uint32_t packet);\n"
-        "#define REFM_MIRROR_MIDI(pkt) refm_felucca_midi_packet(pkt)\n"
-        "#else\n"
-        "#define REFM_MIRROR_MIDI(pkt) ((void)0)\n"
-        "#endif\n"
-        "static int midi_enqueue(uint32_t pkt, uint32_t source)\n{\n"
-        "    REFM_MIRROR_MIDI(pkt);\n",
-    )
+    replace_once(usb, "static int midi_enqueue(uint32_t pkt, uint32_t source)\n{\n", "#ifdef REFM_APP\nextern void refm_felucca_midi_packet(uint32_t packet);\n#define REFM_MIRROR_MIDI(pkt) refm_felucca_midi_packet(pkt)\n#else\n#define REFM_MIRROR_MIDI(pkt) ((void)0)\n#endif\nstatic int midi_enqueue(uint32_t pkt, uint32_t source)\n{\n    REFM_MIRROR_MIDI(pkt);\n")
     felucca = dst / "firmware" / "src" / "felucca.c"
-    replace_once(
-        felucca,
-        '#include "usb.c"\n',
-        '#define REFM_APP 1\n#include "usb.c"\n#undef REFM_APP\n',
-    )
+    replace_once(felucca, '#include "usb.c"\n', '#define REFM_APP 1\n#include "usb.c"\n#undef REFM_APP\n')
 
 
 def patch_storage(dst: Path) -> None:
@@ -94,39 +81,13 @@ def patch_storage(dst: Path) -> None:
 
 def patch_ui(dst: Path) -> None:
     ui_input = dst / "firmware" / "src" / "ui_input.c"
-    replace_once(
-        ui_input,
-        "    *vp = (int16_t)v;\n    if (pg->scope != SC_GLOBAL) motion_capture(TSEL, (uint32_t)(vp - TSEL->p), *vp);\n",
-        "    *vp = (int16_t)v;\n"
-        "    if (song.sel < 2u) {\n"
-        "        uint8_t rk = 0u;\n"
-        "        if (pg->fam == FAM_ENV && pg->graph == GR_ADSR) rk = 1u;\n"
-        "        else if (pg->fam == FAM_LFO && pg->graph == GR_LFO) rk = 2u;\n"
-        "        else if (pg->fam == FAM_LFO && pg->id[slot] == P_LD_FLT) rk = 3u;\n"
-        "        else if (pg->fam == FAM_EDIT && pg->id[slot] >= P_E0 && pg->id[slot] <= P_E3) rk = 4u;\n"
-        "        if (rk) refm_felucca_ui_param(song.sel, rk, (uint8_t)slot, *vp);\n"
-        "    }\n"
-        "    if (pg->scope != SC_GLOBAL) motion_capture(TSEL, (uint32_t)(vp - TSEL->p), *vp);\n",
-    )
-    replace_once(
-        ui_input,
-        "static void edit_param(uint32_t slot, int32_t steps)\n{\n",
-        "extern void refm_felucca_ui_param(uint8_t track, uint8_t kind, uint8_t slot, int16_t value);\n"
-        "static void edit_param(uint32_t slot, int32_t steps)\n{\n",
-    )
+    replace_once(ui_input, "    *vp = (int16_t)v;\n    if (pg->scope != SC_GLOBAL) motion_capture(TSEL, (uint32_t)(vp - TSEL->p), *vp);\n", "    *vp = (int16_t)v;\n    if (song.sel < 2u) {\n        uint8_t rk = 0u;\n        if (pg->fam == FAM_ENV && pg->graph == GR_ADSR) rk = 1u;\n        else if (pg->fam == FAM_LFO && pg->graph == GR_LFO) rk = 2u;\n        else if (pg->fam == FAM_LFO && pg->id[slot] == P_LD_FLT) rk = 3u;\n        else if (pg->fam == FAM_EDIT && pg->id[slot] >= P_E0 && pg->id[slot] <= P_E3) rk = 4u;\n        if (rk) refm_felucca_ui_param(song.sel, rk, (uint8_t)slot, *vp);\n    }\n    if (pg->scope != SC_GLOBAL) motion_capture(TSEL, (uint32_t)(vp - TSEL->p), *vp);\n")
+    replace_once(ui_input, "static void edit_param(uint32_t slot, int32_t steps)\n{\n", "extern void refm_felucca_ui_param(uint8_t track, uint8_t kind, uint8_t slot, int16_t value);\nstatic void edit_param(uint32_t slot, int32_t steps)\n{\n")
 
     ui_graph = dst / "firmware" / "src" / "ui_graph.c"
     helper = '''extern int refm_felucca_ui_curve(uint8_t track, uint8_t kind, int16_t *out, uint32_t count);\n\n/* TheReFmB1rth ACID pages: render the same 64-point model used by the browser/WASM UI. */\nstatic int graph_refm(uint8_t kind, uint16_t c)\n{\n    int16_t yv[64];\n    int32_t i, px = 0, py = 0;\n    if (song.sel >= 2u || refm_felucca_ui_curve(song.sel, kind, yv, 64u) != 64) return 0;\n    if (kind == 2u) cv_rect(PANEL_X0, graph_ht / 2, PANEL_W, 1, T_RAISE);\n    else cv_rect(PANEL_X0, 88 * graph_ht / 100, PANEL_W, 1, T_RAISE);\n    for (i = 0; i < 64; ++i) {\n        int32_t x = PANEL_X0 + i * (PANEL_W - 1) / 63;\n        int32_t y;\n        if (kind == 2u) y = graph_ht / 2 - (int32_t)yv[i] * (42 * graph_ht / 100) / 32768;\n        else y = 88 * graph_ht / 100 - (int32_t)yv[i] * (78 * graph_ht / 100) / 32767;\n        if (i) cv_line_t(px, py, x, y, c, 2);\n        px = x; py = y;\n    }\n    return 1;\n}\n\n'''
     replace_once(ui_graph, "static void draw_graph(void)\n{\n", helper + "static void draw_graph(void)\n{\n")
-    replace_once(
-        ui_graph,
-        "    } else {\n        switch (pg->graph) {\n",
-        "    } else {\n"
-        "        if (song.sel < 2u && pg->fam == FAM_ENV && pg->graph == GR_ADSR) { graph_refm(1u, c); }\n"
-        "        else if (song.sel < 2u && pg->fam == FAM_LFO && pg->graph == GR_LFO) { graph_refm(2u, c); }\n"
-        "        else if (song.sel < 2u && pg->fam == FAM_EDIT && pg->id[0] == P_E0) { graph_refm(4u, c); }\n"
-        "        else switch (pg->graph) {\n",
-    )
+    replace_once(ui_graph, "    } else {\n        switch (pg->graph) {\n", "    } else {\n        if (song.sel < 2u && pg->fam == FAM_ENV && pg->graph == GR_ADSR) { graph_refm(1u, c); }\n        else if (song.sel < 2u && pg->fam == FAM_LFO && pg->graph == GR_LFO) { graph_refm(2u, c); }\n        else if (song.sel < 2u && pg->fam == FAM_EDIT && pg->id[0] == P_E0) { graph_refm(4u, c); }\n        else switch (pg->graph) {\n")
 
 
 def patch_build(dst: Path) -> None:
@@ -136,15 +97,7 @@ def patch_build(dst: Path) -> None:
     if compile_anchor not in text:
         raise SystemExit("build.py compile anchor changed")
     source_literal = repr(REFM_SOURCES)
-    injected = (
-        f"    refm_sources = {source_literal}\n"
-        "    refm_objs = []\n"
-        "    for idx, rel in enumerate(refm_sources):\n"
-        "        obj = OUT / f\"refm_{idx:02d}.o\"\n"
-        "        tc(\"cc\", *flags, \"-DREFM_FELUCCA_PLATFORM=1\", \"-Ifirmware/refm/proto\",\n"
-        "           \"-Ifirmware/refm/integration\", \"-c\", FW / \"refm\" / rel, \"-o\", obj)\n"
-        "        refm_objs.append(obj)\n"
-    )
+    injected = (f"    refm_sources = {source_literal}\n" "    refm_objs = []\n" "    for idx, rel in enumerate(refm_sources):\n" "        obj = OUT / f\"refm_{idx:02d}.o\"\n" "        tc(\"cc\", *flags, \"-DREFM_FELUCCA_PLATFORM=1\", \"-Ifirmware/refm/proto\",\n" "           \"-Ifirmware/refm/integration\", \"-c\", FW / \"refm\" / rel, \"-o\", obj)\n" "        refm_objs.append(obj)\n")
     text = text.replace(compile_anchor, injected + compile_anchor, 1)
     link_old = '       OUT / "felucca.o", "-o", elf)\n'
     link_new = '       OUT / "felucca.o", *refm_objs, "-o", elf)\n'
@@ -154,15 +107,7 @@ def patch_build(dst: Path) -> None:
 
 
 def write_stamp(dst: Path) -> None:
-    files = [
-        dst / "firmware" / "src" / "audio.c",
-        dst / "firmware" / "src" / "usb.c",
-        dst / "firmware" / "src" / "felucca.c",
-        dst / "firmware" / "src" / "ui_input.c",
-        dst / "firmware" / "src" / "ui_graph.c",
-        dst / "tools" / "build.py",
-        dst / "firmware" / "refm" / "sources.txt",
-    ]
+    files = [dst / "firmware" / "src" / "audio.c", dst / "firmware" / "src" / "usb.c", dst / "firmware" / "src" / "felucca.c", dst / "firmware" / "src" / "ui_input.c", dst / "firmware" / "src" / "ui_graph.c", dst / "tools" / "build.py", dst / "firmware" / "refm" / "sources.txt"]
     h = hashlib.sha256()
     for path in files:
         h.update(path.relative_to(dst).as_posix().encode())
@@ -177,6 +122,7 @@ def main() -> int:
     args = ap.parse_args()
     dst = args.felucca.resolve()
     verify_pin(dst)
+    generate_runtime_assets()
     copy_runtime(dst)
     patch_audio(dst)
     patch_midi(dst)
