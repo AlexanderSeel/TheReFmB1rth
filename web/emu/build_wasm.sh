@@ -6,6 +6,8 @@ OUT="$ROOT/build/wasm"
 mkdir -p "$OUT"
 python3 "$ROOT/tools/generate_303_wavetables.py"
 python3 "$ROOT/tools/generate_303_wavetables.py" --check
+python3 "$ROOT/tools/generate_303_hq_wavetables.py" --output "$OUT/acid303_hq_wavetable.h"
+python3 "$ROOT/tools/generate_303_hq_wavetables.py" --output "$OUT/acid303_hq_wavetable.h" --check
 # Browser gets the dedicated floating-point/Open303-HQ acid core. The FM-1 and
 # host regression builds deliberately keep firmware/proto/acid303.c so browser
 # fidelity is no longer limited by the embedded fixed-point/CPU budget.
@@ -23,7 +25,7 @@ emcc -O3 -std=c11 $SAMPLE_FLAGS \
   $COMMON $FEATURES $SAMPLE_SRC \
   "$ROOT/firmware/integration/refm_target.c" \
   "$ROOT/web/emu/refm_wasm.c" \
-  -I"$ROOT/firmware/proto" \
+  -I"$ROOT/firmware/proto" -I"$OUT" \
   -s MODULARIZE=1 \
   -s EXPORT_ES6=1 \
   -s ENVIRONMENT=web,worker \
@@ -48,7 +50,8 @@ grep -q 'installRebirthSkin' "$OUT/index.html"
 grep -q 'installSampleControls' "$OUT/index.html"
 grep -q 'installFxBoard' "$OUT/sample_controls.js"
 grep -q 'REVERB' "$OUT/fx_board.js"
+grep -q 'REFM_ACID_HQ_LEVELS 12u' "$OUT/acid303_hq_wavetable.h"
 grep -q 'Browser-only high-quality TB-303 voice' "$ROOT/web/emu/acid303_hq.c"
 
-echo "WASM groovebox built with Open303-HQ acid core + onboard FX board: $OUT/index.html + worklet.html + refm.js + refm.wasm"
+echo "WASM groovebox built with full-mipmap Open303-HQ acid core + onboard FX board: $OUT/index.html + worklet.html + refm.js + refm.wasm"
 if [ -n "$SAMPLE_SRC" ]; then echo "Bundled audition samples: enabled"; else echo "Bundled audition samples: not present (synth fallback)"; fi
