@@ -23,6 +23,7 @@ FEATURES='firmware/proto/groovebox_pattern.c firmware/proto/midi_router.c firmwa
 TARGET="$COMMON $FEATURES firmware/integration/refm_target.c"
 cc $CFLAGS $COMMON tests/test_groovebox.c -o build/host/test_groovebox
 cc $CFLAGS $COMMON tests/render_hash.c -o build/host/render_hash
+cc $CFLAGS $COMMON tests/bench_groovebox.c -o build/host/bench_groovebox
 cc $CFLAGS firmware/proto/pattern_bank.c tests/test_pattern_bank.c -o build/host/test_pattern_bank
 cc $CFLAGS firmware/proto/sample_voice.c firmware/proto/drum_machine.c firmware/proto/midi_router.c tests/test_midi_router.c -o build/host/test_midi_router
 cc $CFLAGS $COMMON $FEATURES tests/test_groovebox_features.c -o build/host/test_groovebox_features
@@ -39,7 +40,9 @@ cat build/host/acid-reference-polyblep.txt
 printf '%s\n' '--- oscillator throughput ---'
 build/host/bench_acid303
 build/host/bench_acid303_polyblep
-size build/host/acid_reference_probe build/host/acid_reference_probe_polyblep || true
+printf '%s\n' '--- four-machine worst-case throughput ---'
+build/host/bench_groovebox
+size build/host/acid_reference_probe build/host/acid_reference_probe_polyblep build/host/bench_groovebox || true
 build/host/render_hash > build/host/audio-render-hash.txt
 cat build/host/audio-render-hash.txt
 python3 -m unittest discover -s tests -p 'test_*.py'
