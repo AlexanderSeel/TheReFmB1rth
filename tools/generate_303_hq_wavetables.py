@@ -70,8 +70,8 @@ def q15(v:float)->int:
     return max(-32768,min(32767,round(v*32767.0)))
 
 
-def emit_single(name:str,values:list[float])->str:
-    vals=[q15(v) for v in values]; out=[f"static const int16_t {name}[REFM_ACID_WT_SIZE] = {{\n"]
+def emit_single(name:str,values:list[float],scale:float=1.0)->str:
+    vals=[q15(v*scale) for v in values]; out=[f"static const int16_t {name}[REFM_ACID_WT_SIZE] = {{\n"]
     for i in range(0,N,16): out.append("    "+", ".join(map(str,vals[i:i+16]))+",\n")
     out.append("};\n"); return ''.join(out)
 
@@ -91,7 +91,9 @@ def generate()->str:
     ]
     for i in range(LEVELS):
         out.append(emit_single(f"refm_acid_wt_saw_{i}",saw[i]))
-        out.append(emit_single(f"refm_acid_wt_square_{i}",sq[i]))
+        # Open303's BlendOscillator multiplies its SQUARE303 branch by 0.5
+        # after lookup. Bake that relationship into the browser HQ tables.
+        out.append(emit_single(f"refm_acid_wt_square_{i}",sq[i],0.5))
     out.append("static const int16_t *const refm_acid_wt_saw[REFM_ACID_WT_BANDS] = {\n    "+", ".join(f"refm_acid_wt_saw_{i}" for i in range(LEVELS))+"\n};\n")
     out.append("static const int16_t *const refm_acid_wt_square[REFM_ACID_WT_BANDS] = {\n    "+", ".join(f"refm_acid_wt_square_{i}" for i in range(LEVELS))+"\n};\n#endif\n")
     return ''.join(out)
