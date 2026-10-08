@@ -34,6 +34,7 @@ typedef struct {
     double notch_x1,notch_x2,notch_y1,notch_y2;
     double aa_w[12];
     double declick_x1,declick_x2,declick_y1,declick_y2;
+    double square_mem;
     double main_env;
     double amp_env;
     double accent_rc;
@@ -123,14 +124,32 @@ static double antialias(hq_state_t*q,double in){
     double tmp=in,y;int i;for(i=0;i<12;i++)tmp-=a[i]*q->aa_w[i];y=b[0]*tmp;for(i=0;i<12;i++)y+=b[i+1]*q->aa_w[i];for(i=11;i>0;i--)q->aa_w[i]=q->aa_w[i-1];q->aa_w[0]=tmp;return y;
 }
 
+/* Real TB-303 square waves are derived from the saw by an overdriven transistor
+ * stage with capacitor memory. Measurements show a broad/rounded low-note pulse
+ * and a progressively narrower high-note pulse. Open303's static SQUARE303
+ * captures the transistor transfer curve but not this pitch dependency, so the
+ * WASM HQ reference adds a lightweight memoryful approximation here. */
+static double square303_hardware(hq_state_t*q,double saw){
+    double f=dclamp(q->freq,55.0,1000.0);
+    double pos=log(f/55.0)/log(1000.0/55.0);
+    double duty=0.71+(0.45-0.71)*pos;
+    double threshold=1.0-2.0*duty;
+    double target=-tanh(52.0*(saw-threshold));
+    double corner=650.0+5200.0*pos;
+    double a=1.0-exp(-2.0*PI*corner/OSR);
+    q->square_mem+=a*(target-q->square_mem);
+    return 0.5*q->square_mem;
+}
+
 static double osc(hq_state_t*q,acid303_t*s){
-    uint32_t inc=(uint32_t)llround(q->freq/SR*4294967296.0),band=0,idx;double frac,a,b;
+    uint32_t inc=(uint32_t)llround(q->freq/SR*4294967296.0),band=0,idx;double frac,a,b,saw;
     while(band+1u<REFM_ACID_WT_BANDS&&inc>refm_acid_wt_threshold_inc[band])++band;
     q->phase+=q->freq/OSR;if(q->phase>=1.0)q->phase-=floor(q->phase);
     {
-        const int16_t *tab=s->square?refm_acid_wt_square[band]:refm_acid_wt_saw[band];
+        const int16_t *tab=refm_acid_wt_saw[band];
         double p=q->phase*(double)REFM_ACID_WT_SIZE;idx=(uint32_t)p&REFM_ACID_WT_MASK;frac=p-floor(p);a=tab[idx];b=tab[(idx+1u)&REFM_ACID_WT_MASK];
-        return(a+(b-a)*frac)/32768.0;
+        saw=(a+(b-a)*frac)/32768.0;
+        return s->square?square303_hardware(q,saw):saw;
     }
 }
 
