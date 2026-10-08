@@ -1,22 +1,33 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
-"""Generate compact band-limited Q15 oscillator tables for the acid engine.
+"""Generate compact Open303-shaped band-limited Q15 oscillator tables.
 
-The layout is inspired by js303's useful idea of moving Fourier work out of the
-audio callback, but uses generated C/Q15 data rather than a browser PNG. Ten
-frequency bands cover the acid range; each band contains 128 samples for SAW
-and a 65%-duty 303-style pulse. Harmonics are limited to 22.05 kHz so the same
-tables are safe for the 44.1 kHz output path even though the ladder runs at 2x.
+This generator keeps the FM-1-friendly precomputed-table architecture, but the
+prototype shapes now follow Open303's SAW303/SQUARE303 construction instead of
+a generic Fourier saw and arbitrary pulse. Open303 uses a 2048-sample prototype
+and 12 mip levels; this embedded adaptation uses 512-sample tables and ten pitch
+bands to balance fidelity and XIP cost.
+
+The 303 square is derived from the 303 saw by Open303's tanh shaping constants
+(36.9 dB drive, +4.37 offset), inverted, shifted by 180 degrees, and rendered
+at half the saw level as Open303's BlendOscillator does.
 """
 from __future__ import annotations
-import argparse, math
+import argparse
+import cmath
+import math
 from pathlib import Path
 
 BAND_NOTES = [24, 32, 40, 48, 56, 64, 72, 80, 88, 96]
-SIZE = 128
+SIZE = 512
+BITS = 9
 OUT_SR = 44100.0
 BANDLIMIT_HZ = OUT_SR * 0.5
-DUTY = 0.65
+SAW_SCALE = 30000.0
+SQUARE_SCALE = SAW_SCALE * 0.5
+TANH_DRIVE_DB = 36.9
+TANH_OFFSET = 4.37
+SQUARE_PHASE_DEG = 180.0
 
 
 def hz(note: int) -> float:
@@ -27,25 +38,61 @@ def phase_inc(note: int) -> int:
     return round((2.0**32) * hz(note) / OUT_SR)
 
 
-def wave(note: int, pulse: bool) -> tuple[list[int], int]:
-    harmonics = max(1, int(BANDLIMIT_HZ // hz(note)))
-    values: list[float] = []
-    for n in range(SIZE):
-        t = n / SIZE
-        v = 0.0
-        for k in range(1, harmonics + 1):
-            if pulse:
-                # Zero-mean Fourier pulse with the intentionally asymmetric
-                # duty used by the fixed-point 303 square path.
-                v += (2.0 / (math.pi * k)) * math.sin(math.pi * k * DUTY) * math.cos(
-                    2.0 * math.pi * k * (t - DUTY / 2.0)
-                )
-            else:
-                v += -2.0 / (math.pi * k) * math.sin(2.0 * math.pi * k * t)
-        values.append(v)
-    peak = max(abs(v) for v in values) or 1.0
-    scale = 30000.0 / peak
-    return [max(-32768, min(32767, round(v * scale))) for v in values], harmonics
+def open303_saw_prototype() -> list[float]:
+    # Matches rosic_MipMappedWaveTable::fillWithSaw303(): rise 0..1 over
+    # the first half, discontinuity, then rise -1..0 over the second half.
+    n = SIZE
+    n1 = max(1, min(n - 1, round(0.5 * (n - 1))))
+    n2 = n - n1
+    s1 = 1.0 / (n1 - 1)
+    s2 = 1.0 / n2
+    out = []
+    for i in range(n):
+        out.append(s1 * i if i < n1 else -1.0 + s2 * (i - n1))
+    return out
+
+
+def open303_square_prototype(saw: list[float]) -> list[float]:
+    # Open303 defaults from MipMappedWaveTable ctor.
+    shaper = 10.0 ** (TANH_DRIVE_DB / 20.0)
+    shaped = [-math.tanh(shaper * x + TANH_OFFSET) for x in saw]
+    shift = round(SIZE * SQUARE_PHASE_DEG / 360.0) % SIZE
+    if shift:
+        shaped = shaped[-shift:] + shaped[:-shift]
+    return shaped
+
+
+def spectrum(proto: list[float]) -> list[complex]:
+    # Positive-frequency DFT coefficients. Open303's mipmap explicitly removes
+    # DC and Nyquist, so we do the same and reconstruct only harmonics 1..N/2-1.
+    n = len(proto)
+    coeff = [0j] * (n // 2)
+    for k in range(1, n // 2):
+        acc = 0j
+        for i, x in enumerate(proto):
+            acc += x * cmath.exp(-2j * math.pi * k * i / n)
+        coeff[k] = acc / n
+    return coeff
+
+
+def bandlimited(coeff: list[complex], harmonics: int, scale: float) -> list[int]:
+    n = SIZE
+    hmax = max(1, min(harmonics, n // 2 - 1))
+    out: list[int] = []
+    for i in range(n):
+        z = 0j
+        phase = 2j * math.pi * i / n
+        for k in range(1, hmax + 1):
+            z += coeff[k] * cmath.exp(phase * k)
+        # Positive + mirrored negative spectrum.
+        v = 2.0 * z.real
+        out.append(max(-32768, min(32767, round(v * scale))))
+    return out
+
+
+def band_upper_notes() -> list[int]:
+    mids = [(BAND_NOTES[i] + BAND_NOTES[i + 1]) // 2 for i in range(len(BAND_NOTES) - 1)]
+    return mids + [104]
 
 
 def c_array(name: str, values: list[int]) -> str:
@@ -56,12 +103,17 @@ def c_array(name: str, values: list[int]) -> str:
 
 
 def generate() -> str:
+    saw_proto = open303_saw_prototype()
+    square_proto = open303_square_prototype(saw_proto)
+    saw_spec = spectrum(saw_proto)
+    square_spec = spectrum(square_proto)
+    uppers = band_upper_notes()
     tables = []
     harmonic_counts = []
-    for note in BAND_NOTES:
-        saw, harmonics = wave(note, False)
-        square, _ = wave(note, True)
-        tables.append((saw, square))
+    for upper_note in uppers:
+        harmonics = min(SIZE // 2 - 1, max(1, int(BANDLIMIT_HZ // hz(upper_note))))
+        tables.append((bandlimited(saw_spec, harmonics, SAW_SCALE),
+                       bandlimited(square_spec, harmonics, SQUARE_SCALE)))
         harmonic_counts.append(harmonics)
     mids = [(BAND_NOTES[i] + BAND_NOTES[i + 1]) // 2 for i in range(len(BAND_NOTES) - 1)]
     thresholds = [phase_inc(note) for note in mids]
@@ -69,26 +121,25 @@ def generate() -> str:
         "// SPDX-License-Identifier: GPL-3.0-only\n",
         "/* Generated by tools/generate_303_wavetables.py. Do not hand-edit. */\n",
         "#ifndef REFM_ACID303_WAVETABLE_H\n#define REFM_ACID303_WAVETABLE_H\n#include <stdint.h>\n",
-        "#define REFM_ACID_WT_BANDS 10u\n#define REFM_ACID_WT_SIZE 128u\n#define REFM_ACID_WT_MASK 127u\n",
+        f"#define REFM_ACID_WT_BANDS {len(BAND_NOTES)}u\n",
+        f"#define REFM_ACID_WT_BITS {BITS}u\n",
+        f"#define REFM_ACID_WT_SIZE {SIZE}u\n",
+        f"#define REFM_ACID_WT_MASK {SIZE - 1}u\n",
         "static const uint32_t refm_acid_wt_threshold_inc[REFM_ACID_WT_BANDS-1u] = {\n    "
-        + ", ".join(f"{v}u" for v in thresholds)
-        + "\n};\n",
+        + ", ".join(f"{v}u" for v in thresholds) + "\n};\n",
         "static const uint16_t refm_acid_wt_harmonics[REFM_ACID_WT_BANDS] = {\n    "
-        + ", ".join(str(v) for v in harmonic_counts)
-        + "\n};\n",
+        + ", ".join(str(v) for v in harmonic_counts) + "\n};\n",
     ]
     for i, (saw, square) in enumerate(tables):
         out.append(c_array(f"refm_acid_wt_saw_{i}", saw))
         out.append(c_array(f"refm_acid_wt_square_{i}", square))
     out.append(
         "static const int16_t *const refm_acid_wt_saw[REFM_ACID_WT_BANDS] = {\n    "
-        + ", ".join(f"refm_acid_wt_saw_{i}" for i in range(len(tables)))
-        + "\n};\n"
+        + ", ".join(f"refm_acid_wt_saw_{i}" for i in range(len(tables))) + "\n};\n"
     )
     out.append(
         "static const int16_t *const refm_acid_wt_square[REFM_ACID_WT_BANDS] = {\n    "
-        + ", ".join(f"refm_acid_wt_square_{i}" for i in range(len(tables)))
-        + "\n};\n#endif\n"
+        + ", ".join(f"refm_acid_wt_square_{i}" for i in range(len(tables))) + "\n};\n#endif\n"
     )
     return "".join(out)
 
