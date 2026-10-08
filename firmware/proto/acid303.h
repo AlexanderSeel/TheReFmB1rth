@@ -31,8 +31,16 @@ typedef struct {
     int32_t lp3;
     int32_t lp4;
     int32_t resonance_hp_lp;
+
+    /* Analog-conditioning state informed by Open303/js303's signal path.
+       The legacy output_hp names are retained as the pre-ladder 44.486 Hz HPF
+       state to avoid unnecessary structure churn in target diagnostics. */
     int32_t output_hp_x;
     int32_t output_hp_y;
+    int32_t post_hp_x;
+    int32_t post_hp_y;
+    int32_t gain_smooth1;
+    int32_t gain_smooth2;
 
     /* Control-rate ladder coefficients. Expensive cutoff/resonance polynomial
        work is done every 32 output samples; these values interpolate between
@@ -46,7 +54,7 @@ typedef struct {
 
     /* TB-303 style control/envelope state. */
     int32_t env;
-    int32_t env_rc;      /* ~15 ms RC-smoothed filter envelope */
+    int32_t env_rc;
     int32_t amp;
     int32_t accent_env;
     int32_t accent_sweep;
@@ -57,10 +65,9 @@ typedef struct {
     uint16_t decay;
     uint16_t accent;
     uint16_t drive;
-    int8_t tune;         /* fine tuning around concert pitch, centered at zero */
+    int8_t tune;
 
-    /* Retained for project compatibility / optional extended envelope mode.
-       Authentic 303 mode uses the fixed VCA contour instead. */
+    /* Retained for project compatibility / optional extended envelope mode. */
     uint8_t amp_attack;
     uint8_t amp_decay;
     uint8_t amp_sustain;
@@ -72,11 +79,11 @@ typedef struct {
     uint8_t lfo_amount;
     uint8_t lfo_shape;
 
-    uint8_t square;      /* 0 = saw, 1 = 303-style square */
+    uint8_t square;
     uint8_t gate;
     uint8_t accented;
     uint8_t sliding;
-    uint8_t idle;        /* true only after the VCA has decayed to silence */
+    uint8_t idle;
     uint8_t coeff_countdown;
     uint8_t coeff_valid;
 } acid303_t;
