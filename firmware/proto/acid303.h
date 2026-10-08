@@ -34,6 +34,16 @@ typedef struct {
     int32_t output_hp_x;
     int32_t output_hp_y;
 
+    /* Control-rate ladder coefficients. Expensive cutoff/resonance polynomial
+       work is done every 32 output samples; these values interpolate between
+       updates so the 88.2 kHz ladder itself remains smooth. */
+    int32_t coeff_b0;
+    int32_t coeff_k;
+    int32_t coeff_g;
+    int32_t coeff_b0_step;
+    int32_t coeff_k_step;
+    int32_t coeff_g_step;
+
     /* TB-303 style control/envelope state. */
     int32_t env;
     int32_t env_rc;      /* ~15 ms RC-smoothed filter envelope */
@@ -67,6 +77,8 @@ typedef struct {
     uint8_t accented;
     uint8_t sliding;
     uint8_t idle;        /* true only after the VCA has decayed to silence */
+    uint8_t coeff_countdown;
+    uint8_t coeff_valid;
 } acid303_t;
 
 void acid303_init(acid303_t *s);
