@@ -19,6 +19,72 @@ export function installRebirthSkin(mod){
     b.innerHTML=`<span class="refm-step-num">${step+1}</span><strong>${s.flags&1?noteLabel(s.note):'—'}</strong><small>${s.flags&2?'ACC ':''}${s.flags&4?'SLD ':''}${s.flags&8?'TIE':''}</small>`;
   };
 
+  const showToast=(text,bad=false)=>{
+    let t=document.querySelector('.refm-toast');
+    if(!t){t=document.createElement('div');t.className='refm-toast';document.body.appendChild(t);}
+    t.textContent=text;t.classList.toggle('bad',bad);t.classList.add('show');
+    clearTimeout(t._timer);t._timer=setTimeout(()=>t.classList.remove('show'),2200);
+  };
+
+  /* Real rotary control layer over native ranges. */
+  const knobify=(input)=>{
+    if(!input || input.dataset.refmKnob==='1')return;
+    input.dataset.refmKnob='1';
+    const min=Number(input.min||0),max=Number(input.max||100),range=Math.max(1,max-min);
+    const step=Math.max(Number(input.step||0)||range/127,range/1000);
+    const reset=Number(input.defaultValue||input.value||((min+max)/2));
+    const face=document.createElement('div');face.className='refm-knob';face.tabIndex=0;face.setAttribute('role','slider');
+    face.innerHTML='<span class="refm-knob-pointer"></span><small class="refm-knob-value"></small>';
+    input.insertAdjacentElement('afterend',face);
+    input.classList.add('refm-knob-input');
+    const sync=()=>{const value=Number(input.value),norm=clamp((value-min)/range,0,1),angle=-135+norm*270;face.style.setProperty('--angle',`${angle}deg`);face.setAttribute('aria-valuemin',String(min));face.setAttribute('aria-valuemax',String(max));face.setAttribute('aria-valuenow',String(value));face.querySelector('small').textContent=Math.round(norm*100)+'%';};
+    const setValue=(v)=>{const snapped=Math.round((clamp(v,min,max)-min)/step)*step+min;input.value=String(clamp(snapped,min,max));input.dispatchEvent(new Event('input',{bubbles:true}));sync();};
+    let startY=0,startValue=0,dragging=false;
+    face.addEventListener('pointerdown',e=>{dragging=true;startY=e.clientY;startValue=Number(input.value);face.setPointerCapture(e.pointerId);face.classList.add('dragging');e.preventDefault();});
+    face.addEventListener('pointermove',e=>{if(!dragging)return;const fine=e.shiftKey?.18:.007;setValue(startValue+(startY-e.clientY)*range*fine);});
+    const end=e=>{if(!dragging)return;dragging=false;try{face.releasePointerCapture(e.pointerId);}catch{}face.classList.remove('dragging');};
+    face.addEventListener('pointerup',end);face.addEventListener('pointercancel',end);
+    face.addEventListener('wheel',e=>{e.preventDefault();const mult=e.shiftKey?1:5;setValue(Number(input.value)+(e.deltaY<0?step*mult:-step*mult));},{passive:false});
+    face.addEventListener('dblclick',()=>setValue(reset));
+    face.addEventListener('keydown',e=>{let d=0;if(e.key==='ArrowUp'||e.key==='ArrowRight')d=step*(e.shiftKey?1:5);if(e.key==='ArrowDown'||e.key==='ArrowLeft')d=-step*(e.shiftKey?1:5);if(e.key==='Home')return setValue(min);if(e.key==='End')return setValue(max);if(d){e.preventDefault();setValue(Number(input.value)+d);}});
+    input.addEventListener('input',sync);sync();
+  };
+
+  /* Sequence JSON exchange: current slot only, never resets the full pattern bank. */
+  const seqTools=document.createElement('div');seqTools.className='refm-sequence-tools';
+  seqTools.innerHTML='<button data-save-seq>SAVE SEQUENCE</button><button data-load-seq>LOAD JSON</button><input data-seq-file type="file" accept="application/json,.json" hidden>';
+  document.querySelector('.master')?.appendChild(seqTools);
+  const captureSequence=()=>({
+    format:'TheReFmB1rth.sequence',version:1,
+    sourcePattern:mod._refm_wasm_pattern()&7,
+    bpm:mod._refm_wasm_bpm(),
+    acid:[0,1].map(t=>Array.from({length:16},(_,s)=>readStep(t,s))),
+    drums:[0,1].map(t=>Array.from({length:16},(_,s)=>{const x=mod._refm_wasm_get_drum_step(t,s)>>>0;return{hits:x&65535,accents:(x>>>16)&65535};}))
+  });
+  seqTools.querySelector('[data-save-seq]').onclick=()=>{
+    const data=captureSequence(),letter=String.fromCharCode(65+data.sourcePattern),blob=new Blob([JSON.stringify(data,null,2)+'\n'],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');
+    a.href=url;a.download=`TheReFmB1rth-pattern-${letter}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);showToast(`PATTERN ${letter} SAVED`);
+  };
+  const fileInput=seqTools.querySelector('[data-seq-file]');seqTools.querySelector('[data-load-seq]').onclick=()=>fileInput.click();
+  fileInput.onchange=async()=>{
+    const file=fileInput.files?.[0];if(!file)return;
+    try{
+      const data=JSON.parse(await file.text());
+      if(data?.format!=='TheReFmB1rth.sequence'||data.version!==1)throw new Error('unsupported sequence format');
+      if(!Array.isArray(data.acid)||data.acid.length!==2||!Array.isArray(data.drums)||data.drums.length!==2)throw new Error('invalid sequence lanes');
+      for(let t=0;t<2;t++){
+        if(!Array.isArray(data.acid[t])||data.acid[t].length!==16)throw new Error('acid lane must contain 16 steps');
+        if(!Array.isArray(data.drums[t])||data.drums[t].length!==16)throw new Error('drum lane must contain 16 steps');
+      }
+      for(let t=0;t<2;t++)for(let s=0;s<16;s++){
+        const a=data.acid[t][s]||{};mod._refm_wasm_set_acid_step(t,s,clamp(Number(a.note)||48,0,127),Number(a.flags)||0,clamp(Number(a.prob)||100,0,100));paintAcidStep(t,s);
+        const d=data.drums[t][s]||{};mod._refm_wasm_set_drum_step(t,s,(Number(d.hits)||0)&65535,(Number(d.accents)||0)&65535);
+      }
+      document.querySelectorAll('.refm-drum-machine').forEach(sec=>paintDrum(+sec.dataset.refmDrumTrack,sec));
+      const target=String.fromCharCode(65+(mod._refm_wasm_pattern()&7));showToast(`SEQUENCE LOADED INTO PATTERN ${target}`);
+    }catch(err){console.error(err);showToast(`LOAD FAILED: ${err.message}`,true);}finally{fileInput.value='';}
+  };
+
   /* ACID modules: stock panel + x0x-style step/note programming drawer. */
   document.querySelectorAll('.acid').forEach((acid,track)=>{
     acid.dataset.refmMachine=`acid-${track}`;
@@ -90,14 +156,16 @@ export function installRebirthSkin(mod){
     ch.querySelector('.refm-fader').oninput=e=>mod._refm_wasm_set_mix_track(track,0,+e.target.value);
     ch.querySelector('[data-pan]').oninput=e=>mod._refm_wasm_set_mix_track(track,1,+e.target.value);
     ch.querySelector('[data-send]').oninput=e=>mod._refm_wasm_set_mix_track(track,4,+e.target.value);
-    ch.querySelector('[data-mute]').onclick=e=>{const on=!e.target.classList.toggle('on');e.target.classList.toggle('on',!on);mod._refm_wasm_set_mix_track(track,2,e.target.classList.contains('on')?1:0);};
+    ch.querySelector('[data-mute]').onclick=e=>{e.target.classList.toggle('on');mod._refm_wasm_set_mix_track(track,2,e.target.classList.contains('on')?1:0);};
     ch.querySelector('[data-solo]').onclick=e=>{e.target.classList.toggle('on');mod._refm_wasm_set_mix_track(track,3,e.target.classList.contains('on')?1:0);};
     chHost.appendChild(ch);
   });
   const fx=mixer.querySelector('.refm-fx-host');
   const fxDefs=[['DRIVE',0,0,20000,3000],['COMP',1,2048,32767,24576],['FILTER',2,256,32767,30000],['DELAY FB',3,0,30000,14000],['DELAY MIX',4,0,32767,7000],['DELAY TIME',5,64,2048,1102]];
-  fxDefs.forEach(([name,param,min,max,val])=>{const c=document.createElement('label');c.className='refm-fx-control';c.innerHTML=`<span>${name}</span><input type="range" min="${min}" max="${max}" value="${val}"><i></i>`;c.querySelector('input').oninput=e=>mod._refm_wasm_set_fx(param,+e.target.value);fx.appendChild(c);});
+  fxDefs.forEach(([name,param,min,max,val])=>{const c=document.createElement('label');c.className='refm-fx-control';c.innerHTML=`<span>${name}</span><input type="range" min="${min}" max="${max}" value="${val}">`;c.querySelector('input').oninput=e=>mod._refm_wasm_set_fx(param,+e.target.value);fx.appendChild(c);});
   document.querySelector('.main')?.appendChild(mixer);
+
+  document.querySelectorAll('.ctl input[type=range],.refm-fx-control input[type=range]').forEach(knobify);
 
   let last=-1;setInterval(()=>{const step=mod._refm_wasm_step()&15;if(step===last)return;last=step;document.querySelectorAll('.step,.refm-drum-step').forEach(b=>b.classList.remove('playing'));document.querySelectorAll(`.step[data-i="${step}"],.refm-drum-step[data-step="${step}"]`).forEach(b=>b.classList.add('playing'));},50);
 }
