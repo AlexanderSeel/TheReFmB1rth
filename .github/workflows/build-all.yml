@@ -47,10 +47,15 @@ jobs:
           test -s build/wasm/refm.js
           test -s build/wasm/refm.wasm
           test -s build/wasm/sample_controls.js
+          test -s build/wasm/rebirth_skin.css
+          test -s build/wasm/rebirth_skin.js
           test -s build/wasm/sample-manifest.json
           test -s build/wasm/sample-lock.json
           test -s build/wasm/target-sample-budget.json
           grep -q "import createRefm from './refm.js'" build/wasm/index.html
+          grep -q "rebirth_skin.css" build/wasm/index.html
+          grep -q "rebirth_skin.js" build/wasm/index.html
+          grep -q "installRebirthSkin" build/wasm/index.html
           grep -q "sample_controls.js" build/wasm/index.html
           grep -q "ReFmWorkletClient" build/wasm/worklet.html
           grep -q "registerProcessor('refm-audio'" build/wasm/refm_audio_worklet.js
@@ -58,7 +63,7 @@ jobs:
           grep -q "_refm_wasm_enable_samples" build/wasm/refm.js
           grep -q "_refm_wasm_set_acid_wave" build/wasm/refm.js
       - name: Record checksums
-        run: sha256sum build/wasm/index.html build/wasm/worklet.html build/wasm/worklet_client.js build/wasm/refm_audio_worklet.js build/wasm/refm.js build/wasm/refm.wasm build/wasm/sample_controls.js build/wasm/sample-manifest.json build/wasm/sample-lock.json build/wasm/target-sample-budget.json > build/wasm/SHA256SUMS
+        run: sha256sum build/wasm/index.html build/wasm/worklet.html build/wasm/worklet_client.js build/wasm/refm_audio_worklet.js build/wasm/refm.js build/wasm/refm.wasm build/wasm/sample_controls.js build/wasm/rebirth_skin.css build/wasm/rebirth_skin.js build/wasm/sample-manifest.json build/wasm/sample-lock.json build/wasm/target-sample-budget.json > build/wasm/SHA256SUMS
       - uses: actions/upload-artifact@v4
         with:
           name: refm-wasm-${{ github.sha }}
@@ -70,6 +75,8 @@ jobs:
             build/wasm/refm.js
             build/wasm/refm.wasm
             build/wasm/sample_controls.js
+            build/wasm/rebirth_skin.css
+            build/wasm/rebirth_skin.js
             build/wasm/sample-manifest.json
             build/wasm/sample-lock.json
             build/wasm/target-sample-budget.json
