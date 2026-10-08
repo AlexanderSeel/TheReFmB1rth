@@ -42,6 +42,7 @@ REFM_EXPORT int refm_wasm_restore(const uint8_t *data, uint32_t len) { return re
 REFM_EXPORT uint8_t refm_wasm_step(void) { return vm.groovebox.step; }
 REFM_EXPORT uint8_t refm_wasm_pattern(void) { return vm.groovebox.current_pattern; }
 REFM_EXPORT uint16_t refm_wasm_bpm(void) { return vm.groovebox.transport.bpm; }
+REFM_EXPORT void refm_wasm_set_bpm(uint16_t bpm) { midi_transport_set_bpm(&vm.groovebox.transport, bpm); }
 
 REFM_EXPORT void refm_wasm_enable_samples(uint8_t track, uint8_t enabled) { if (track < GROOVEBOX_DRUM_TRACKS) drum_machine_enable_samples(&vm.groovebox.drum[track], enabled); }
 REFM_EXPORT uint16_t refm_wasm_sample_mask(uint8_t track) { return track < GROOVEBOX_DRUM_TRACKS ? vm.groovebox.drum[track].sample_mask : 0u; }
@@ -97,6 +98,16 @@ REFM_EXPORT int16_t refm_wasm_get_mix_track(uint8_t track, uint8_t param) {
     if (param == 2u) return t->mute;
     if (param == 3u) return t->solo;
     if (param == 4u) return t->delay_send;
+    return 0;
+}
+REFM_EXPORT int16_t refm_wasm_get_fx(uint8_t param) {
+    const mixer_fx_t *m=&vm.groovebox.mixer;
+    if (param == 0u) return m->drive;
+    if (param == 1u) return m->compressor_threshold;
+    if (param == 2u) return m->filter_cutoff;
+    if (param == 3u) return m->delay_feedback;
+    if (param == 4u) return m->delay_mix;
+    if (param == 5u) return (int16_t)m->delay_len;
     return 0;
 }
 
