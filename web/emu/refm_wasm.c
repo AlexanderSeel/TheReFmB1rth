@@ -26,8 +26,6 @@ REFM_EXPORT void refm_wasm_init(uint16_t bpm) {
     refm_attach_bundled_samples(&vm.groovebox.drum[0], DRUM_MODEL_808);
     refm_attach_bundled_samples(&vm.groovebox.drum[1], DRUM_MODEL_909);
 #endif
-    /* Browser audition defaults to hybrid: every physically available sample lane
-       is selected, while missing lanes remain synth fallback. */
     drum_machine_enable_samples(&vm.groovebox.drum[0], 1u);
     drum_machine_enable_samples(&vm.groovebox.drum[1], 1u);
     project_size = 0u;
@@ -73,7 +71,6 @@ REFM_EXPORT void refm_wasm_set_acid_mod(uint8_t track, uint8_t param, uint8_t va
     else if (param == 4u) s->lfo_rate = value; else if (param == 5u) s->lfo_amount = value; else if (param == 6u) s->lfo_shape = (uint8_t)(value & 3u);
 }
 
-/* Browser mixer/FX controls directly edit the same mixer state used by firmware. */
 REFM_EXPORT void refm_wasm_set_mix_track(uint8_t track, uint8_t param, int16_t value) {
     mixer_track_t *t; if (track >= MIX_TRACKS) return; t=&vm.groovebox.mixer.track[track];
     if (param == 0u) t->level = value < 0 ? 0 : value;
@@ -92,8 +89,15 @@ REFM_EXPORT void refm_wasm_set_fx(uint8_t param, int16_t value) {
     else if (param == 5u) mixer_fx_set_delay(m, (uint16_t)(value < 1 ? 1 : value), m->delay_feedback, m->delay_mix);
 }
 REFM_EXPORT int16_t refm_wasm_get_mix_track(uint8_t track, uint8_t param) {
-    const mixer_track_t *t; if (track >= MIX_TRACKS) return 0; t=&vm.groovebox.mixer.track[track];
-    if (param == 0u) return t->level; if (param == 1u) return t->pan; if (param == 2u) return t->mute; if (param == 3u) return t->solo; if (param == 4u) return t->delay_send; return 0;
+    const mixer_track_t *t;
+    if (track >= MIX_TRACKS) return 0;
+    t=&vm.groovebox.mixer.track[track];
+    if (param == 0u) return t->level;
+    if (param == 1u) return t->pan;
+    if (param == 2u) return t->mute;
+    if (param == 3u) return t->solo;
+    if (param == 4u) return t->delay_send;
+    return 0;
 }
 
 REFM_EXPORT const int16_t *refm_wasm_graph(uint8_t track, uint8_t kind) {
