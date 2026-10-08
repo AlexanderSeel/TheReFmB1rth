@@ -54,16 +54,34 @@ def square303(saw:list[float])->list[float]:
 
 
 def mipmaps(proto:list[float])->list[list[float]]:
+    """Build one-octave mip levels from an ordinary complex FFT.
+
+    Open303's FourierTransformer stores a packed symmetric real spectrum, so
+    its lowBin/highBin indices cannot be copied literally to a normal complex
+    FFT. Each successive table must simply retain half as many positive
+    harmonics as the preceding one, together with their negative-frequency
+    mirror. The previous implementation zeroed both halves twice and made the
+    upper mip levels effectively silent.
+    """
     tables=[list(proto)]
-    spec=fft([complex(v,0.0) for v in proto])
-    spec[0]=0j; spec[N//2]=0j
+    full=fft([complex(v,0.0) for v in proto])
+    full[0]=0j; full[N//2]=0j
     for t in range(1,LEVELS):
-        low=N//(2**t); high=N//(2**(t-1))
-        for k in range(low,high):
-            spec[k]=0j
-            if k: spec[N-k]=0j
+        hmax=max(1,N//(2**(t+1)))
+        spec=[0j]*N
+        for k in range(1,hmax+1):
+            spec[k]=full[k]
+            spec[N-k]=full[N-k]
         tables.append([z.real for z in fft(spec,True)])
     return tables
+
+
+def validate_mips(name:str,tables:list[list[float]])->None:
+    for i,table in enumerate(tables):
+        peak=max(abs(v) for v in table)
+        rms=math.sqrt(sum(v*v for v in table)/len(table))
+        if peak < 1e-5 or rms < 1e-6:
+            raise RuntimeError(f"{name} mip {i} is effectively silent: peak={peak} rms={rms}")
 
 
 def q15(v:float)->int:
@@ -78,9 +96,10 @@ def emit_single(name:str,values:list[float],scale:float=1.0)->str:
 
 def generate()->str:
     saw=mipmaps(saw303()); sq=mipmaps(square303(saw303()))
-    # Open303 selects tableNumber = exponent(2048*freq/176400) + 2.
-    # acid303_hq.c measures pitch as a 44.1-kHz Q32 phase increment, so the
-    # corresponding boundaries are powers of two beginning at 2^22.
+    validate_mips("SAW303",saw); validate_mips("SQUARE303",sq)
+    # Open303 chooses tableNumber=floor(log2(2048*freq/176400))+2.
+    # In the HQ core frequency is represented as a 44.1-kHz Q32 phase
+    # increment. These are the equivalent octave boundaries for table indices.
     thresholds=[min(0xffffffff,1<<(22+i)) for i in range(LEVELS-1)]
     out=[
         "// SPDX-License-Identifier: GPL-3.0-only\n",
@@ -104,7 +123,7 @@ def main()->int:
     text=generate()
     if args.check:
         if not args.output.exists() or args.output.read_text()!=text: raise SystemExit("HQ wavetable is stale")
-        print(f"303 HQ wavetable ok: {LEVELS} x {N} x 2 Q15"); return 0
-    args.output.parent.mkdir(parents=True,exist_ok=True); args.output.write_text(text); print(f"wrote {args.output}: {LEVELS} x {N} x 2 Q15"); return 0
+        print(f"303 HQ wavetable ok: {LEVELS} x {N} x 2 Q15 (all mips non-silent)"); return 0
+    args.output.parent.mkdir(parents=True,exist_ok=True); args.output.write_text(text); print(f"wrote {args.output}: {LEVELS} x {N} x 2 Q15") ; return 0
 
 if __name__=='__main__': raise SystemExit(main())
