@@ -48,6 +48,12 @@ static int32_t compress(int32_t x, int16_t threshold) {
 
 void mixer_fx_process(mixer_fx_t *m, const int16_t input[MIX_TRACKS], int16_t *out_l, int16_t *out_r) {
     int any_solo = 0;
+    uint16_t delay_len = m->delay_len;
+    if (delay_len == 0u) delay_len = 1u;
+    if (delay_len > MIX_DELAY_MAX) delay_len = MIX_DELAY_MAX;
+    if (m->delay_len != delay_len) m->delay_len = delay_len;
+    if (m->delay_pos >= delay_len) m->delay_pos = 0u;
+
     for (unsigned i=0; i<MIX_TRACKS; ++i) if (m->track[i].solo) any_solo = 1;
 
     int64_t left = 0, right = 0, send_l = 0, send_r = 0;
@@ -72,7 +78,7 @@ void mixer_fx_process(mixer_fx_t *m, const int16_t input[MIX_TRACKS], int16_t *o
     m->delay_l[m->delay_pos] = clip16(write_l);
     m->delay_r[m->delay_pos] = clip16(write_r);
     m->delay_pos++;
-    if (m->delay_pos >= m->delay_len) m->delay_pos = 0u;
+    if (m->delay_pos >= delay_len) m->delay_pos = 0u;
 
     left += ((int64_t)dl * m->delay_mix) >> 15;
     right += ((int64_t)dr * m->delay_mix) >> 15;
