@@ -15,6 +15,7 @@ int refm_wasm_restore(const uint8_t *data, uint32_t len);
 uint8_t refm_wasm_step(void);
 uint8_t refm_wasm_pattern(void);
 uint16_t refm_wasm_bpm(void);
+void refm_wasm_set_bpm(uint16_t bpm);
 void refm_wasm_enable_samples(uint8_t track, uint8_t enabled);
 uint16_t refm_wasm_sample_mask(uint8_t track);
 uint16_t refm_wasm_sample_use_mask(uint8_t track);
@@ -34,6 +35,7 @@ void refm_wasm_set_acid_mod(uint8_t track, uint8_t param, uint8_t value);
 void refm_wasm_set_mix_track(uint8_t track, uint8_t param, int16_t value);
 int16_t refm_wasm_get_mix_track(uint8_t track, uint8_t param);
 void refm_wasm_set_fx(uint8_t param, int16_t value);
+int16_t refm_wasm_get_fx(uint8_t param);
 
 static void test_pattern_roundtrip(void) {
     uint32_t packed;
@@ -73,7 +75,19 @@ static void test_mixer_bridge(void) {
     refm_wasm_set_mix_track(2u,2u,1); assert(refm_wasm_get_mix_track(2u,2u)==1);
     refm_wasm_set_mix_track(3u,3u,1); assert(refm_wasm_get_mix_track(3u,3u)==1);
     refm_wasm_set_mix_track(0u,4u,99); assert(refm_wasm_get_mix_track(0u,4u)==99);
-    refm_wasm_set_fx(0u,4000); refm_wasm_set_fx(1u,20000); refm_wasm_set_fx(2u,22000); refm_wasm_set_fx(3u,12000); refm_wasm_set_fx(4u,6000); refm_wasm_set_fx(5u,900);
+    refm_wasm_set_fx(0u,4000); assert(refm_wasm_get_fx(0u)==4000);
+    refm_wasm_set_fx(1u,20000); assert(refm_wasm_get_fx(1u)==20000);
+    refm_wasm_set_fx(2u,22000); assert(refm_wasm_get_fx(2u)==22000);
+    refm_wasm_set_fx(3u,12000); assert(refm_wasm_get_fx(3u)==12000);
+    refm_wasm_set_fx(4u,6000); assert(refm_wasm_get_fx(4u)==6000);
+    refm_wasm_set_fx(5u,900); assert(refm_wasm_get_fx(5u)==900);
+}
+
+static void test_tempo_bridge(void) {
+    refm_wasm_init(128u);
+    refm_wasm_set_bpm(166u); assert(refm_wasm_bpm()==166u);
+    refm_wasm_set_bpm(1u); assert(refm_wasm_bpm()==30u);
+    refm_wasm_set_bpm(999u); assert(refm_wasm_bpm()==300u);
 }
 
 static void test_sample_bridge_no_assets(void) {
@@ -90,6 +104,6 @@ int main(void) {
     refm_wasm_external_clock(1u); refm_wasm_midi(0xFAu); for (unsigned i = 0; i < 6u; ++i) refm_wasm_midi(0xF8u); assert(refm_wasm_step() != 0u);
     refm_wasm_midi(0x90u); refm_wasm_midi(48u); refm_wasm_midi(110u); refm_wasm_render(audio, 64u); for (unsigned i = 0; i < 128u; ++i) assert(audio[i] >= -32768 && audio[i] <= 32767);
     assert(refm_wasm_snapshot() == 0); assert(refm_wasm_snapshot_size() > 0u); assert(refm_wasm_restore(refm_wasm_snapshot_ptr(), refm_wasm_snapshot_size()) == 0);
-    test_pattern_roundtrip(); test_303_controls(); test_mixer_bridge(); test_sample_bridge_no_assets();
+    test_pattern_roundtrip(); test_303_controls(); test_mixer_bridge(); test_tempo_bridge(); test_sample_bridge_no_assets();
     puts("WASM bridge tests: ok"); return 0;
 }
