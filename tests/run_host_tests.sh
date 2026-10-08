@@ -8,6 +8,8 @@ cc $CFLAGS firmware/proto/acid303.c tests/test_acid303.c -o build/host/test_acid
 cc $CFLAGS -DREFM_ACID_WAVETABLE=0 firmware/proto/acid303.c tests/test_acid303.c -o build/host/test_acid303_polyblep
 cc $CFLAGS firmware/proto/acid303.c tests/acid_reference_probe.c -o build/host/acid_reference_probe
 cc $CFLAGS -DREFM_ACID_WAVETABLE=0 firmware/proto/acid303.c tests/acid_reference_probe.c -o build/host/acid_reference_probe_polyblep
+cc $CFLAGS firmware/proto/acid303.c tests/bench_acid303.c -o build/host/bench_acid303
+cc $CFLAGS -DREFM_ACID_WAVETABLE=0 firmware/proto/acid303.c tests/bench_acid303.c -o build/host/bench_acid303_polyblep
 cc $CFLAGS firmware/proto/seq16.c tests/test_seq16.c -o build/host/test_seq16
 cc $CFLAGS firmware/proto/ui_graph_model.c tests/test_ui_graph_model.c -o build/host/test_ui_graph_model
 cc $CFLAGS firmware/proto/song.c tests/test_song.c -o build/host/test_song
@@ -34,6 +36,9 @@ printf '%s\n' '--- wavetable acid probes ---'
 cat build/host/acid-reference-wavetable.txt
 printf '%s\n' '--- PolyBLEP reference probes ---'
 cat build/host/acid-reference-polyblep.txt
+printf '%s\n' '--- oscillator throughput ---'
+build/host/bench_acid303
+build/host/bench_acid303_polyblep
 size build/host/acid_reference_probe build/host/acid_reference_probe_polyblep || true
 build/host/render_hash > build/host/audio-render-hash.txt
 cat build/host/audio-render-hash.txt
