@@ -16,7 +16,7 @@ function installAcidTimingControls(mod){
     const b=document.querySelector(`#seq${track} .step[data-i="${step}"]`);if(!b)return;
     const s=read(track,step),mode=modeOf(s),note=mode==='note'?noteLabel(s.note):mode==='tie'?'TIE':'REST';
     b.className='step'+(mode==='note'?' on':'')+(s.flags&ACCENT?' accent':'')+(s.flags&SLIDE?' slide':'')+(mode==='tie'?' tie':'')+(b.classList.contains('playing')?' playing':'')+(b.classList.contains('selected')?' selected':'');
-    b.innerHTML=`<span class="refm-step-num">${step+1}</span><strong>${note}</strong><small>${mode==='note'&&(s.flags&ACCENT)?'ACC ':''}${mode==='note'&&(s.flags&SLIDE)?'SLD ':''}${s.prob<100?`${s.prob}%`:''}</small>`;
+    b.innerHTML=`<span class="refm-step-num">${step+1}</span><strong>${note}</strong><small>${mode==='note'&&(s.flags&ACCENT)?'ACC ':''}${mode==='note'&&(s.flags&SLIDE)?'SLIDE→ ':''}${s.prob<100?`${s.prob}%`:''}</small>`;
   };
   const refresh=(editor,track)=>{
     const step=selectedStep(track),s=read(track,step),mode=modeOf(s);
@@ -27,7 +27,7 @@ function installAcidTimingControls(mod){
   };
   document.querySelectorAll('.refm-note-editor').forEach(editor=>{
     const track=+editor.dataset.track,flags=editor.querySelector('.refm-flags');if(!flags)return;
-    flags.innerHTML='<div class="refm-time-mode"><span>TIME MODE</span><button data-time="note">NOTE</button><button data-time="rest">REST</button><button data-time="tie">TIE</button></div><div class="refm-note-modifiers"><span>NOTE MOD</span><button data-modifier="2">ACCENT</button><button data-modifier="4">SLIDE</button></div><button data-copy>COPY</button><button data-paste>PASTE</button>';
+    flags.innerHTML='<div class="refm-time-mode"><span>TIME MODE · NOTE / REST / TIE</span><button data-time="note">NOTE</button><button data-time="rest">REST</button><button data-time="tie">TIE</button></div><div class="refm-note-modifiers"><span>NOTE MOD</span><button data-modifier="2">ACCENT</button><button data-modifier="4">SLIDE → NEXT</button></div><button data-copy>COPY</button><button data-paste>PASTE</button>';
     let clipboard=null;
     flags.querySelectorAll('[data-time]').forEach(b=>b.onclick=()=>{
       const step=selectedStep(track),s=read(track,step),mode=b.dataset.time;
