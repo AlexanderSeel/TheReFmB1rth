@@ -10,8 +10,6 @@ void mixer_fx_init(mixer_fx_t *m) {
     for (unsigned i=0; i<MIX_TRACKS; ++i) {
         m->track[i].level = 32767;
         m->track[i].pan = 0;
-        m->track[i].delay_send = 24u;
-        m->track[i].reverb_send = 18u;
     }
     m->delay_len = 1102u;
     m->delay_feedback = 14000;
@@ -109,9 +107,6 @@ void mixer_fx_process(mixer_fx_t *m, const int16_t input[MIX_TRACKS], int16_t *o
 
         m->reverb_lp_a += (int32_t)(((int64_t)(ra - m->reverb_lp_a) * damp) >> 15);
         m->reverb_lp_b += (int32_t)(((int64_t)(rb - m->reverb_lp_b) * damp) >> 15);
-
-        /* Cross-feed the two prime-ish delay lines. This creates a diffuse,
-           stereo tail without the large RAM cost of a full Schroeder network. */
         m->reverb_a[m->reverb_pos_a] = clip16(in_a + (int32_t)(((int64_t)m->reverb_lp_b * m->reverb_feedback) >> 15));
         m->reverb_b[m->reverb_pos_b] = clip16(in_b + (int32_t)(((int64_t)m->reverb_lp_a * m->reverb_feedback) >> 15));
         if (++m->reverb_pos_a >= MIX_REVERB_A) m->reverb_pos_a = 0u;
