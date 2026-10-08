@@ -8,10 +8,15 @@ python3 "$ROOT/tools/generate_303_wavetables.py"
 python3 "$ROOT/tools/generate_303_wavetables.py" --check
 python3 "$ROOT/tools/generate_303_hq_wavetables.py" --output "$OUT/acid303_hq_wavetable.h"
 python3 "$ROOT/tools/generate_303_hq_wavetables.py" --output "$OUT/acid303_hq_wavetable.h" --check
+# Compile a browser-only copy whose oscillator include resolves to the full
+# 2048x12 Open303-style mipmap. The source tree and FM-1 compact header remain
+# untouched.
+sed 's#"../../firmware/proto/acid303_wavetable.h"#"acid303_hq_wavetable.h"#' \
+  "$ROOT/web/emu/acid303_hq.c" > "$OUT/acid303_hq_build.c"
 # Browser gets the dedicated floating-point/Open303-HQ acid core. The FM-1 and
 # host regression builds deliberately keep firmware/proto/acid303.c so browser
 # fidelity is no longer limited by the embedded fixed-point/CPU budget.
-COMMON="$ROOT/web/emu/acid303_hq.c $ROOT/firmware/proto/seq16.c $ROOT/firmware/proto/sample_voice.c $ROOT/firmware/proto/drum_machine.c $ROOT/firmware/proto/mixer_fx.c $ROOT/firmware/proto/midi_transport.c $ROOT/firmware/proto/song.c $ROOT/firmware/proto/project_store.c $ROOT/firmware/proto/pattern_bank.c $ROOT/firmware/proto/groovebox.c $ROOT/firmware/proto/ui_graph_model.c"
+COMMON="$OUT/acid303_hq_build.c $ROOT/firmware/proto/seq16.c $ROOT/firmware/proto/sample_voice.c $ROOT/firmware/proto/drum_machine.c $ROOT/firmware/proto/mixer_fx.c $ROOT/firmware/proto/midi_transport.c $ROOT/firmware/proto/song.c $ROOT/firmware/proto/project_store.c $ROOT/firmware/proto/pattern_bank.c $ROOT/firmware/proto/groovebox.c $ROOT/firmware/proto/ui_graph_model.c"
 FEATURES="$ROOT/firmware/proto/groovebox_pattern.c $ROOT/firmware/proto/midi_router.c $ROOT/firmware/proto/groovebox_midi.c"
 SAMPLE_SRC=""
 SAMPLE_FLAGS=""
@@ -50,7 +55,8 @@ grep -q 'installRebirthSkin' "$OUT/index.html"
 grep -q 'installSampleControls' "$OUT/index.html"
 grep -q 'installFxBoard' "$OUT/sample_controls.js"
 grep -q 'REVERB' "$OUT/fx_board.js"
-grep -q 'REFM_ACID_HQ_LEVELS 12u' "$OUT/acid303_hq_wavetable.h"
+grep -q 'REFM_ACID_WT_BANDS 12u' "$OUT/acid303_hq_wavetable.h"
+grep -q 'REFM_ACID_WT_SIZE 2048u' "$OUT/acid303_hq_wavetable.h"
 grep -q 'Browser-only high-quality TB-303 voice' "$ROOT/web/emu/acid303_hq.c"
 
 echo "WASM groovebox built with full-mipmap Open303-HQ acid core + onboard FX board: $OUT/index.html + worklet.html + refm.js + refm.wasm"
