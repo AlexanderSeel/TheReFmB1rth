@@ -44,26 +44,28 @@ function knobify(input,format){
   input.addEventListener('input',sync);sync();
 }
 
-function fxControl(mod,name,param,min,max,format){
+function fxControl(mod,name,param,min,max,format,step){
   const c=document.createElement('label');c.className='refm-fx-control';c.dataset.fxName=name;
   const value=mod._refm_wasm_get_fx(param);
-  c.innerHTML=`<span>${name}</span><input type="range" min="${min}" max="${max}" value="${value}">`;
+  c.innerHTML=`<span>${name}</span><input type="range" min="${min}" max="${max}"${step?` step="${step}"`:''} value="${value}">`;
   const input=c.querySelector('input');input.oninput=e=>mod._refm_wasm_set_fx(param,+e.target.value);
   knobify(input,format);return c;
 }
 
+const decaySeconds=v=>{
+  /* Readout is an intuitive musical approximation of the cross-feedback tail,
+     not an RT60 laboratory measurement. */
+  const n=clamp(v/32400,0,0.999);return `${(0.25+7.75*Math.pow(n,2.2)).toFixed(1)} s`;
+};
+
 export function installFxBoard(mod){
   ensureFxStyles();
-  /* Keep the ACID panels stock-focused. These controls are not present on a
-     TB-303 and were confusing the product concept. The ABI remains compatible
-     with old projects, but the stock rack no longer exposes them. */
   document.querySelectorAll('.lfoRow,.refm-ext-toggle').forEach(x=>x.remove());
   document.querySelectorAll('.refm-stock-strip').forEach(strip=>{
     strip.querySelectorAll('span').forEach(s=>{if(/MOD|LFO/i.test(s.textContent))s.remove();});
   });
   document.querySelectorAll('.ctl label').forEach(l=>{if(l.textContent.trim()==='DRIVE')l.textContent='DISTORTION';});
 
-  /* Split the single SEND control into real delay and reverb sends. */
   document.querySelectorAll('.refm-channel').forEach((channel,track)=>{
     const labels=[...channel.querySelectorAll('label')];
     const oldSend=labels.find(l=>l.textContent.trim().startsWith('SEND'));
@@ -79,27 +81,27 @@ export function installFxBoard(mod){
   host.innerHTML='';host.classList.add('refm-fx-board');
   const groups=[
     ['DISTORTION',[
-      ['AMOUNT',0,0,20000,null]
+      ['AMOUNT',0,0,20000,null,0]
     ]],
     ['DELAY',[
-      ['TIME',5,64,2048,(v)=>`${Math.round(v/44.1)} ms`],
-      ['FEEDBACK',3,0,30000,null],
-      ['MIX',4,0,32767,null]
+      ['TIME',5,20,1486,(v)=>v<1000?`${Math.round(v)} ms`:`${(v/1000).toFixed(2)} s`,1],
+      ['FEEDBACK',3,0,31000,null,0],
+      ['MIX',4,0,32767,null,0]
     ]],
     ['REVERB',[
-      ['SIZE',6,0,31000,null],
-      ['MIX',7,0,32767,null],
-      ['DAMP',8,256,30000,null]
+      ['DECAY',6,0,32400,(v)=>decaySeconds(v),0],
+      ['MIX',7,0,32767,null,0],
+      ['DAMP',8,256,30000,(v,n)=>`${Math.round((1-n)*100)}% dark`,0]
     ]],
     ['MASTER',[
-      ['COMP',1,2048,32767,null],
-      ['FILTER',2,256,32767,null]
+      ['COMP',1,2048,32767,null,0],
+      ['FILTER',2,256,32767,null,0]
     ]]
   ];
   groups.forEach(([title,defs])=>{
     const group=document.createElement('section');group.className='refm-fx-group';group.innerHTML=`<h3>${title}</h3><div class="refm-fx-group-controls"></div>`;
     const controls=group.querySelector('.refm-fx-group-controls');
-    defs.forEach(([name,param,min,max,format])=>controls.appendChild(fxControl(mod,name,param,min,max,format)));
+    defs.forEach(([name,param,min,max,format,step])=>controls.appendChild(fxControl(mod,name,param,min,max,format,step)));
     host.appendChild(group);
   });
 }
