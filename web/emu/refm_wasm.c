@@ -83,17 +83,25 @@ REFM_EXPORT void refm_wasm_set_mix_track(uint8_t track, uint8_t param, int16_t v
     else if (param == 4u) t->delay_send = (uint8_t)(value < 0 ? 0 : value > 127 ? 127 : value);
     else if (param == 5u) t->reverb_send = (uint8_t)(value < 0 ? 0 : value > 127 ? 127 : value);
 }
-REFM_EXPORT void refm_wasm_set_fx(uint8_t param, int16_t value) {
+
+/* FX bridge uses int32 so long WASM delay times are not truncated by the old
+   int16 ABI. Delay TIME is expressed as milliseconds in the browser API. */
+REFM_EXPORT void refm_wasm_set_fx(uint8_t param, int32_t value) {
     mixer_fx_t *m=&vm.groovebox.mixer;
-    if (param == 0u) m->drive = value < 0 ? 0 : value;
-    else if (param == 1u) m->compressor_threshold = value < 512 ? 512 : value;
-    else if (param == 2u) m->filter_cutoff = value < 256 ? 256 : value;
-    else if (param == 3u) mixer_fx_set_delay(m, m->delay_len, value, m->delay_mix);
-    else if (param == 4u) mixer_fx_set_delay(m, m->delay_len, m->delay_feedback, value);
-    else if (param == 5u) mixer_fx_set_delay(m, (uint16_t)(value < 1 ? 1 : value), m->delay_feedback, m->delay_mix);
-    else if (param == 6u) mixer_fx_set_reverb(m, value, m->reverb_mix, m->reverb_damp);
-    else if (param == 7u) mixer_fx_set_reverb(m, m->reverb_feedback, value, m->reverb_damp);
-    else if (param == 8u) mixer_fx_set_reverb(m, m->reverb_feedback, m->reverb_mix, value);
+    if (param == 0u) m->drive = (int16_t)(value < 0 ? 0 : value > 20000 ? 20000 : value);
+    else if (param == 1u) m->compressor_threshold = (int16_t)(value < 512 ? 512 : value > 32767 ? 32767 : value);
+    else if (param == 2u) m->filter_cutoff = (int16_t)(value < 256 ? 256 : value > 32767 ? 32767 : value);
+    else if (param == 3u) mixer_fx_set_delay(m, m->delay_len, (int16_t)value, m->delay_mix);
+    else if (param == 4u) mixer_fx_set_delay(m, m->delay_len, m->delay_feedback, (int16_t)value);
+    else if (param == 5u) {
+        uint32_t ms=(uint32_t)(value < 1 ? 1 : value > 1486 ? 1486 : value);
+        uint32_t samples=(ms * 441u + 5u) / 10u;
+        if (samples > MIX_DELAY_MAX) samples = MIX_DELAY_MAX;
+        mixer_fx_set_delay(m, (uint16_t)samples, m->delay_feedback, m->delay_mix);
+    }
+    else if (param == 6u) mixer_fx_set_reverb(m, (int16_t)value, m->reverb_mix, m->reverb_damp);
+    else if (param == 7u) mixer_fx_set_reverb(m, m->reverb_feedback, (int16_t)value, m->reverb_damp);
+    else if (param == 8u) mixer_fx_set_reverb(m, m->reverb_feedback, m->reverb_mix, (int16_t)value);
 }
 REFM_EXPORT int16_t refm_wasm_get_mix_track(uint8_t track, uint8_t param) {
     const mixer_track_t *t;
@@ -107,14 +115,14 @@ REFM_EXPORT int16_t refm_wasm_get_mix_track(uint8_t track, uint8_t param) {
     if (param == 5u) return t->reverb_send;
     return 0;
 }
-REFM_EXPORT int16_t refm_wasm_get_fx(uint8_t param) {
+REFM_EXPORT int32_t refm_wasm_get_fx(uint8_t param) {
     const mixer_fx_t *m=&vm.groovebox.mixer;
     if (param == 0u) return m->drive;
     if (param == 1u) return m->compressor_threshold;
     if (param == 2u) return m->filter_cutoff;
     if (param == 3u) return m->delay_feedback;
     if (param == 4u) return m->delay_mix;
-    if (param == 5u) return (int16_t)m->delay_len;
+    if (param == 5u) return ((int32_t)m->delay_len * 1000 + 22050) / 44100;
     if (param == 6u) return m->reverb_feedback;
     if (param == 7u) return m->reverb_mix;
     if (param == 8u) return m->reverb_damp;
