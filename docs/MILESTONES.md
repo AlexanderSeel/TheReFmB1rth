@@ -14,6 +14,7 @@
 - [x] four-track mixer with level/pan/mute/solo
 - [x] per-track delay sends
 - [x] master drive, compressor, delay, performance low-pass and bounded output
+- [x] mixer delay state is clamped defensively in the audio path so zero/out-of-range project values cannot index outside the delay buffers
 - [x] MIDI 24 PPQN START/CONTINUE/STOP/CLOCK transport
 - [x] integer internal BPM clock
 - [x] MIDI note/CC/program routing for both acid tracks and both drum machines
@@ -30,9 +31,11 @@
 - [x] 2x internal oscillator/filter processing at 88.2 kHz with output down-average
 - [x] measured Open303 cutoff/env-mod law, ~15 ms envelope RC, accented timing and idle-only analog reset
 - [x] js303/Open303-informed ~44.486 Hz pre-ladder high-pass, ~24 Hz post-ladder conditioning and two-stage ~200 Hz VCA gain de-click smoothing
+- [x] Open303-informed VCA articulation now couples ~0.45× main envelope on held notes plus accent-scaled envelope gain before the de-click stage
+- [x] characterization tests lock the stock-style 60 ms slide control (~12 ms slew time constant), 200 ms accent envelope decay and longer 50 ms accented release behavior
 - [x] expensive filter coefficient mapping runs at control rate with interpolation while the nonlinear ladder remains at 88.2 kHz
 - [x] stock-style TUNE control implemented in the DSP and exposed through WASM
-- [x] deterministic groovebox render fingerprint locked to `88cefa40afeecf47` for the current analog-conditioned path
+- [x] deterministic groovebox render fingerprint locked to `93117892d0a0d7a7` for the current Open303-coupled path
 - [x] optional fixed-point ACID LFO with sine-like/triangle/saw/square shapes and filter modulation; amount defaults to zero and is treated as a non-stock MOD extension
 - [x] shared 64-point envelope/LFO/filter graph models used by target UI and browser/WASM path
 - [x] physical Felucca EDIT page is bridged to ACID cutoff/resonance/env-mod/decay and renders the ReFmB1rth filter response curve
@@ -66,8 +69,10 @@
 - [x] complete pinned JieLi/AC79 target compile + link succeeds in GitHub Actions
 - [x] large ReFmB1rth runtime/project work buffers are placed in Felucca's dedicated `.pool` region rather than exhausting 96 KiB general RAM
 - [x] GitHub target build emits machine-readable XIP/RAM/pool usage and refuses release artifacts below conservative headroom thresholds
-- [x] current analog-conditioned code head `50169796391de6d8a17b2762042696b6d9810dc4` passes host, WASM and real JieLi/FM-1 builds
-- [x] current target image is 424,708 B XIP with 156,856 B XIP, 13,756 B general RAM and 173,132 B pool headroom
+- [x] four-machine host stress benchmark exercises two dense resonant/sliding ACIDs, all 22 drum voices and full master FX; current GitHub x86 baseline is about 97× realtime and is treated only as a regression metric
+- [x] physical CPU/underrun report tooling consumes Felucca `felucca_dbg` snapshots and fails on DMA lateness, >75% sustained CPU or >82% peak half-buffer render by default
+- [x] physical CPU profiling procedure documents the pinned 128-frame DMA half buffer and explicitly separates host throughput from target proof
+- [x] proven pre-calibration target image baseline is 424,708 B XIP with 156,856 B XIP, 13,756 B general RAM and 173,132 B pool headroom
 
 **M5 target integration still open:**
 
@@ -76,8 +81,9 @@
 - [ ] transfer the browser's improved ACID note-programming workflow to a compact FM-1 step/note editor
 - [ ] implement the physical FM-1 mixer/song/pattern/drum UI
 - [ ] perform controlled listening/reference-render A/B calibration against Open303/js303 for oscillator level, resonance, accent, slide and VCA contour
+- [ ] specifically evaluate whether the stronger Open303-style VCA envelope coupling needs output gain compensation before final sound approval
 - [ ] decide from A/B evidence whether the low-frequency all-pass/notch stages seen in Open303/js303 materially improve the model before adding them
-- [ ] measure worst-case CPU/audio-underrun cost of two simultaneous analog-conditioned 2x ACID engines plus both dense drum machines on target hardware
+- [ ] capture a physical FM-1 `felucca_dbg` stress snapshot and pass `tools/target_cpu_report.py` under simultaneous UI + MIDI activity
 - [ ] listen/measure and explicitly approve the small FM-1 sample candidate set; full browser sample kits must not be copied automatically into target flash
 - [ ] embed only approved target sample candidates and re-run XIP/CPU/audio-underrun gates
 - [ ] move WASM DSP production fully off main-thread scheduling (the current AudioWorklet sink is a buffered timing prototype, not the final Worker/Worklet architecture)
@@ -111,7 +117,7 @@
 
 - [ ] inherited Felucca host/update/loader/emulator regression suites are run against the integrated overlay, not only the target build
 - [ ] the browser emulator UI passes with the integrated runtime under final Worker/AudioWorklet timing
-- [ ] worst-case CPU/audio-underrun gates pass, including the analog-conditioned 2x ACID ladder path
+- [ ] physical worst-case CPU/audio-underrun gate passes with `late == 0` and conservative sustained/peak margin
 - [ ] runtime stack watermark/headroom is measured under worst-case UI + audio + MIDI activity
 - [ ] return-to-stock and FM-1-transporter recovery preparation is confirmed for the test unit
 - [ ] a controlled physical FM-1 beta installation is performed successfully
