@@ -4,6 +4,8 @@ command -v emcc >/dev/null 2>&1 || { echo 'emcc not found; install/activate Emsc
 ROOT=$(CDPATH= cd -- "$(dirname "$0")/../.." && pwd)
 OUT="$ROOT/build/wasm"
 mkdir -p "$OUT"
+python3 "$ROOT/tools/generate_303_wavetables.py"
+python3 "$ROOT/tools/generate_303_wavetables.py" --check
 COMMON="$ROOT/firmware/proto/acid303.c $ROOT/firmware/proto/seq16.c $ROOT/firmware/proto/sample_voice.c $ROOT/firmware/proto/drum_machine.c $ROOT/firmware/proto/mixer_fx.c $ROOT/firmware/proto/midi_transport.c $ROOT/firmware/proto/song.c $ROOT/firmware/proto/project_store.c $ROOT/firmware/proto/pattern_bank.c $ROOT/firmware/proto/groovebox.c $ROOT/firmware/proto/ui_graph_model.c"
 FEATURES="$ROOT/firmware/proto/groovebox_pattern.c $ROOT/firmware/proto/midi_router.c $ROOT/firmware/proto/groovebox_midi.c"
 SAMPLE_SRC=""
