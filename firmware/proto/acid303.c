@@ -4,15 +4,25 @@
  *
  * The four-stage filter topology, measured cutoff/envelope mapping and timing
  * are fixed-point adaptations informed by Robin Schmidt's Open303 (MIT).
- * See docs/THIRD_PARTY_DSP.md for attribution and the retained MIT notice.
+ * The optional band-limited oscillator tables are generated locally from
+ * tools/generate_303_wavetables.py; the idea of precomputing pitch-dependent
+ * tables was informed by js303 but this implementation/data is independent.
  */
 #include "acid303.h"
 #include <string.h>
 
+#ifndef REFM_ACID_WAVETABLE
+#define REFM_ACID_WAVETABLE 1
+#endif
+
+#if REFM_ACID_WAVETABLE
+#include "acid303_wavetable.h"
+#endif
+
 #define SR 44100u
-#define OS_SR 88200u
 #define Q15_ONE 32767
 #define Q20_ONE 1048576ll
+#define COEFF_PERIOD 32u
 
 static int32_t clamp32(int64_t x, int32_t lo, int32_t hi) {
     if (x < lo) return lo;
@@ -36,8 +46,6 @@ uint32_t acid303_note_to_phase_inc(uint8_t note) {
 }
 
 uint32_t acid303_apply_tune(uint32_t phase_inc, int8_t tune) {
-    /* The hardware tune pot is continuous. This fixed-point approximation gives
-       roughly +/-70 cents over the UI range without libm/pow on the FM-1. */
     int64_t delta = ((int64_t)phase_inc * (int32_t)tune) / 1536;
     int64_t tuned = (int64_t)phase_inc + delta;
     if (tuned < 1) tuned = 1;
@@ -54,8 +62,6 @@ static int32_t shape_q15(int32_t x) {
 
 static uint32_t decay_tau_samples(uint16_t decay, uint8_t accented) {
     if (accented) return (SR * 200u) / 1000u;
-    /* The DECAY pot spans roughly 0.2..2 s; the default lands close to the
-       ~1 s Open303 normal filter-envelope time. */
     uint32_t ms = 200u + ((uint32_t)decay * 1800u) / 32767u;
     return (SR * ms) / 1000u;
 }
@@ -68,9 +74,6 @@ static void decay_env(int32_t *env, uint32_t tau_samples) {
     if (*env < 8) *env = 0;
 }
 
-/* Open303 r5 measured nominal cutoff span is 313.815..2394.412 Hz. The 33
-   points below are an exponential interpolation of those endpoints, allowing
-   the target to reproduce the measured knob law without libm/log/pow. */
 uint16_t acid303_cutoff_hz(const acid303_t *s) {
     static const uint16_t lut[33] = {
         314,334,356,380,405,431,459,489,522,556,592,
@@ -96,14 +99,12 @@ static int32_t resonance_skew_q15(uint16_t resonance) {
     uint32_t i = pos >> 15;
     uint32_t frac = pos & 32767u;
     if (i >= 15u) return 32767;
-    return (int32_t)lut[i] + (int32_t)(((int64_t)((int32_t)lut[i+1] - lut[i]) * frac) >> 15);
+    return (int32_t)lut[i] + (int32_t)(((int64_t)((int32_t)lut[i + 1u] - lut[i]) * frac) >> 15);
 }
 
-/* Open303's TB coefficient shape evaluated for the 2x internal sample rate. */
 static int32_t tb_b0_q15(uint32_t hz) {
     if (hz < 80u) hz = 80u;
     if (hz > 12000u) hz = 12000u;
-    /* OS_SR * sqrt(2) ~= 124734. */
     int64_t fx = ((int64_t)hz << 20) / 124734ll;
     int64_t fx2 = (fx * fx) >> 20;
     int64_t num = 477ll + ((6493013ll * fx) >> 20);
@@ -133,6 +134,8 @@ static void reset_analog_path(acid303_t *s) {
     s->output_hp_x = 0;
     s->output_hp_y = 0;
     s->env_rc = 0;
+    s->coeff_valid = 0u;
+    s->coeff_countdown = 0u;
 }
 
 void acid303_init(acid303_t *s) {
@@ -144,8 +147,6 @@ void acid303_init(acid303_t *s) {
     s->accent = 21000u;
     s->drive = 0u;
     s->tune = 0;
-    s->amp_attack = 0u;
-    s->amp_decay = 0u;
     s->amp_sustain = 127u;
     s->amp_release = 110u;
     s->lfo_rate = 35u;
@@ -158,20 +159,14 @@ void acid303_init(acid303_t *s) {
 void acid303_set_note(acid303_t *s, uint8_t note, uint8_t accent, uint8_t slide) {
     uint32_t inc = acid303_apply_tune(acid303_note_to_phase_inc(note), s->tune);
     if (slide && s->gate) {
-        /* Open303 changes accent/decay behavior on a slid note without retriggering
-           the main filter envelope. */
         s->slide_target_inc = inc;
         s->sliding = 1u;
         s->accented = accent ? 1u : 0u;
         if (accent) {
             s->accent_env = Q15_ONE;
             s->accent_sweep += (Q15_ONE - s->accent_sweep) / 2;
-        } else {
-            s->accent_env = 0;
-        }
+        } else s->accent_env = 0;
     } else {
-        /* Like Open303, phase/filter state is reset only after true idle. This
-           keeps consecutive notes in an acid phrase continuous and click-free. */
         if (s->idle) reset_analog_path(s);
         s->phase_inc = inc;
         s->slide_target_inc = inc;
@@ -182,9 +177,7 @@ void acid303_set_note(acid303_t *s, uint8_t note, uint8_t accent, uint8_t slide)
         if (accent) {
             s->accent_env = Q15_ONE;
             s->accent_sweep += (Q15_ONE - s->accent_sweep) / 2;
-        } else {
-            s->accent_env = 0;
-        }
+        } else s->accent_env = 0;
         s->accented = accent ? 1u : 0u;
     }
     s->gate = 1u;
@@ -212,8 +205,7 @@ int16_t acid303_lfo_value(const acid303_t *s) {
     }
 }
 
-/* Fixed-point PolyBLEP correction in Q15. phase and dt are Q32 cycles.
-   This removes most of the hard-discontinuity aliasing without tables/libm. */
+#if !REFM_ACID_WAVETABLE
 static int32_t poly_blep_q15(uint32_t phase, uint32_t dt) {
     if (!dt) return 0;
     if (phase < dt) {
@@ -227,10 +219,21 @@ static int32_t poly_blep_q15(uint32_t phase, uint32_t dt) {
     }
     return 0;
 }
+#endif
 
 static int32_t oscillator_substep(acid303_t *s, uint32_t sub_inc) {
-    const uint32_t duty = 0xA6666666u; /* intentionally asymmetric ~65% */
     s->phase += sub_inc;
+#if REFM_ACID_WAVETABLE
+    uint32_t band = 0u;
+    while (band + 1u < REFM_ACID_WT_BANDS && s->phase_inc > refm_acid_wt_threshold_inc[band]) ++band;
+    const int16_t *table = s->square ? refm_acid_wt_square[band] : refm_acid_wt_saw[band];
+    uint32_t idx = s->phase >> 25;
+    uint32_t frac = (s->phase >> 10) & 32767u;
+    int32_t a = table[idx & REFM_ACID_WT_MASK];
+    int32_t b = table[(idx + 1u) & REFM_ACID_WT_MASK];
+    return a + (int32_t)(((int64_t)(b - a) * frac) >> 15);
+#else
+    const uint32_t duty = 0xA6666666u;
     int32_t blep_wrap = poly_blep_q15(s->phase, sub_inc);
     if (!s->square) {
         int32_t saw = (int32_t)(s->phase >> 16) - 32768;
@@ -242,13 +245,12 @@ static int32_t oscillator_substep(acid303_t *s, uint32_t sub_inc) {
     int32_t blep_duty = poly_blep_q15(rel, sub_inc);
     sq -= (int32_t)(((int64_t)blep_duty * 57000) >> 16);
     return clamp32(sq, -32768, 32767);
+#endif
 }
 
 static void slide_step(acid303_t *s) {
     if (!s->sliding) return;
     int64_t d = (int64_t)s->slide_target_inc - (int64_t)s->phase_inc;
-    /* Open303's nominal 60 ms slide uses a slew time constant of 0.2*slide,
-       i.e. ~12 ms. 529 samples is 12 ms at 44.1 kHz. */
     int64_t step = d / 529;
     if (!step && d) step = d > 0 ? 1 : -1;
     s->phase_inc = (uint32_t)((int64_t)s->phase_inc + step);
@@ -257,71 +259,74 @@ static void slide_step(acid303_t *s) {
 
 static void envelope_step(acid303_t *s) {
     decay_env(&s->env, decay_tau_samples(s->decay, s->accented));
-
-    /* Open303 r5 has a 15 ms RC stage after the main filter envelope. */
     s->env_rc += (int32_t)(((int64_t)(s->env - s->env_rc) * 50) >> 15);
-
     decay_env(&s->accent_env, (SR * 200u) / 1000u);
-
-    /* r5's amp envelope decays around 1230 ms. Note release is effectively
-       immediate for normal notes and ~50 ms for accented notes. */
-    if (s->gate)
-        decay_env(&s->amp, (SR * 1230u) / 1000u);
-    else
-        decay_env(&s->amp, (SR * (s->accented ? 50u : 1u)) / 1000u);
-
+    if (s->gate) decay_env(&s->amp, (SR * 1230u) / 1000u);
+    else decay_env(&s->amp, (SR * (s->accented ? 50u : 1u)) / 1000u);
     if (!s->amp) {
         s->amp_stage = ACID_ENV_OFF;
         if (!s->gate) s->idle = 1u;
     }
-
     uint32_t base = 7000u + ((uint32_t)s->resonance * 22000u) / 32767u;
     decay_env(&s->accent_sweep, base);
 }
 
 static int32_t feedback_highpass(acid303_t *s, int32_t x) {
     int32_t d = x - s->resonance_hp_lp;
-    /* ~150 Hz at the 88.2 kHz internal ladder rate. */
     s->resonance_hp_lp += (int32_t)(((int64_t)d * 346) >> 15);
     return x - s->resonance_hp_lp;
 }
 
-static int32_t teebee_ladder_substep(acid303_t *s, int32_t in, uint32_t cutoff_hz) {
+static void set_filter_coeff_target(acid303_t *s, uint32_t cutoff_hz) {
     int32_t b0 = tb_b0_q15(cutoff_hz);
     int32_t r = resonance_skew_q15(s->resonance);
     int32_t kbase = tb_kbase_q12(cutoff_hz);
-    int32_t k_q15 = (int32_t)(((int64_t)kbase * r) >> 12);
+    int32_t k = (int32_t)(((int64_t)kbase * r) >> 12);
+    int32_t gbase = (int32_t)(((int64_t)kbase * 32768) / (17ll * 4096ll));
+    int32_t g = 32768 + (int32_t)(((int64_t)(gbase - 32768) * r) >> 15);
+    g = (int32_t)(((int64_t)g * (32768 + r)) >> 15);
+    if (!s->coeff_valid) {
+        s->coeff_b0 = b0; s->coeff_k = k; s->coeff_g = g;
+        s->coeff_b0_step = s->coeff_k_step = s->coeff_g_step = 0;
+        s->coeff_valid = 1u;
+    } else {
+        s->coeff_b0_step = (b0 - s->coeff_b0) / (int32_t)COEFF_PERIOD;
+        s->coeff_k_step = (k - s->coeff_k) / (int32_t)COEFF_PERIOD;
+        s->coeff_g_step = (g - s->coeff_g) / (int32_t)COEFF_PERIOD;
+    }
+    s->coeff_countdown = COEFF_PERIOD;
+}
+
+static void advance_filter_coeffs(acid303_t *s) {
+    if (!s->coeff_countdown) return;
+    s->coeff_b0 += s->coeff_b0_step;
+    s->coeff_k += s->coeff_k_step;
+    s->coeff_g += s->coeff_g_step;
+    --s->coeff_countdown;
+}
+
+static int32_t teebee_ladder_substep(acid303_t *s, int32_t in) {
     int32_t fb_shape = shape_q15(s->lp4);
-    int32_t fb = clamp32(((int64_t)fb_shape * k_q15) >> 15, -262144, 262144);
+    int32_t fb = clamp32(((int64_t)fb_shape * s->coeff_k) >> 15, -262144, 262144);
     int32_t y0 = clamp32((int64_t)in - feedback_highpass(s, fb), -196608, 196608);
     int32_t d1 = clamp32((int64_t)y0 - s->lp1 + s->lp2, -262144, 262144);
-    s->lp1 = clamp32((int64_t)s->lp1 + (((int64_t)2 * b0 * d1) >> 15), -262144, 262144);
+    s->lp1 = clamp32((int64_t)s->lp1 + (((int64_t)2 * s->coeff_b0 * d1) >> 15), -262144, 262144);
     int32_t d2 = clamp32((int64_t)s->lp1 - 2ll * s->lp2 + s->lp3, -262144, 262144);
-    s->lp2 = clamp32((int64_t)s->lp2 + (((int64_t)b0 * d2) >> 15), -262144, 262144);
+    s->lp2 = clamp32((int64_t)s->lp2 + (((int64_t)s->coeff_b0 * d2) >> 15), -262144, 262144);
     int32_t d3 = clamp32((int64_t)s->lp2 - 2ll * s->lp3 + s->lp4, -262144, 262144);
-    s->lp3 = clamp32((int64_t)s->lp3 + (((int64_t)b0 * d3) >> 15), -262144, 262144);
+    s->lp3 = clamp32((int64_t)s->lp3 + (((int64_t)s->coeff_b0 * d3) >> 15), -262144, 262144);
     int32_t d4 = clamp32((int64_t)s->lp3 - 2ll * s->lp4, -262144, 262144);
-    s->lp4 = clamp32((int64_t)s->lp4 + (((int64_t)b0 * d4) >> 15), -262144, 262144);
-    int32_t gbase_q15 = (int32_t)(((int64_t)kbase * 32768) / (17ll * 4096ll));
-    int32_t g_q15 = 32768 + (int32_t)(((int64_t)(gbase_q15 - 32768) * r) >> 15);
-    g_q15 = (int32_t)(((int64_t)g_q15 * (32768 + r)) >> 15);
-    return clamp32(((int64_t)2 * g_q15 * s->lp4) >> 15, -131072, 131072);
+    s->lp4 = clamp32((int64_t)s->lp4 + (((int64_t)s->coeff_b0 * d4) >> 15), -262144, 262144);
+    return clamp32(((int64_t)2 * s->coeff_g * s->lp4) >> 15, -131072, 131072);
 }
 
 static int32_t output_highpass(acid303_t *s, int32_t x) {
-    /* Open303 r5 includes a 44.486 Hz HPF in the oversampled/output path. */
     int32_t y = x - s->output_hp_x + (int32_t)(((int64_t)s->output_hp_y * 32561) >> 15);
     s->output_hp_x = x;
     s->output_hp_y = y;
     return y;
 }
 
-/* Fixed-point port of Open303 r5's measured environment mapping:
-     c0=313.815 Hz, c1=2394.412 Hz
-     offset = 0.294391 + 0.048293*c
-     scaler = lerp(0.736966+3.773996*e,
-                   0.864345+4.194549*e, c)
-   where c is the exponential cutoff-knob position and e is Env Mod 0..1. */
 static uint32_t measured_env_cutoff(acid303_t *s) {
     int32_t c = s->cutoff > 32767u ? 32767 : (int32_t)s->cutoff;
     int32_t e = s->env_mod > 32767u ? 32767 : (int32_t)s->env_mod;
@@ -338,16 +343,10 @@ static uint32_t measured_env_cutoff(acid303_t *s) {
 
 static uint32_t modulated_cutoff(acid303_t *s) {
     uint32_t fc = measured_env_cutoff(s);
-
-    /* Persistent accent charge is retained as a restrained additional lift.
-       The main accented character now primarily comes from the r5 200 ms main
-       envelope decay and 50 ms VCA release rather than a huge fixed-Hz sweep. */
     if (s->accent_sweep > 0 && s->accent) {
         int32_t sweep = (int32_t)(((int64_t)s->accent_sweep * s->accent) >> 15);
-        uint32_t extra = (uint32_t)(((int64_t)acid303_cutoff_hz(s) * sweep) >> 17);
-        fc += extra;
+        fc += (uint32_t)(((int64_t)acid303_cutoff_hz(s) * sweep) >> 17);
     }
-
     if (s->lfo_amount) {
         int16_t lfo = acid303_lfo_value(s);
         int32_t delta = (int32_t)(((int64_t)lfo * s->lfo_amount * 1600) >> 22);
@@ -364,11 +363,13 @@ int32_t acid303_process(acid303_t *s) {
     envelope_step(s);
 
     uint32_t fc = modulated_cutoff(s);
+    if (!s->coeff_countdown) set_filter_coeff_target(s, fc);
+    advance_filter_coeffs(s);
+
     uint32_t sub_inc = s->phase_inc >> 1;
     if (!sub_inc && s->phase_inc) sub_inc = 1u;
-
-    int32_t y0 = teebee_ladder_substep(s, oscillator_substep(s, sub_inc), fc);
-    int32_t y1 = teebee_ladder_substep(s, oscillator_substep(s, sub_inc), fc);
+    int32_t y0 = teebee_ladder_substep(s, oscillator_substep(s, sub_inc));
+    int32_t y1 = teebee_ladder_substep(s, oscillator_substep(s, sub_inc));
     int32_t y = (y0 + y1) / 2;
 
     int32_t gain = s->amp;
