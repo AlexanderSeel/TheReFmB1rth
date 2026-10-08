@@ -11,12 +11,21 @@ void mixer_fx_init(mixer_fx_t *m) {
         m->track[i].level = 32767;
         m->track[i].pan = 0;
     }
+#if defined(__EMSCRIPTEN__)
+    m->delay_len = 11025u; /* 250 ms */
+    m->delay_feedback = 15000;
+    m->delay_mix = 7000;
+    m->reverb_feedback = 29400;
+    m->reverb_mix = 6000;
+    m->reverb_damp = 7000;
+#else
     m->delay_len = 1102u;
     m->delay_feedback = 14000;
     m->delay_mix = 7000;
     m->reverb_feedback = 24500;
     m->reverb_mix = 6000;
     m->reverb_damp = 9000;
+#endif
     m->drive = 3000;
     m->compressor_threshold = 24576;
     m->filter_cutoff = 30000;
@@ -26,13 +35,13 @@ void mixer_fx_set_delay(mixer_fx_t *m, uint16_t samples, int16_t feedback, int16
     if (samples == 0u) samples = 1u;
     if (samples > MIX_DELAY_MAX) samples = MIX_DELAY_MAX;
     m->delay_len = samples;
-    m->delay_feedback = (int16_t)clamp32(feedback, 0, 30000);
+    m->delay_feedback = (int16_t)clamp32(feedback, 0, 31000);
     m->delay_mix = (int16_t)clamp32(mix, 0, 32767);
     if (m->delay_pos >= samples) m->delay_pos = 0u;
 }
 
 void mixer_fx_set_reverb(mixer_fx_t *m, int16_t feedback, int16_t mix, int16_t damp) {
-    m->reverb_feedback = (int16_t)clamp32(feedback, 0, 31000);
+    m->reverb_feedback = (int16_t)clamp32(feedback, 0, MIX_REVERB_FEEDBACK_MAX);
     m->reverb_mix = (int16_t)clamp32(mix, 0, 32767);
     m->reverb_damp = (int16_t)clamp32(damp, 256, 30000);
 }
@@ -105,6 +114,9 @@ void mixer_fx_process(mixer_fx_t *m, const int16_t input[MIX_TRACKS], int16_t *o
         int32_t in_a = clamp32(reverb_send_l + (reverb_send_r >> 1), -65536, 65535);
         int32_t in_b = clamp32(reverb_send_r + (reverb_send_l >> 1), -65536, 65535);
 
+        /* Damping runs inside the feedback loop. A longer WASM line pair plus
+           high-but-bounded feedback produces a several-second tail without
+           resorting to a giant convolution buffer. */
         m->reverb_lp_a += (int32_t)(((int64_t)(ra - m->reverb_lp_a) * damp) >> 15);
         m->reverb_lp_b += (int32_t)(((int64_t)(rb - m->reverb_lp_b) * damp) >> 15);
         m->reverb_a[m->reverb_pos_a] = clip16(in_a + (int32_t)(((int64_t)m->reverb_lp_b * m->reverb_feedback) >> 15));
