@@ -6,7 +6,10 @@ OUT="$ROOT/build/wasm"
 mkdir -p "$OUT"
 python3 "$ROOT/tools/generate_303_wavetables.py"
 python3 "$ROOT/tools/generate_303_wavetables.py" --check
-COMMON="$ROOT/firmware/proto/acid303.c $ROOT/firmware/proto/seq16.c $ROOT/firmware/proto/sample_voice.c $ROOT/firmware/proto/drum_machine.c $ROOT/firmware/proto/mixer_fx.c $ROOT/firmware/proto/midi_transport.c $ROOT/firmware/proto/song.c $ROOT/firmware/proto/project_store.c $ROOT/firmware/proto/pattern_bank.c $ROOT/firmware/proto/groovebox.c $ROOT/firmware/proto/ui_graph_model.c"
+# Browser gets the dedicated floating-point/Open303-HQ acid core. The FM-1 and
+# host regression builds deliberately keep firmware/proto/acid303.c so browser
+# fidelity is no longer limited by the embedded fixed-point/CPU budget.
+COMMON="$ROOT/web/emu/acid303_hq.c $ROOT/firmware/proto/seq16.c $ROOT/firmware/proto/sample_voice.c $ROOT/firmware/proto/drum_machine.c $ROOT/firmware/proto/mixer_fx.c $ROOT/firmware/proto/midi_transport.c $ROOT/firmware/proto/song.c $ROOT/firmware/proto/project_store.c $ROOT/firmware/proto/pattern_bank.c $ROOT/firmware/proto/groovebox.c $ROOT/firmware/proto/ui_graph_model.c"
 FEATURES="$ROOT/firmware/proto/groovebox_pattern.c $ROOT/firmware/proto/midi_router.c $ROOT/firmware/proto/groovebox_midi.c"
 SAMPLE_SRC=""
 SAMPLE_FLAGS=""
@@ -42,6 +45,7 @@ cp "$ROOT/web/emu/refm_audio_worklet.js" "$OUT/refm_audio_worklet.js"
 grep -q 'rebirth_skin.css' "$OUT/index.html"
 grep -q 'installRebirthSkin' "$OUT/index.html"
 grep -q 'installSampleControls' "$OUT/index.html"
+grep -q 'Browser-only high-quality TB-303 voice' "$ROOT/web/emu/acid303_hq.c"
 
-echo "WASM groovebox built: $OUT/index.html + worklet.html + refm.js + refm.wasm"
+echo "WASM groovebox built with Open303-HQ acid core: $OUT/index.html + worklet.html + refm.js + refm.wasm"
 if [ -n "$SAMPLE_SRC" ]; then echo "Bundled audition samples: enabled"; else echo "Bundled audition samples: not present (synth fallback)"; fi
