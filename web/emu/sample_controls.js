@@ -12,10 +12,17 @@ function installAcidTimingControls(mod){
   const write=(track,step,s)=>mod._refm_wasm_set_acid_step(track,step,clamp(s.note||48,0,127),s.flags&15,clamp(s.prob??100,0,100));
   const selectedStep=track=>{const b=document.querySelector(`#seq${track} .step.selected`);return b?+b.dataset.i:0;};
   const modeOf=s=>(s.flags&TIE)&&!(s.flags&GATE)?'tie':(s.flags&GATE)?'note':'rest';
+  const selectStep=(track,step)=>{
+    const next=((step%16)+16)%16;
+    const b=document.querySelector(`#seq${track} .step[data-i="${next}"]`);
+    if(b)b.click();
+  };
+  const advanceStep=(track,step)=>selectStep(track,(step+1)&15);
   const paintStep=(track,step)=>{
     const b=document.querySelector(`#seq${track} .step[data-i="${step}"]`);if(!b)return;
+    const wasPlaying=b.classList.contains('playing'),wasSelected=b.classList.contains('selected');
     const s=read(track,step),mode=modeOf(s),note=mode==='note'?noteLabel(s.note):mode==='tie'?'TIE':'REST';
-    b.className='step'+(mode==='note'?' on':'')+(s.flags&ACCENT?' accent':'')+(s.flags&SLIDE?' slide':'')+(mode==='tie'?' tie':'')+(b.classList.contains('playing')?' playing':'')+(b.classList.contains('selected')?' selected':'');
+    b.className='step'+(mode==='note'?' on':'')+(s.flags&ACCENT?' accent':'')+(s.flags&SLIDE?' slide':'')+(mode==='tie'?' tie':'')+(wasPlaying?' playing':'')+(wasSelected?' selected':'');
     b.innerHTML=`<span class="refm-step-num">${step+1}</span><strong>${note}</strong><small>${mode==='note'&&(s.flags&ACCENT)?'ACC ':''}${mode==='note'&&(s.flags&SLIDE)?'SLIDE→ ':''}${s.prob<100?`${s.prob}%`:''}</small>`;
   };
   const refresh=(editor,track)=>{
@@ -27,7 +34,8 @@ function installAcidTimingControls(mod){
   };
   document.querySelectorAll('.refm-note-editor').forEach(editor=>{
     const track=+editor.dataset.track,flags=editor.querySelector('.refm-flags');if(!flags)return;
-    flags.innerHTML='<div class="refm-time-mode"><span>TIME MODE · NOTE / REST / TIE</span><button data-time="note">NOTE</button><button data-time="rest">REST</button><button data-time="tie">TIE</button></div><div class="refm-note-modifiers"><span>NOTE MOD</span><button data-modifier="2">ACCENT</button><button data-modifier="4">SLIDE → NEXT</button></div><button data-copy>COPY</button><button data-paste>PASTE</button>';
+    const head=editor.querySelector('.refm-editor-head span');if(head)head.textContent=' TB-303 STEP WRITE · choose pitch / REST / TIE → auto next';
+    flags.innerHTML='<div class="refm-time-mode"><span>TIME MODE · NOTE / REST / TIE · AUTO →</span><button data-time="note">NOTE</button><button data-time="rest">REST</button><button data-time="tie">TIE</button></div><div class="refm-note-modifiers"><span>NOTE MOD</span><button data-modifier="2">ACCENT</button><button data-modifier="4">SLIDE → NEXT</button></div><button data-copy>COPY</button><button data-paste>PASTE</button>';
     let clipboard=null;
     flags.querySelectorAll('[data-time]').forEach(b=>b.onclick=()=>{
       const step=selectedStep(track),s=read(track,step),mode=b.dataset.time;
@@ -35,6 +43,9 @@ function installAcidTimingControls(mod){
       else if(mode==='tie'){s.flags=TIE;}
       else{s.flags=0;}
       write(track,step,s);paintStep(track,step);refresh(editor,track);
+      /* TB-303-style time entry: REST and TIE consume the current step and
+         move the write cursor. NOTE stays put until a pitch is chosen. */
+      if(mode!=='note')advanceStep(track,step);
     });
     flags.querySelectorAll('[data-modifier]').forEach(b=>b.onclick=()=>{
       const step=selectedStep(track),s=read(track,step);if(modeOf(s)!=='note')return;
@@ -43,7 +54,19 @@ function installAcidTimingControls(mod){
     flags.querySelector('[data-copy]').onclick=()=>{clipboard={...read(track,selectedStep(track))};};
     flags.querySelector('[data-paste]').onclick=()=>{if(!clipboard)return;const step=selectedStep(track);write(track,step,{...clipboard});paintStep(track,step);refresh(editor,track);};
     editor.addEventListener('click',e=>{
-      if(e.target.closest('[data-note],[data-oct]'))queueMicrotask(()=>{const step=selectedStep(track),s=read(track,step);s.flags=(s.flags&(ACCENT|SLIDE))|GATE;write(track,step,s);paintStep(track,step);refresh(editor,track);});
+      const noteKey=e.target.closest('[data-note]');
+      if(noteKey)queueMicrotask(()=>{
+        const step=selectedStep(track),s=read(track,step);
+        /* The hardware-style piano already wrote the chosen pitch. Force the
+           step into NOTE mode, preserve ACCENT/SLIDE, then advance exactly one
+           position. Step 16 wraps to step 1. */
+        s.flags=(s.flags&(ACCENT|SLIDE))|GATE;
+        write(track,step,s);paintStep(track,step);refresh(editor,track);
+        advanceStep(track,step);
+      });
+      /* OCT +/- is an edit of the current note, not a new note-entry action,
+         so it intentionally does not advance the cursor. */
+      if(e.target.closest('[data-oct]'))queueMicrotask(()=>{const step=selectedStep(track),s=read(track,step);s.flags=(s.flags&(ACCENT|SLIDE))|GATE;write(track,step,s);paintStep(track,step);refresh(editor,track);});
       if(e.target.closest('.step'))queueMicrotask(()=>refresh(editor,track));
     });
     document.querySelector(`#seq${track}`)?.addEventListener('click',()=>queueMicrotask(()=>refresh(editor,track)));
