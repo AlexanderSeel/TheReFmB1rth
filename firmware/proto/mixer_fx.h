@@ -5,9 +5,22 @@
 #include <stdint.h>
 
 #define MIX_TRACKS 4u
+
+/* Browser/WASM has cheap linear memory, so give the performance rack a proper
+   musical delay range and longer diffusion paths. The embedded FM-1 keeps the
+   compact buffers until the physical CPU/RAM profiling gate proves that more
+   pool can safely be spent on effects. */
+#if defined(__EMSCRIPTEN__)
+#define MIX_DELAY_MAX 65535u          /* 1.486 s @ 44.1 kHz */
+#define MIX_REVERB_A 1499u            /* 34.0 ms */
+#define MIX_REVERB_B 2111u            /* 47.9 ms */
+#define MIX_REVERB_FEEDBACK_MAX 32400 /* ~0.989 */
+#else
 #define MIX_DELAY_MAX 2048u
 #define MIX_REVERB_A 353u
 #define MIX_REVERB_B 521u
+#define MIX_REVERB_FEEDBACK_MAX 31000
+#endif
 
 typedef struct {
     int16_t level;
@@ -27,9 +40,8 @@ typedef struct {
     int16_t delay_feedback;
     int16_t delay_mix;
 
-    /* Compact stereo cross-feedback reverb. The short mutually-prime delay
-       lengths keep memory low enough for FM-1 while still giving the browser
-       rack a real onboard room/plate-like tail. */
+    /* Stereo cross-feedback reverb. WASM uses much longer mutually-prime-ish
+       lines; FM-1 retains the compact version for its current pool budget. */
     int16_t reverb_a[MIX_REVERB_A];
     int16_t reverb_b[MIX_REVERB_B];
     uint16_t reverb_pos_a;
