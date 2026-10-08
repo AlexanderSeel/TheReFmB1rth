@@ -255,6 +255,8 @@ static int32_t oscillator_substep(acid303_t *s, uint32_t sub_inc) {
 static void slide_step(acid303_t *s) {
     if (!s->sliding) return;
     int64_t d = (int64_t)s->slide_target_inc - (int64_t)s->phase_inc;
+    /* Open303's stock 60 ms slide uses a slew time constant of 0.2 * slide,
+       i.e. about 12 ms. 529 output samples at 44.1 kHz is 11.995 ms. */
     int64_t step = d / 529;
     if (!step && d) step = d > 0 ? 1 : -1;
     s->phase_inc = (uint32_t)((int64_t)s->phase_inc + step);
@@ -405,10 +407,18 @@ int32_t acid303_process(acid303_t *s) {
         y1 = teebee_ladder_substep(s, pre_ladder_highpass(s, oscillator_substep(s, sub_inc)));
         y = post_ladder_highpass(s, (y0 + y1) / 2);
 
+        /* Open303 couples the main filter envelope into the VCA while the note
+           is held: about 0.45x on every note, plus up to 4x on accents. This is
+           a major part of the short, forward 303 articulation and is distinct
+           from the slower accent-cutoff sweep. Keep it before the 200 Hz
+           de-click stage, matching the reference signal ordering. */
         gain = s->amp;
-        if (s->accented || s->accent_env > 0) {
-            int32_t ag = (int32_t)(((int64_t)s->accent_env * s->accent) >> 16);
-            gain = clamp32((int64_t)gain + ag, 0, 41000);
+        if (s->gate) {
+            gain += (int32_t)(((int64_t)s->env * 14746) >> 15); /* ~= 0.45 */
+            if (s->accented && s->accent) {
+                int32_t accent_gain = (int32_t)(((int64_t)s->env * s->accent) >> 15);
+                gain = clamp32((int64_t)gain + 4ll * accent_gain, 0, 196608);
+            }
         }
         gain = declick_gain(s, gain);
         y = (int32_t)(((int64_t)y * gain) >> 15);
