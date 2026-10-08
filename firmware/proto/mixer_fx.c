@@ -10,10 +10,15 @@ void mixer_fx_init(mixer_fx_t *m) {
     for (unsigned i=0; i<MIX_TRACKS; ++i) {
         m->track[i].level = 32767;
         m->track[i].pan = 0;
+        m->track[i].delay_send = 24u;
+        m->track[i].reverb_send = 18u;
     }
     m->delay_len = 1102u;
     m->delay_feedback = 14000;
     m->delay_mix = 7000;
+    m->reverb_feedback = 24500;
+    m->reverb_mix = 6000;
+    m->reverb_damp = 9000;
     m->drive = 3000;
     m->compressor_threshold = 24576;
     m->filter_cutoff = 30000;
@@ -26,6 +31,12 @@ void mixer_fx_set_delay(mixer_fx_t *m, uint16_t samples, int16_t feedback, int16
     m->delay_feedback = (int16_t)clamp32(feedback, 0, 30000);
     m->delay_mix = (int16_t)clamp32(mix, 0, 32767);
     if (m->delay_pos >= samples) m->delay_pos = 0u;
+}
+
+void mixer_fx_set_reverb(mixer_fx_t *m, int16_t feedback, int16_t mix, int16_t damp) {
+    m->reverb_feedback = (int16_t)clamp32(feedback, 0, 31000);
+    m->reverb_mix = (int16_t)clamp32(mix, 0, 32767);
+    m->reverb_damp = (int16_t)clamp32(damp, 256, 30000);
 }
 
 static int32_t saturate(int32_t x, int16_t drive) {
@@ -53,10 +64,13 @@ void mixer_fx_process(mixer_fx_t *m, const int16_t input[MIX_TRACKS], int16_t *o
     if (delay_len > MIX_DELAY_MAX) delay_len = MIX_DELAY_MAX;
     if (m->delay_len != delay_len) m->delay_len = delay_len;
     if (m->delay_pos >= delay_len) m->delay_pos = 0u;
+    if (m->reverb_pos_a >= MIX_REVERB_A) m->reverb_pos_a = 0u;
+    if (m->reverb_pos_b >= MIX_REVERB_B) m->reverb_pos_b = 0u;
 
     for (unsigned i=0; i<MIX_TRACKS; ++i) if (m->track[i].solo) any_solo = 1;
 
-    int64_t left = 0, right = 0, send_l = 0, send_r = 0;
+    int64_t left = 0, right = 0, delay_send_l = 0, delay_send_r = 0;
+    int64_t reverb_send_l = 0, reverb_send_r = 0;
     for (unsigned i=0; i<MIX_TRACKS; ++i) {
         const mixer_track_t *t = &m->track[i];
         if (t->mute || (any_solo && !t->solo)) continue;
@@ -67,30 +81,56 @@ void mixer_fx_process(mixer_fx_t *m, const int16_t input[MIX_TRACKS], int16_t *o
         int32_t r = (int32_t)(((int64_t)s * rg) >> 15);
         left += l;
         right += r;
-        send_l += ((int64_t)l * t->delay_send) / 127;
-        send_r += ((int64_t)r * t->delay_send) / 127;
+        delay_send_l += ((int64_t)l * t->delay_send) / 127;
+        delay_send_r += ((int64_t)r * t->delay_send) / 127;
+        reverb_send_l += ((int64_t)l * t->reverb_send) / 127;
+        reverb_send_r += ((int64_t)r * t->reverb_send) / 127;
     }
 
-    int16_t dl = m->delay_l[m->delay_pos];
-    int16_t dr = m->delay_r[m->delay_pos];
-    int32_t write_l = (int32_t)send_l + (int32_t)(((int64_t)dl * m->delay_feedback) >> 15);
-    int32_t write_r = (int32_t)send_r + (int32_t)(((int64_t)dr * m->delay_feedback) >> 15);
-    m->delay_l[m->delay_pos] = clip16(write_l);
-    m->delay_r[m->delay_pos] = clip16(write_r);
-    m->delay_pos++;
-    if (m->delay_pos >= delay_len) m->delay_pos = 0u;
+    {
+        int16_t dl = m->delay_l[m->delay_pos];
+        int16_t dr = m->delay_r[m->delay_pos];
+        int32_t write_l = (int32_t)delay_send_l + (int32_t)(((int64_t)dl * m->delay_feedback) >> 15);
+        int32_t write_r = (int32_t)delay_send_r + (int32_t)(((int64_t)dr * m->delay_feedback) >> 15);
+        m->delay_l[m->delay_pos] = clip16(write_l);
+        m->delay_r[m->delay_pos] = clip16(write_r);
+        m->delay_pos++;
+        if (m->delay_pos >= delay_len) m->delay_pos = 0u;
+        left += ((int64_t)dl * m->delay_mix) >> 15;
+        right += ((int64_t)dr * m->delay_mix) >> 15;
+    }
 
-    left += ((int64_t)dl * m->delay_mix) >> 15;
-    right += ((int64_t)dr * m->delay_mix) >> 15;
+    {
+        int32_t ra = m->reverb_a[m->reverb_pos_a];
+        int32_t rb = m->reverb_b[m->reverb_pos_b];
+        int32_t damp = clamp32(m->reverb_damp, 256, 30000);
+        int32_t in_a = clamp32(reverb_send_l + (reverb_send_r >> 1), -65536, 65535);
+        int32_t in_b = clamp32(reverb_send_r + (reverb_send_l >> 1), -65536, 65535);
 
-    int32_t l = saturate(clamp32(left, -65536, 65535), m->drive);
-    int32_t r = saturate(clamp32(right, -65536, 65535), m->drive);
-    l = compress(l, m->compressor_threshold);
-    r = compress(r, m->compressor_threshold);
+        m->reverb_lp_a += (int32_t)(((int64_t)(ra - m->reverb_lp_a) * damp) >> 15);
+        m->reverb_lp_b += (int32_t)(((int64_t)(rb - m->reverb_lp_b) * damp) >> 15);
 
-    int32_t fc = clamp32(m->filter_cutoff, 256, 32767);
-    m->filter_l += (int32_t)(((int64_t)(l - m->filter_l) * fc) >> 15);
-    m->filter_r += (int32_t)(((int64_t)(r - m->filter_r) * fc) >> 15);
-    *out_l = clip16(m->filter_l);
-    *out_r = clip16(m->filter_r);
+        /* Cross-feed the two prime-ish delay lines. This creates a diffuse,
+           stereo tail without the large RAM cost of a full Schroeder network. */
+        m->reverb_a[m->reverb_pos_a] = clip16(in_a + (int32_t)(((int64_t)m->reverb_lp_b * m->reverb_feedback) >> 15));
+        m->reverb_b[m->reverb_pos_b] = clip16(in_b + (int32_t)(((int64_t)m->reverb_lp_a * m->reverb_feedback) >> 15));
+        if (++m->reverb_pos_a >= MIX_REVERB_A) m->reverb_pos_a = 0u;
+        if (++m->reverb_pos_b >= MIX_REVERB_B) m->reverb_pos_b = 0u;
+
+        left += ((int64_t)(ra + (rb >> 1)) * m->reverb_mix) >> 15;
+        right += ((int64_t)(rb + (ra >> 1)) * m->reverb_mix) >> 15;
+    }
+
+    {
+        int32_t l = saturate(clamp32(left, -65536, 65535), m->drive);
+        int32_t r = saturate(clamp32(right, -65536, 65535), m->drive);
+        l = compress(l, m->compressor_threshold);
+        r = compress(r, m->compressor_threshold);
+
+        int32_t fc = clamp32(m->filter_cutoff, 256, 32767);
+        m->filter_l += (int32_t)(((int64_t)(l - m->filter_l) * fc) >> 15);
+        m->filter_r += (int32_t)(((int64_t)(r - m->filter_r) * fc) >> 15);
+        *out_l = clip16(m->filter_l);
+        *out_r = clip16(m->filter_r);
+    }
 }
