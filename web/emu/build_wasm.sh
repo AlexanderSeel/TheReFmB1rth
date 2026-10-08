@@ -36,6 +36,7 @@ emcc -O3 -std=c11 $SAMPLE_FLAGS \
 # build time: source preview and uploaded artifact must stay byte-identical.
 cp "$ROOT/web/emu/index.html" "$OUT/index.html"
 cp "$ROOT/web/emu/sample_controls.js" "$OUT/sample_controls.js"
+cp "$ROOT/web/emu/fx_board.js" "$OUT/fx_board.js"
 cp "$ROOT/web/emu/rebirth_skin.css" "$OUT/rebirth_skin.css"
 cp "$ROOT/web/emu/rebirth_skin.js" "$OUT/rebirth_skin.js"
 cp "$ROOT/web/emu/worklet.html" "$OUT/worklet.html"
@@ -45,7 +46,9 @@ cp "$ROOT/web/emu/refm_audio_worklet.js" "$OUT/refm_audio_worklet.js"
 grep -q 'rebirth_skin.css' "$OUT/index.html"
 grep -q 'installRebirthSkin' "$OUT/index.html"
 grep -q 'installSampleControls' "$OUT/index.html"
+grep -q 'installFxBoard' "$OUT/sample_controls.js"
+grep -q 'REVERB' "$OUT/fx_board.js"
 grep -q 'Browser-only high-quality TB-303 voice' "$ROOT/web/emu/acid303_hq.c"
 
-echo "WASM groovebox built with Open303-HQ acid core: $OUT/index.html + worklet.html + refm.js + refm.wasm"
+echo "WASM groovebox built with Open303-HQ acid core + onboard FX board: $OUT/index.html + worklet.html + refm.js + refm.wasm"
 if [ -n "$SAMPLE_SRC" ]; then echo "Bundled audition samples: enabled"; else echo "Bundled audition samples: not present (synth fallback)"; fi
