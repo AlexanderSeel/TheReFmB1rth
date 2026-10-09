@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
-"""Generate browser-only Open303-style 2048x12 SAW303/SQUARE303 mipmaps.
+"""Generate browser-only 2048x12 TB-303 reference mipmaps.
 
-The prototype construction and octave mip strategy mirror Open303's
-MipMappedWaveTable. The emitted interface intentionally matches the compact
-firmware wavetable header so the browser HQ core can switch tables without
-changing the FM-1 implementation.
+For the WASM reference path we deliberately use the spectral construction from
+js303 as a second benchmark beside Open303: all harmonics for saw, odd
+harmonics only for square, with a cosine-squared roll-off toward the highest
+retained partial.  This produces a stable hollow/reedy square without the
+experimental pulse-width/memory model that drifted away from the reference.
+
+The emitted interface matches the compact firmware wavetable header so the
+FM-1 implementation remains untouched.
 """
 from __future__ import annotations
 import argparse, math
@@ -13,67 +17,45 @@ from pathlib import Path
 
 N=2048
 LEVELS=12
-DRIVE_DB=36.9
-OFFSET=4.37
-PHASE_DEG=180.0
 
 
-def fft(a:list[complex], inverse:bool=False)->list[complex]:
-    n=len(a); out=list(a); j=0
-    for i in range(1,n):
-        bit=n>>1
-        while j&bit:
-            j^=bit; bit>>=1
-        j^=bit
-        if i<j: out[i],out[j]=out[j],out[i]
-    length=2
-    while length<=n:
-        ang=(2.0*math.pi/length)*(1.0 if inverse else -1.0)
-        wlen=complex(math.cos(ang),math.sin(ang)); half=length>>1
-        for i in range(0,n,length):
-            w=1+0j
-            for k in range(half):
-                u=out[i+k]; v=out[i+k+half]*w
-                out[i+k]=u+v; out[i+k+half]=u-v; w*=wlen
-        length<<=1
-    if inverse: out=[x/n for x in out]
+def normalize_bank(tables:list[list[float]])->list[list[float]]:
+    peak=max(max(abs(v) for v in table) for table in tables)
+    if peak <= 0.0:
+        raise RuntimeError("wavetable bank is silent")
+    scale=1.0/peak
+    return [[v*scale for v in table] for table in tables]
+
+
+def spectral_table(hmax:int, odd_only:bool)->list[float]:
+    """Render one js303-style band-limited waveform.
+
+    js303 weights harmonic j with
+      cos^2((j-1) * pi / (2*hmax)) / j
+    and keeps only odd j for square.  We retain that spectral shape while using
+    our 2048-sample mipmapped representation instead of js303's per-MIDI-note
+    4096-sample table bank.
+    """
+    h=max(1,min(N//2-1,hmax))
+    out=[0.0]*N
+    for j in range(1,h+1):
+        if odd_only and not (j&1):
+            continue
+        taper=math.cos((j-1)*0.5*math.pi/h)
+        amp=(taper*taper)/j
+        for k in range(N):
+            out[k]+=amp*math.sin(2.0*math.pi*j*k/N)
     return out
 
 
-def saw303()->list[float]:
-    n1=max(1,min(N-1,round(0.5*(N-1)))); n2=N-n1
-    s1=1.0/(n1-1); s2=1.0/n2
-    return [s1*i if i<n1 else -1.0+s2*(i-n1) for i in range(N)]
-
-
-def square303(saw:list[float])->list[float]:
-    factor=10.0**(DRIVE_DB/20.0)
-    x=[-math.tanh(factor*v+OFFSET) for v in saw]
-    shift=round(N*PHASE_DEG/360.0)%N
-    return x[-shift:]+x[:-shift] if shift else x
-
-
-def mipmaps(proto:list[float])->list[list[float]]:
-    """Build one-octave mip levels from an ordinary complex FFT.
-
-    Open303's FourierTransformer stores a packed symmetric real spectrum, so
-    its lowBin/highBin indices cannot be copied literally to a normal complex
-    FFT. Each successive table must simply retain half as many positive
-    harmonics as the preceding one, together with their negative-frequency
-    mirror. The previous implementation zeroed both halves twice and made the
-    upper mip levels effectively silent.
-    """
-    tables=[list(proto)]
-    full=fft([complex(v,0.0) for v in proto])
-    full[0]=0j; full[N//2]=0j
-    for t in range(1,LEVELS):
-        hmax=max(1,N//(2**(t+1)))
-        spec=[0j]*N
-        for k in range(1,hmax+1):
-            spec[k]=full[k]
-            spec[N-k]=full[N-k]
-        tables.append([z.real for z in fft(spec,True)])
-    return tables
+def js303_mips(odd_only:bool)->list[list[float]]:
+    tables=[]
+    for level in range(LEVELS):
+        # Each successive mip retains roughly half the harmonics, matching the
+        # octave-spaced selection used by the HQ oscillator.
+        hmax=max(1,(N//2-1)//(1<<level))
+        tables.append(spectral_table(hmax,odd_only))
+    return normalize_bank(tables)
 
 
 def validate_mips(name:str,tables:list[list[float]])->None:
@@ -88,18 +70,24 @@ def q15(v:float)->int:
     return max(-32768,min(32767,round(v*32767.0)))
 
 
-def emit_single(name:str,values:list[float],scale:float=1.0)->str:
-    vals=[q15(v*scale) for v in values]; out=[f"static const int16_t {name}[REFM_ACID_WT_SIZE] = {{\n"]
-    for i in range(0,N,16): out.append("    "+", ".join(map(str,vals[i:i+16]))+",\n")
-    out.append("};\n"); return ''.join(out)
+def emit_single(name:str,values:list[float])->str:
+    vals=[q15(v) for v in values]
+    out=[f"static const int16_t {name}[REFM_ACID_WT_SIZE] = {{\n"]
+    for i in range(0,N,16):
+        out.append("    "+", ".join(map(str,vals[i:i+16]))+",\n")
+    out.append("};\n")
+    return ''.join(out)
 
 
 def generate()->str:
-    saw=mipmaps(saw303()); sq=mipmaps(square303(saw303()))
-    validate_mips("SAW303",saw); validate_mips("SQUARE303",sq)
-    # Open303 chooses tableNumber=floor(log2(2048*freq/176400))+2.
-    # In the HQ core frequency is represented as a 44.1-kHz Q32 phase
-    # increment. These are the equivalent octave boundaries for table indices.
+    saw=js303_mips(False)
+    square=js303_mips(True)
+    validate_mips("SAW",saw)
+    validate_mips("SQUARE",square)
+
+    # The HQ oscillator runs at 4x but represents pitch using the 44.1-kHz Q32
+    # phase increment. These octave thresholds retain the existing proven mip
+    # selection and avoid the high-note silence regression.
     thresholds=[min(0xffffffff,1<<(22+i)) for i in range(LEVELS-1)]
     out=[
         "// SPDX-License-Identifier: GPL-3.0-only\n",
@@ -110,20 +98,27 @@ def generate()->str:
     ]
     for i in range(LEVELS):
         out.append(emit_single(f"refm_acid_wt_saw_{i}",saw[i]))
-        # Open303's BlendOscillator multiplies its SQUARE303 branch by 0.5
-        # after lookup. Bake that relationship into the browser HQ tables.
-        out.append(emit_single(f"refm_acid_wt_square_{i}",sq[i],0.5))
+        out.append(emit_single(f"refm_acid_wt_square_{i}",square[i]))
     out.append("static const int16_t *const refm_acid_wt_saw[REFM_ACID_WT_BANDS] = {\n    "+", ".join(f"refm_acid_wt_saw_{i}" for i in range(LEVELS))+"\n};\n")
     out.append("static const int16_t *const refm_acid_wt_square[REFM_ACID_WT_BANDS] = {\n    "+", ".join(f"refm_acid_wt_square_{i}" for i in range(LEVELS))+"\n};\n#endif\n")
     return ''.join(out)
 
 
 def main()->int:
-    ap=argparse.ArgumentParser(); ap.add_argument("--output",type=Path,default=Path("build/wasm/acid303_hq_wavetable.h")); ap.add_argument("--check",action="store_true"); args=ap.parse_args()
+    ap=argparse.ArgumentParser()
+    ap.add_argument("--output",type=Path,default=Path("build/wasm/acid303_hq_wavetable.h"))
+    ap.add_argument("--check",action="store_true")
+    args=ap.parse_args()
     text=generate()
     if args.check:
-        if not args.output.exists() or args.output.read_text()!=text: raise SystemExit("HQ wavetable is stale")
-        print(f"303 HQ wavetable ok: {LEVELS} x {N} x 2 Q15 (all mips non-silent)"); return 0
-    args.output.parent.mkdir(parents=True,exist_ok=True); args.output.write_text(text); print(f"wrote {args.output}: {LEVELS} x {N} x 2 Q15") ; return 0
+        if not args.output.exists() or args.output.read_text()!=text:
+            raise SystemExit("HQ wavetable is stale")
+        print(f"303 HQ wavetable ok: {LEVELS} x {N} x 2 Q15 (js303 spectral reference)")
+        return 0
+    args.output.parent.mkdir(parents=True,exist_ok=True)
+    args.output.write_text(text)
+    print(f"wrote {args.output}: {LEVELS} x {N} x 2 Q15")
+    return 0
 
-if __name__=='__main__': raise SystemExit(main())
+if __name__=='__main__':
+    raise SystemExit(main())
