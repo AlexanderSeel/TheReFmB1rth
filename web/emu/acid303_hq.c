@@ -170,6 +170,48 @@ static double ladder(hq_state_t*q,acid303_t*s,double in,double fc){
     return 2.0*g*q->y4;
 }
 
+/*
+ * 303-style diode clipper for the per-ACID DISTORTION control.
+ *
+ * The previous rational saturator was too smooth and tended to make resonant
+ * peaks smaller instead of giving them the characteristic hard bite.  This
+ * stage models a pair of unequal clipping thresholds: the positive side
+ * conducts slightly later than the negative side, and both knees become
+ * firmer as DRIVE rises.  Zero DRIVE is a true bypass.  The wet signal is
+ * level-compensated so the useful part of the knob changes texture rather than
+ * only loudness.
+ */
+static double diode_clip(double x,uint16_t drive){
+    double d=dclamp((double)drive/(127.0*128.0),0.0,1.0);
+    double pre,pos,neg,knee,y,wet,comp;
+    if(d<=0.000001)return x;
+
+    /* Fast gain rise: even the first quarter of the knob can catch resonance
+       spikes, while the top half becomes deliberately hard and acidic. */
+    pre=1.0+8.0*sqrt(d);
+    x*=pre;
+
+    /* Slightly asymmetric silicon-style thresholds.  DRIVE pulls the knee
+       inward so the control progresses from edge enhancement to hard clip. */
+    pos=0.78-0.30*d;
+    neg=0.70-0.27*d;
+    knee=0.16-0.10*d;
+
+    if(x>pos){
+        double over=x-pos;
+        y=pos+knee*tanh(over/knee);
+    }else if(x<-neg){
+        double over=(-x)-neg;
+        y=-(neg+0.82*knee*tanh(over/(0.82*knee)));
+    }else y=x;
+
+    /* Preserve dry low-level articulation, but let the clipped branch dominate
+       quickly enough to expose the hard diode edge on square and resonance. */
+    wet=dclamp(0.24+0.76*sqrt(d),0.0,1.0);
+    comp=1.0/(1.0+1.25*d);
+    return ((1.0-wet)*(x/pre)+wet*y)*comp;
+}
+
 int32_t acid303_process(acid303_t*s){
     hq_state_t*q=st_for(s);int i;double fc,tmp=0.0,gain,out;
     if(s->idle)return 0;
@@ -182,7 +224,7 @@ int32_t acid303_process(acid303_t*s){
     gain=(1.0+(s->accented?4.0*knob01(s->accent):0.0))*q->amp_env;
     gain=declick(q,gain);
     out=tmp*gain;
-    if(s->drive){double d=(double)s->drive/2048.0;out=(d*out)/(1.0+d*fabs(out));}
+    out=diode_clip(out,s->drive);
     out*=0.251188643150958;
     return iclamp(out*32767.0);
 }
