@@ -44,6 +44,19 @@ static hq_state_t hq[HQ_SLOTS];
 
 static double dclamp(double x,double lo,double hi){return x<lo?lo:x>hi?hi:x;}
 static int32_t iclamp(double x){if(x>32767.0)return 32767;if(x<-32768.0)return -32768;return (int32_t)lrint(x);}
+static double knob01(uint16_t v){return dclamp((double)v/32767.0,0.0,1.0);}
+
+/* Stock-panel calibration. These helpers deliberately express the physical
+ * knob-position domains explicitly so the WASM UI's 0..100% positions map to
+ * the same quantities Open303 expects: measured exponential cutoff, resonance
+ * percent, Env Mod percent, and the stock 200..2000 ms decay range. */
+static double stock_cutoff_hz(uint16_t v){
+    const double c0=313.8152786059267,c1=2394.411986817546;
+    return c0*pow(c1/c0,knob01(v));
+}
+static double stock_resonance(uint16_t v){return knob01(v);}
+static double stock_envmod(uint16_t v){return knob01(v);}
+static double stock_decay_ms(uint16_t v){return 200.0+1800.0*knob01(v);}
 
 static hq_state_t *st_for(acid303_t *s){
     unsigned i;
@@ -61,11 +74,7 @@ uint32_t acid303_note_to_phase_inc(uint8_t note){uint32_t octave=note/12u,inc=se
 uint32_t acid303_apply_tune(uint32_t inc,int8_t tune){double f=(double)inc*pow(2.0,(double)tune/1536.0);if(f<1.0)f=1.0;if(f>4294967295.0)f=4294967295.0;return(uint32_t)llround(f);}
 static double inc_to_hz(uint32_t inc){return(double)inc*SR/4294967296.0;}
 
-uint16_t acid303_cutoff_hz(const acid303_t *s){
-    const double c0=313.8152786059267,c1=2394.411986817546;
-    double n=dclamp((double)s->cutoff/32767.0,0.0,1.0);
-    return(uint16_t)lrint(c0*pow(c1/c0,n));
-}
+uint16_t acid303_cutoff_hz(const acid303_t *s){return(uint16_t)lrint(stock_cutoff_hz(s->cutoff));}
 
 int16_t acid303_lfo_value(const acid303_t *s){
     uint32_t q=s->lfo_phase>>16;double p=(double)q/65536.0,y;
@@ -126,30 +135,37 @@ static double antialias(hq_state_t*q,double in){
 
 /* Real TB-303 square waves are derived from the saw by an overdriven transistor
  * stage with capacitor memory. Measurements show a broad/rounded low-note pulse
- * and a progressively narrower high-note pulse. Open303's static SQUARE303
- * captures the transistor transfer curve but not this pitch dependency, so the
- * WASM HQ reference adds a lightweight memoryful approximation here. */
-static double square303_hardware(hq_state_t*q,double saw){
+ * and a progressively narrower high-note pulse. The fast Open303 SQUARE303
+ * component below restores the characteristic crisp/reedy attack while this
+ * memory branch supplies the pitch-dependent hollow body. */
+static double square303_hardware(hq_state_t*q,double saw,double open303_square){
     double f=dclamp(q->freq,55.0,1000.0);
     double pos=log(f/55.0)/log(1000.0/55.0);
     double duty=0.71+(0.45-0.71)*pos;
     double threshold=1.0-2.0*duty;
     double target=-tanh(52.0*(saw-threshold));
-    double corner=650.0+5200.0*pos;
+    double corner=850.0+6500.0*pos;
     double a=1.0-exp(-2.0*PI*corner/OSR);
+    double memory,edge;
     q->square_mem+=a*(target-q->square_mem);
-    return 0.5*q->square_mem;
+    memory=0.5*q->square_mem;
+    edge=open303_square-memory;
+    /* Mostly hardware-memory body, with enough original SQUARE303 edge to
+       recover the small snappy/aggressive transient without generic clipping. */
+    return 0.78*memory+0.42*open303_square+0.08*edge;
 }
 
 static double osc(hq_state_t*q,acid303_t*s){
-    uint32_t inc=(uint32_t)llround(q->freq/SR*4294967296.0),band=0,idx;double frac,a,b,saw;
+    uint32_t inc=(uint32_t)llround(q->freq/SR*4294967296.0),band=0,idx;double frac,a,b,saw,sq;
     while(band+1u<REFM_ACID_WT_BANDS&&inc>refm_acid_wt_threshold_inc[band])++band;
     q->phase+=q->freq/OSR;if(q->phase>=1.0)q->phase-=floor(q->phase);
     {
-        const int16_t *tab=refm_acid_wt_saw[band];
-        double p=q->phase*(double)REFM_ACID_WT_SIZE;idx=(uint32_t)p&REFM_ACID_WT_MASK;frac=p-floor(p);a=tab[idx];b=tab[(idx+1u)&REFM_ACID_WT_MASK];
-        saw=(a+(b-a)*frac)/32768.0;
-        return s->square?square303_hardware(q,saw):saw;
+        const int16_t *sawtab=refm_acid_wt_saw[band],*sqtab=refm_acid_wt_square[band];
+        double p=q->phase*(double)REFM_ACID_WT_SIZE;idx=(uint32_t)p&REFM_ACID_WT_MASK;frac=p-floor(p);
+        a=sawtab[idx];b=sawtab[(idx+1u)&REFM_ACID_WT_MASK];saw=(a+(b-a)*frac)/32768.0;
+        if(!s->square)return saw;
+        a=sqtab[idx];b=sqtab[(idx+1u)&REFM_ACID_WT_MASK];sq=(a+(b-a)*frac)/32768.0;
+        return square303_hardware(q,saw,sq);
     }
 }
 
@@ -157,7 +173,7 @@ static void env_and_pitch(hq_state_t*q,acid303_t*s){
     double glideA=1.0-exp(-1.0/(0.012*SR));
     if(s->sliding){q->freq+=glideA*(q->target_freq-q->freq);if(fabs(q->target_freq-q->freq)<0.001){q->freq=q->target_freq;s->sliding=0u;}}
     {
-        double normalMs=200.0+1800.0*dclamp((double)s->decay/32767.0,0.0,1.0),tau=s->accented?200.0:normalMs;
+        double tau=s->accented?200.0:stock_decay_ms(s->decay);
         q->main_env*=exp(-1.0/(0.001*tau*SR));
     }
     {
@@ -172,15 +188,15 @@ static void env_and_pitch(hq_state_t*q,acid303_t*s){
 
 static double inst_cutoff(acid303_t*s,hq_state_t*q){
     const double c0=313.8152786059267,c1=2394.411986817546,oF=0.048292930943553,oC=0.294391201442418,sLoF=3.773996325111173,sLoC=0.736965594166206,sHiF=4.194548788411135,sHiC=0.864344900642434;
-    double cutoff=(double)acid303_cutoff_hz(s),e=dclamp((double)s->env_mod/32767.0,0.0,1.0),c=log(cutoff/c0)/log(c1/c0),sLo=sLoF*e+sLoC,sHi=sHiF*e+sHiC,sc=(1.0-c)*sLo+c*sHi,off=oF*c+oC;
-    double tmp1=sc*(q->main_env-off),tmp2=dclamp((double)s->accent/32767.0,0.0,1.0)*q->accent_rc;
+    double cutoff=stock_cutoff_hz(s->cutoff),e=stock_envmod(s->env_mod),c=log(cutoff/c0)/log(c1/c0),sLo=sLoF*e+sLoC,sHi=sHiF*e+sHiC,sc=(1.0-c)*sLo+c*sHi,off=oF*c+oC;
+    double tmp1=sc*(q->main_env-off),tmp2=knob01(s->accent)*q->accent_rc;
     double fc=cutoff*pow(2.0,tmp1+tmp2);
     if(s->lfo_amount){double l=(double)acid303_lfo_value(s)/32768.0;fc+=l*((double)s->lfo_amount/127.0)*1600.0;}
     return dclamp(fc,200.0,20000.0);
 }
 
 static double ladder(hq_state_t*q,acid303_t*s,double in,double fc){
-    double raw=dclamp((double)s->resonance/32767.0,0.0,1.0),r=(1.0-exp(-3.0*raw))/(1.0-exp(-3.0));
+    double raw=stock_resonance(s->resonance),r=(1.0-exp(-3.0*raw))/(1.0-exp(-3.0));
     double fx=fc/(OSR*sqrt(2.0));
     double b0=(0.00045522346+6.1922189*fx)/(1.0+12.358354*fx+4.4156345*fx*fx);
     double k=fx*(fx*(fx*(fx*(fx*(fx+7198.6997)-5837.7917)-476.47308)+614.95611)+213.87126)+16.998792;
@@ -199,7 +215,7 @@ int32_t acid303_process(acid303_t*s){
         double x=-osc(q,s);x=hp(x,44.486,OSR,&q->pre_x1,&q->pre_y1);tmp=ladder(q,s,x,fc);tmp=antialias(q,tmp);
     }
     tmp=allpass(tmp,14.008,SR,&q->ap_x1,&q->ap_y1);tmp=hp(tmp,24.167,SR,&q->post_x1,&q->post_y1);tmp=notch(q,tmp);
-    gain=q->amp_env;if(s->gate)gain+=0.45*q->main_env+(s->accented?4.0*dclamp((double)s->accent/32767.0,0.0,1.0)*q->main_env:0.0);gain=declick(q,gain);
+    gain=q->amp_env;if(s->gate)gain+=0.45*q->main_env+(s->accented?4.0*knob01(s->accent)*q->main_env:0.0);gain=declick(q,gain);
     out=tmp*gain;
     if(s->drive){double d=(double)s->drive/2048.0;out=(d*out)/(1.0+d*fabs(out));}
     out*=0.251188643150958; /* Open303 default postgain -12 dB. */
