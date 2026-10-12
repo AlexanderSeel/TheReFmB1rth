@@ -17,7 +17,7 @@ No Roland/Propellerhead/ReBirth artwork, logos, proprietary source, ROMs, or non
 
 ---
 
-# Current checkpoint — post-beta.1 corrective build, 2026-10-12
+# Current checkpoint — v0.1.0-beta.2 published, 2026-10-12
 
 ## First physical install — completed
 
@@ -35,7 +35,7 @@ The first custom firmware install succeeded, but the build was **not usable as a
 
 Root cause confirmed: Felucca still owned the physical panel/keyboard/transport while TheReFmB1rth replaced the audible engine. The two state/control paths were therefore disconnected.
 
-## Beta corrective architecture — implemented
+## Beta corrective architecture — implemented and released in beta.2
 
 - [x] physical FM-1 panel now drives the ReFm engine directly;
 - [x] physical keyboard routes to selected ACID A/B;
@@ -54,10 +54,15 @@ Root cause confirmed: Felucca still owned the physical panel/keyboard/transport 
 - [x] combined physical runtime report now gates CPU, DMA lateness and minimum stack headroom;
 - [x] browser can request a device-state snapshot and synchronize the live editor from the FM-1;
 - [x] browser can back up and restore the complete versioned ReFm project blob, including the A–H pattern bank;
+- [x] browser can capture the physical CPU/late/stack diagnostic snapshot and evaluate the beta gates without manual memory reads;
 - [x] exact readback checkpoint `8e6daf2f0345e297c21c5b3270de2498f981e8ba` passed host, WASM, FM-1 target package, target-memory, manifest/SHA and sample-link experiment gates;
-- [x] exact full-transfer checkpoint `993eeb40255d75bbe3b344fa9c6c400816b05820` passed CI, WASM, real JieLi FM-1 app/loader/FWSC build, target-memory budgets, release manifest/SHA verification and sample-link experiment.
+- [x] exact full-transfer checkpoint `993eeb40255d75bbe3b344fa9c6c400816b05820` passed CI, WASM, real JieLi FM-1 app/loader/FWSC build, target-memory budgets, release manifest/SHA verification and sample-link experiment;
+- [x] exact beta.2 release commit `2b4c537cc1a1f8c42c43ee953e14e27d7740837b` passed host, WASM, real JieLi target, target-memory, package/manifest/SHA and sample-link gates before publication;
+- [x] `v0.1.0-beta.2` published as a prerelease from that exact verified commit;
+- [x] browser firmware channel points to beta.2 with FWSC SHA-256 `f2d2e13089a52cf279cee0bc43d9d4791ae913f0b3b889ec5b3de02b70c667b2`;
+- [x] deterministic second-pass hardware runbook added at `docs/PHYSICAL_BETA2_VALIDATION.md`.
 
-The current code is a **software-gated beta candidate** until the second physical validation pass succeeds.
+Beta.2 is a **software-gated beta** until the second physical validation pass succeeds.
 
 ---
 
@@ -72,8 +77,8 @@ The current code is a **software-gated beta candidate** until the second physica
 - [x] official V15 SHA pinned for return-to-stock verification;
 - [x] FM-1-transporter documented as last-resort recovery;
 - [x] first controlled custom firmware installation performed;
-- [ ] verify OCT-/boot/update recovery path on the physical test device;
-- [ ] prove return to official/Felucca firmware after beta test;
+- [ ] verify OCT-/boot/update recovery path on the physical test device with beta.2;
+- [ ] prove return to official/Felucca firmware after beta.2 test;
 - [ ] repeat update/rollback cycle several times.
 
 No custom firmware has a zero-brick guarantee.
@@ -155,7 +160,7 @@ Implemented software-side:
 - [x] EDIT/REC act as contextual secondary actions;
 - [x] host tests for compact UI state/editing and hardware bridge workflow.
 
-Physical validation still required:
+Physical beta.2 validation still required:
 
 - [ ] confirm all dedicated pages actually render correctly on the 240×240 LCD;
 - [ ] confirm K1–K4/PRESET/ALGO/SELECT physical encoders match the LCD labels;
@@ -189,6 +194,9 @@ Physical validation still required:
 - [x] project transfer uses 256-byte 7-bit-packed chunks, an outer CRC32, staging-generation protection and the inner ReFm project CRC/version checks;
 - [x] project backup/restore is refused while ReFm transport is playing;
 - [x] browser restore changes the live project only; normal physical PROJECT SAVE remains the explicit persistence step;
+- [x] one-click read-only runtime diagnostic capture through editor command 91;
+- [x] browser runtime gate matches the CLI gate: zero late buffers, <=75% sustained CPU, <=82% peak, >=4096 B user stack free, >=1024 B supervisor stack free;
+- [x] runtime snapshot can be downloaded as JSON for `target_runtime_report.py`;
 - [ ] consolidated polished editor/WASM application after physical beta is stable.
 
 ---
@@ -202,12 +210,15 @@ Software-side instrumentation/tooling:
 - [x] stack high-water fields exposed through `felucca_dbg`;
 - [x] `target_runtime_report.py` combines CPU, DMA deadline and stack-headroom gates;
 - [x] host regression tests cover healthy, missing-field, low-stack and late-DMA reports;
-- [x] target stack-symbol declarations/casts aligned with Felucca's linker/guard declarations.
+- [x] target stack-symbol declarations/casts aligned with Felucca's linker/guard declarations;
+- [x] browser read-only diagnostic command exposes the gate fields;
+- [x] browser evaluates the same thresholds and downloads the raw JSON capture;
+- [x] beta.2 physical test sequence documented in `docs/PHYSICAL_BETA2_VALIDATION.md`.
 
-These are the main blockers between **beta candidate** and **hardware-proven beta**:
+These are the main blockers between **software-gated beta.2** and **hardware-proven beta**:
 
-- [ ] capture physical `felucca_dbg` while factory Pattern A plays;
-- [ ] capture worst-case four-machine stress run;
+- [ ] capture physical runtime JSON while factory Pattern A plays;
+- [ ] capture worst-case four-machine stress JSON;
 - [ ] `late == 0`;
 - [ ] sustained audio CPU <= 75%;
 - [ ] peak audio render <= 82% of DMA-half deadline;
@@ -248,8 +259,9 @@ These are the main blockers between **beta candidate** and **hardware-proven bet
 - [x] CORS-safe browser firmware channel;
 - [x] one-shot `Publish verified beta` workflow only consumes a successful exact-head `Build all artifacts` result;
 - [x] `v0.1.0-beta.1` published as the initial prerelease from commit `3b881e3f845a71f7fdf280b2f0b5016d84b3a254`;
-- [x] explicitly treat `beta.1` as older than the later runtime-stack/readback/project-transfer corrections — do not present those fixes as part of `beta.1`;
-- [ ] publish the next beta (normally `v0.1.0-beta.2`) only from a chosen exact-green corrective commit;
+- [x] explicitly treat `beta.1` as older than the runtime-stack/readback/project-transfer/diagnostic corrections;
+- [x] `v0.1.0-beta.2` published from exact-green commit `2b4c537cc1a1f8c42c43ee953e14e27d7740837b`;
+- [x] beta.2 firmware-channel metadata verified against the published commit and FWSC SHA-256;
 - [ ] second physical hardware validation;
 - [ ] only later consider public FM-1 Firmware Hub registration.
 
@@ -257,16 +269,16 @@ These are the main blockers between **beta candidate** and **hardware-proven bet
 
 # Immediate beta tasks
 
-1. Preserve `993eeb40255d75bbe3b344fa9c6c400816b05820` as the first fully green target checkpoint containing runtime-stack diagnostics, device-state readback and complete browser project backup/restore.
-2. Expose the physical CPU/late/stack diagnostic snapshot through the browser so the second hardware pass can collect acceptance data without manual memory reads.
-3. Get that diagnostic-browser checkpoint through host + WASM + real JieLi FM-1 target + memory/package gates.
-4. Publish the next prerelease only from a chosen exact-green corrective commit; do not overwrite/relabel `v0.1.0-beta.1`.
-5. Install that corrective beta through the browser app.
-6. Validate HOME / ACID / STEP / DRUM / MIXER / FX / SONG / PROJECT pages on the actual LCD.
-7. Validate live keys, PLAY/STOP, factory Pattern A and editing without lag/stuck notes.
-8. Capture factory-pattern and worst-case stress diagnostics and run `target_runtime_report.py` against them.
-9. Verify USB MIDI, TRS MIDI, USB audio and physical project save/load.
-10. Prove rollback/recovery and repeat the update/rollback cycle.
+1. Install `v0.1.0-beta.2` through the browser app and verify the displayed tag/commit/SHA before flashing.
+2. Follow `docs/PHYSICAL_BETA2_VALIDATION.md` rather than ad-hoc testing.
+3. Validate HOME / ACID / STEP / DRUM / MIXER / FX / SONG / PROJECT on the actual LCD and confirm all physical mappings.
+4. Validate live keys, PLAY/STOP, factory Pattern A and editing without lag/stuck notes.
+5. Capture factory-pattern runtime JSON with **CAPTURE RUNTIME** and retain it as evidence.
+6. Run the four-machine stress scenario for several minutes, capture the second runtime JSON and require the full CPU/late/stack gate to pass.
+7. Verify browser state sync plus complete project backup/restore, including the rule that restore stays RAM-only until explicit PROJECT SAVE.
+8. Verify USB MIDI, TRS MIDI and USB audio under playback/edit load.
+9. Verify physical project slot save/load and power-cycle behavior.
+10. Prove rollback to official/Felucca firmware and repeat the update/rollback cycle.
 
 ---
 
@@ -284,6 +296,8 @@ These are the main blockers between **beta candidate** and **hardware-proven bet
 - [x] runtime user/supervisor stack instrumentation implemented software-side;
 - [x] device-to-browser current-state synchronization implemented software-side;
 - [x] full bidirectional browser project/pattern transfer implemented software-side;
+- [x] browser-accessible physical runtime diagnostics implemented software-side;
+- [x] exact-green corrective beta.2 published;
 - [ ] comfortable FM-1 CPU headroom proven physically;
 - [ ] runtime stack headroom proven physically;
 - [ ] physical UI/controls validated;
