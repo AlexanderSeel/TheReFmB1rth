@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 import pathlib
+import re
 import unittest
+
+from tools.physical_validation_report import REQUIRED_CHECKS
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 
@@ -38,6 +41,11 @@ class PhysicalValidationBrowserTests(unittest.TestCase):
         self.assertIn("'usb_midi','I/O'", validation)
         self.assertIn("'trs_midi','I/O'", validation)
         self.assertIn("'usb_audio','I/O'", validation)
+
+    def test_browser_and_offline_required_check_sets_match(self):
+        validation = (ROOT / "web" / "app" / "validation.js").read_text()
+        ids = tuple(re.findall(r"^\s*\['([a-z0-9_]+)','", validation, flags=re.MULTILINE))
+        self.assertEqual(ids, REQUIRED_CHECKS)
 
     def test_validation_evidence_is_persistent_and_exportable(self):
         validation = (ROOT / "web" / "app" / "validation.js").read_text()
