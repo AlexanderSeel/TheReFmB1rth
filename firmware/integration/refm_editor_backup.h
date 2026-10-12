@@ -2,6 +2,8 @@
 #ifndef REFM_EDITOR_BACKUP_H
 #define REFM_EDITOR_BACKUP_H
 
+#include <stddef.h>
+
 /*
  * ReFm project transfer over Felucca's existing editor SysEx envelope:
  *   F0 7D 46 4C 90 op ... F7
