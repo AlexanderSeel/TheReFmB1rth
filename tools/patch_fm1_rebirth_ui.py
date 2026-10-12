@@ -29,7 +29,7 @@ def main() -> int:
         raise SystemExit("apply the ReFmB1rth Felucca overlay first")
     graph = root / "firmware" / "src" / "ui_graph.c"
     old = """    return 1;\n}\n\nstatic void draw_graph(void)\n"""
-    new = """    /* 16 grouped step lamps: temporary graph-level compatibility; the\n       dedicated ReFm beta renderer replaces normal Felucca pages afterwards. */\n    {\n        extern uint8_t refm_felucca_step(void);\n        uint32_t st = refm_felucca_step() & 15u;\n        for (i = 0; i < 16; ++i) {\n            int32_t sx = 11 + i * 13 + (i / 4) * 4;\n            uint16_t sc = ((uint32_t)i == st) ? T_ACCENT : T_RAISE;\n            cv_rect(sx, graph_ht - 7, 9, 4, sc);\n        }\n    }\n    return 1;\n}\n\nstatic void draw_graph(void)\n"""
+    new = """    /* Compact dual-bassline visual language: 16 grouped step lamps.\n       This graph strip remains as a compatibility/provenance marker; the\n       dedicated ReFm beta renderer replaces normal Felucca pages afterwards. */\n    {\n        extern uint8_t refm_felucca_step(void);\n        uint32_t st = refm_felucca_step() & 15u;\n        for (i = 0; i < 16; ++i) {\n            int32_t sx = 11 + i * 13 + (i / 4) * 4;\n            uint16_t sc = ((uint32_t)i == st) ? T_ACCENT : T_RAISE;\n            cv_rect(sx, graph_ht - 7, 9, 4, sc);\n        }\n    }\n    return 1;\n}\n\nstatic void draw_graph(void)\n"""
     replace_once(graph, old, new)
 
     subprocess.run(
