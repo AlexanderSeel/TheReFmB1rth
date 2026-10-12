@@ -24,7 +24,7 @@ REFM_SOURCES = [
     "proto/acid303.c", "proto/int64_runtime.c", "proto/seq16.c", "proto/sample_voice.c", "proto/drum_machine.c", "proto/mixer_fx.c",
     "proto/midi_transport.c", "proto/song.c", "proto/project_store.c", "proto/groovebox.c",
     "proto/midi_router.c", "proto/groovebox_midi.c", "proto/pattern_bank.c",
-    "proto/groovebox_pattern.c", "proto/ui_graph_model.c", "integration/refm_target.c",
+    "proto/groovebox_pattern.c", "proto/ui_graph_model.c", "proto/ui240.c", "integration/refm_target.c",
     "integration/refm_felucca_bridge.c",
 ]
 
