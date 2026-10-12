@@ -1,0 +1,54 @@
+name: Deploy FM-1 web app
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'web/app/**'
+      - '.github/workflows/deploy-web-app.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate static app
+        run: |
+          test -s web/app/index.html
+          test -s web/app/style.css
+          test -s web/app/app.js
+          test -s web/app/fm1pkg.js
+          test -s web/app/fm1ota.js
+          node --check web/app/app.js
+          node --check web/app/fm1pkg.js
+          node --check web/app/fm1ota.js
+          grep -q 'FLASH THE FM-1' web/app/index.html
+          grep -q 'requestMIDIAccess({sysex:true})' web/app/app.js
+          grep -q 'logicalImage' web/app/fm1pkg.js
+          grep -q '0xe0000000' web/app/fm1ota.js
+          grep -q '0xf0000000' web/app/fm1ota.js
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web/app
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-24.04
+    needs: validate
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
