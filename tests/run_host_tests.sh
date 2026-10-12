@@ -20,7 +20,7 @@ cc $CFLAGS firmware/proto/sample_voice.c firmware/proto/drum_machine.c tests/tes
 cc $CFLAGS firmware/proto/sample_voice.c tests/test_sample_voice.c -o build/host/test_sample_voice
 COMMON='firmware/proto/acid303.c firmware/proto/seq16.c firmware/proto/sample_voice.c firmware/proto/drum_machine.c firmware/proto/mixer_fx.c firmware/proto/midi_transport.c firmware/proto/song.c firmware/proto/project_store.c firmware/proto/pattern_bank.c firmware/proto/ui_graph_model.c firmware/proto/groovebox.c'
 FEATURES='firmware/proto/groovebox_pattern.c firmware/proto/midi_router.c firmware/proto/groovebox_midi.c'
-TARGET="$COMMON $FEATURES firmware/integration/refm_target.c"
+TARGET="$COMMON $FEATURES firmware/proto/ui240.c firmware/integration/refm_target.c"
 cc $CFLAGS $COMMON tests/test_groovebox.c -o build/host/test_groovebox
 cc $CFLAGS $COMMON tests/render_hash.c -o build/host/render_hash
 cc $CFLAGS $COMMON tests/bench_groovebox.c -o build/host/bench_groovebox
