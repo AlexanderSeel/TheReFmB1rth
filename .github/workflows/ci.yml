@@ -12,6 +12,12 @@ jobs:
       - uses: actions/checkout@v4
       - name: Run host safety and DSP tests
         run: tests/run_host_tests.sh
+      - name: Syntax-check browser modules
+        run: |
+          for js in web/app/*.js web/emu/*.js; do
+            [ -f "$js" ] || continue
+            node --check "$js"
+          done
       - name: Validate redistributable sample manifest
         run: python3 tools/fetch_samples.py --validate-only
       - name: Prepare pinned Felucca baseline
