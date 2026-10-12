@@ -55,6 +55,9 @@ Root cause confirmed: Felucca still owned the physical panel/keyboard/transport 
 - [x] browser can request a device-state snapshot and synchronize the live editor from the FM-1;
 - [x] browser can back up and restore the complete versioned ReFm project blob, including the A–H pattern bank;
 - [x] browser can capture the physical CPU/late/stack diagnostic snapshot and evaluate the beta gates without manual memory reads;
+- [x] browser VALIDATION page records the complete physical pass and binds it to the exact firmware-channel tag/commit/SHA;
+- [x] validation evidence embeds assigned factory-pattern and stress runtime snapshots and exports JSON + Markdown;
+- [x] offline `physical_validation_report.py` independently enforces the complete physical/runtime gate and exact target identity;
 - [x] exact readback checkpoint `8e6daf2f0345e297c21c5b3270de2498f981e8ba` passed host, WASM, FM-1 target package, target-memory, manifest/SHA and sample-link experiment gates;
 - [x] exact full-transfer checkpoint `993eeb40255d75bbe3b344fa9c6c400816b05820` passed CI, WASM, real JieLi FM-1 app/loader/FWSC build, target-memory budgets, release manifest/SHA verification and sample-link experiment;
 - [x] exact beta.2 release commit `2b4c537cc1a1f8c42c43ee953e14e27d7740837b` passed host, WASM, real JieLi target, target-memory, package/manifest/SHA and sample-link gates before publication;
@@ -197,6 +200,12 @@ Physical beta.2 validation still required:
 - [x] one-click read-only runtime diagnostic capture through editor command 91;
 - [x] browser runtime gate matches the CLI gate: zero late buffers, <=75% sustained CPU, <=82% peak, >=4096 B user stack free, >=1024 B supervisor stack free;
 - [x] runtime snapshot can be downloaded as JSON for `target_runtime_report.py`;
+- [x] dedicated **VALIDATION** tab for the complete physical beta pass;
+- [x] validation state auto-saves locally and is tied to exact firmware tag/commit/SHA;
+- [x] changing the target firmware commit invalidates prior physical results instead of carrying them forward;
+- [x] factory-pattern and stress runtime captures can be assigned directly from the diagnostic event stream;
+- [x] JSON and Markdown physical-validation evidence export;
+- [x] browser and Python mandatory-check contracts are locked together by CI tests;
 - [ ] consolidated polished editor/WASM application after physical beta is stable.
 
 ---
@@ -213,7 +222,10 @@ Software-side instrumentation/tooling:
 - [x] target stack-symbol declarations/casts aligned with Felucca's linker/guard declarations;
 - [x] browser read-only diagnostic command exposes the gate fields;
 - [x] browser evaluates the same thresholds and downloads the raw JSON capture;
-- [x] beta.2 physical test sequence documented in `docs/PHYSICAL_BETA2_VALIDATION.md`.
+- [x] beta.2 physical test sequence documented in `docs/PHYSICAL_BETA2_VALIDATION.md`;
+- [x] `physical_validation_report.py` independently validates the exported full hardware evidence bundle;
+- [x] offline gate rejects incomplete reports, N/A/pending checks, missing runtime captures and target tag/commit/SHA mismatches;
+- [x] validation report usage documented in `docs/PHYSICAL_VALIDATION_REPORT.md`.
 
 These are the main blockers between **software-gated beta.2** and **hardware-proven beta**:
 
@@ -270,15 +282,17 @@ These are the main blockers between **software-gated beta.2** and **hardware-pro
 # Immediate beta tasks
 
 1. Install `v0.1.0-beta.2` through the browser app and verify the displayed tag/commit/SHA before flashing.
-2. Follow `docs/PHYSICAL_BETA2_VALIDATION.md` rather than ad-hoc testing.
-3. Validate HOME / ACID / STEP / DRUM / MIXER / FX / SONG / PROJECT on the actual LCD and confirm all physical mappings.
+2. Open the browser **VALIDATION** tab and follow `docs/PHYSICAL_BETA2_VALIDATION.md` rather than ad-hoc testing.
+3. Validate HOME / ACID / STEP / DRUM / MIXER / FX / SONG / PROJECT on the actual LCD and record every result in the validation report.
 4. Validate live keys, PLAY/STOP, factory Pattern A and editing without lag/stuck notes.
-5. Capture factory-pattern runtime JSON with **CAPTURE RUNTIME** and retain it as evidence.
-6. Run the four-machine stress scenario for several minutes, capture the second runtime JSON and require the full CPU/late/stack gate to pass.
+5. Capture factory-pattern runtime JSON with **CAPTURE RUNTIME**, retain the raw JSON and assign the latest capture to **Factory Pattern A** in VALIDATION.
+6. Run the four-machine stress scenario for several minutes, capture the second runtime JSON and assign it to **Worst-case stress**.
 7. Verify browser state sync plus complete project backup/restore, including the rule that restore stays RAM-only until explicit PROJECT SAVE.
 8. Verify USB MIDI, TRS MIDI and USB audio under playback/edit load.
-9. Verify physical project slot save/load and power-cycle behavior.
+9. Verify physical project slot save/load, corruption fallback and power-cycle behavior.
 10. Prove rollback to official/Felucca firmware and repeat the update/rollback cycle.
+11. Export the VALIDATION JSON + Markdown evidence bundle.
+12. Run `tools/physical_validation_report.py` against the JSON with beta.2 expected tag/commit/SHA and require exit code 0 before calling beta.2 hardware-proven.
 
 ---
 
@@ -297,6 +311,7 @@ These are the main blockers between **software-gated beta.2** and **hardware-pro
 - [x] device-to-browser current-state synchronization implemented software-side;
 - [x] full bidirectional browser project/pattern transfer implemented software-side;
 - [x] browser-accessible physical runtime diagnostics implemented software-side;
+- [x] guided/exportable/offline-verifiable hardware validation evidence pipeline implemented;
 - [x] exact-green corrective beta.2 published;
 - [ ] comfortable FM-1 CPU headroom proven physically;
 - [ ] runtime stack headroom proven physically;
