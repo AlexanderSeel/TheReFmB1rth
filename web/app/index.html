@@ -18,6 +18,7 @@
   <nav class="tabs" aria-label="App pages">
     <button class="tab active" data-tab="installer">INSTALLER</button>
     <button class="tab" data-tab="editor">LIVE EDITOR</button>
+    <button class="tab" data-tab="validation">VALIDATION</button>
   </nav>
 
   <main>
@@ -137,11 +138,50 @@
         <div class="pads" id="drumPads"></div>
       </article>
     </section>
+
+    <section id="validation" class="page">
+      <div class="hero card compact">
+        <div><div class="eyebrow">PHYSICAL ACCEPTANCE</div><h2>Beta hardware validation</h2><p>Record the complete FM-1 physical pass locally, attach runtime evidence, then export one JSON or Markdown report.</p></div>
+        <button id="validationRefreshTarget" class="secondary">REFRESH TARGET</button>
+      </div>
+
+      <article class="card validationSummary" id="validationSummary"></article>
+
+      <article class="card rack">
+        <div class="rackHead"><div><span>TARGET RELEASE</span><small>read from the CORS-safe firmware channel</small></div><div id="validationTarget" class="status">—</div></div>
+        <p class="editorHint">The validation report records the release tag, exact commit and firmware SHA-256 so measurements stay tied to one binary.</p>
+      </article>
+
+      <article class="card rack">
+        <div class="rackHead"><div><span>RUNTIME EVIDENCE</span><small>capture on LIVE EDITOR, then assign the latest measurement</small></div></div>
+        <div class="validationRuntime">
+          <div><strong>Latest capture</strong><span id="validationRuntimeLast">No capture yet.</span></div>
+          <div><strong>Factory Pattern A</strong><span id="validationFactory">NOT CAPTURED</span><button id="validationAssignFactory" class="secondary">ASSIGN LATEST</button></div>
+          <div><strong>Worst-case stress</strong><span id="validationStress">NOT CAPTURED</span><button id="validationAssignStress" class="secondary">ASSIGN LATEST</button></div>
+        </div>
+      </article>
+
+      <article class="card rack">
+        <div class="rackHead"><div><span>PHYSICAL CHECKS</span><small>saved automatically in this browser</small></div></div>
+        <div id="validationChecks"></div>
+      </article>
+
+      <article class="card rack">
+        <div class="rackHead"><div><span>SESSION NOTES</span><small>serial-independent observations, failures and recovery notes</small></div></div>
+        <textarea id="validationNotes" class="validationNotes" placeholder="Add observations from the physical test session…"></textarea>
+        <div class="validationActions">
+          <button id="validationExportJson" class="primary">EXPORT JSON</button>
+          <button id="validationExportMd" class="secondary">EXPORT MARKDOWN</button>
+          <button id="validationReset" class="danger">RESET LOCAL RESULTS</button>
+        </div>
+      </article>
+    </section>
   </main>
   <footer>Experimental hardware tool · Chromium Web MIDI + SysEx required · GPL-3.0-only</footer>
   <script type="module" src="./app.js"></script>
   <script type="module" src="./transport.js"></script>
   <script type="module" src="./project_transfer.js"></script>
   <script type="module" src="./runtime_diagnostics.js"></script>
+  <script type="module" src="./validation.js"></script>
 </body>
 </html>
