@@ -43,8 +43,11 @@ typedef struct {
     uint8_t page;
     uint8_t machine;
     uint8_t pattern;
+    uint8_t playing;
     uint8_t playing_step;
     uint8_t selected_step;
+    uint8_t selected_lane;
+    uint8_t project_slot;
     uint16_t bpm;
     uint16_t p0;
     uint16_t p1;
@@ -54,17 +57,29 @@ typedef struct {
     uint8_t step_type;
     uint8_t accent;
     uint8_t slide;
+    uint8_t step_probability;
+    uint8_t drum_state;
+    uint8_t mute;
+    uint8_t solo;
     uint16_t drum_hits;
     uint16_t drum_accents;
 } ui240_view_t;
 
 void ui240_init(ui240_state_t *ui);
+void ui240_set_page(ui240_state_t *ui, ui240_page_t page);
+void ui240_set_machine(ui240_state_t *ui, ui240_machine_t machine);
 void ui240_next_page(ui240_state_t *ui, int8_t delta);
 void ui240_cycle_machine(ui240_state_t *ui, int8_t delta);
 void ui240_select_step(ui240_state_t *ui, int8_t delta);
+void ui240_select_lane(ui240_state_t *ui, int8_t delta);
+void ui240_select_project(ui240_state_t *ui, int8_t delta);
 void ui240_snapshot(const ui240_state_t *ui, const groovebox_t *g, ui240_view_t *out);
 void ui240_edit_acid_main(ui240_state_t *ui, groovebox_t *g, uint8_t slot, int8_t delta);
+void ui240_edit_acid_step(ui240_state_t *ui, groovebox_t *g, uint8_t slot, int8_t delta);
 void ui240_set_acid_step_type(ui240_state_t *ui, groovebox_t *g, ui240_step_type_t type);
 void ui240_toggle_acid_flag(ui240_state_t *ui, groovebox_t *g, uint8_t flag);
+void ui240_edit_drum(ui240_state_t *ui, groovebox_t *g, uint8_t slot, int8_t delta);
+void ui240_edit_mixer(ui240_state_t *ui, groovebox_t *g, uint8_t slot, int8_t delta);
+void ui240_edit_fx(ui240_state_t *ui, groovebox_t *g, uint8_t slot, int8_t delta);
 
 #endif
