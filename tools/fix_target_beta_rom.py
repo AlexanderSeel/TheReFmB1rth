@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
-"""Remove target-time divisions from the injected ReFm beta LCD renderer.
+"""Remove target-time divisions and ROM-range immediates from the ReFm beta LCD renderer.
 
-The JieLi compiler may lower integer division to undocumented ROM helpers. Felucca
-intentionally rejects those references, so the display uses Q15/Q7 approximations
-instead. These are UI percentages only and do not affect audio/control values.
+Felucca rejects any instruction that materializes a value in the JieLi chip-ROM
+address window. That includes innocent signed arithmetic constants such as
+-32767*100 == 0xffce0064. Keep all display-only scaling in small Q7/Q15 steps so
+those values are never emitted. The safety gate itself remains unchanged.
 """
 from __future__ import annotations
 import argparse
@@ -32,7 +33,7 @@ def main() -> int:
     replace_once(
         draw,
         "((int32_t)p1 - 32767) * 100 / 32767",
-        "(((int32_t)p1 - 32767) * 100) >> 15",
+        "((((int32_t)p1 - 32767) >> 8) * 100) >> 7",
     )
     replace_once(
         draw,
@@ -49,7 +50,7 @@ def main() -> int:
         "(int32_t)p1 * 100 / 31000",
         "((int32_t)p1 * 100) >> 15",
     )
-    print("FM-1 beta renderer ROM-helper divisions removed")
+    print("FM-1 beta renderer target-safe display arithmetic applied")
     return 0
 
 
