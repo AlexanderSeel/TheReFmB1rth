@@ -17,7 +17,7 @@ No Roland/Propellerhead/ReBirth artwork, logos, proprietary source, ROMs, or non
 
 ---
 
-# Current checkpoint — first beta candidate, 2026-10-12
+# Current checkpoint — post-beta.1 corrective build, 2026-10-12
 
 ## First physical install — completed
 
@@ -51,9 +51,11 @@ Root cause confirmed: Felucca still owned the physical panel/keyboard/transport 
 - [x] exact JieLi target build passes Felucca ROM/register checks, memory budgets, manifest and SHA verification;
 - [x] verified one-shot beta publisher workflow added;
 - [x] target runtime stack-watermark instrumentation added for user + supervisor/ISR stacks;
-- [x] combined physical runtime report now gates CPU, DMA lateness and minimum stack headroom.
+- [x] combined physical runtime report now gates CPU, DMA lateness and minimum stack headroom;
+- [x] browser can request a device-state snapshot and synchronize the live editor from the FM-1;
+- [x] exact readback checkpoint `8e6daf2f0345e297c21c5b3270de2498f981e8ba` passed host, WASM, FM-1 target package, target-memory, manifest/SHA and sample-link experiment gates.
 
-The first beta is a **software-gated beta candidate** until the second physical validation pass succeeds.
+The current code is a **software-gated beta candidate** until the second physical validation pass succeeds.
 
 ---
 
@@ -177,8 +179,10 @@ Physical validation still required:
 - [x] 16-step Acid/808/909 editing protocol;
 - [x] note/drum audition;
 - [x] browser START / CONTINUE / STOP using the firmware MIDI realtime transport path;
-- [ ] device-to-editor state readback;
-- [ ] pattern/project dump + restore;
+- [x] device-to-editor current-state readback over a reserved channel-16 CC envelope;
+- [x] readback response is deferred to the audio context so Felucca's MIDI OUT ring keeps its single-producer assumption;
+- [x] browser sync updates machine/pattern/step plus ACID, drum and mixer editor state without echoing writes back to the FM-1;
+- [ ] full A–H pattern/project dump + restore;
 - [ ] consolidated polished editor/WASM application after physical beta is stable.
 
 ---
@@ -236,7 +240,9 @@ These are the main blockers between **beta candidate** and **hardware-proven bet
 - [x] prerelease classification for hardware-test/alpha/beta/rc;
 - [x] CORS-safe browser firmware channel;
 - [x] one-shot `Publish verified beta` workflow only consumes a successful exact-head `Build all artifacts` result;
-- [ ] publish `v0.1.0-beta.1` from the final verified beta commit;
+- [x] `v0.1.0-beta.1` published as the initial prerelease from commit `3b881e3f845a71f7fdf280b2f0b5016d84b3a254`;
+- [x] explicitly treat `beta.1` as older than the later runtime-stack/readback corrections — do not present those fixes as part of `beta.1`;
+- [ ] publish the next beta (normally `v0.1.0-beta.2`) only from a chosen exact-green corrective commit;
 - [ ] second physical hardware validation;
 - [ ] only later consider public FM-1 Firmware Hub registration.
 
@@ -244,15 +250,16 @@ These are the main blockers between **beta candidate** and **hardware-proven bet
 
 # Immediate beta tasks
 
-1. Get the exact current `main` through a green host + FM-1 target build after the runtime-stack instrumentation fix.
-2. Publish **`v0.1.0-beta.1`** only from that exact green build.
-3. Install that beta through the browser app.
-4. Validate HOME / ACID / STEP / DRUM / MIXER / FX / SONG / PROJECT pages on the actual LCD.
-5. Validate live keys, PLAY/STOP, factory Pattern A and editing without lag/stuck notes.
-6. Capture `felucca_dbg` CPU/late timing plus the new user/supervisor stack-watermark fields and run `target_runtime_report.py`.
-7. Verify USB MIDI, TRS MIDI, USB audio and physical project save/load.
-8. Prove rollback/recovery.
-9. Fix only findings from the second hardware pass before promoting to the next beta.
+1. Preserve `8e6daf2f0345e297c21c5b3270de2498f981e8ba` as the first fully green target checkpoint with runtime-stack diagnostics + device-state readback.
+2. Complete full A–H pattern/project dump + restore without bypassing the existing project codec/CRC path.
+3. Get the resulting exact `main` through host + WASM + real JieLi FM-1 target + memory/package gates.
+4. Publish the next prerelease only from the chosen exact-green corrective commit; do not overwrite/relabel `v0.1.0-beta.1`.
+5. Install that corrective beta through the browser app.
+6. Validate HOME / ACID / STEP / DRUM / MIXER / FX / SONG / PROJECT pages on the actual LCD.
+7. Validate live keys, PLAY/STOP, factory Pattern A and editing without lag/stuck notes.
+8. Capture `felucca_dbg` CPU/late timing plus the user/supervisor stack-watermark fields and run `target_runtime_report.py`.
+9. Verify USB MIDI, TRS MIDI, USB audio and physical project save/load.
+10. Prove rollback/recovery and repeat the update/rollback cycle.
 
 ---
 
@@ -268,10 +275,11 @@ These are the main blockers between **beta candidate** and **hardware-proven bet
 - [x] loader-mediated installer foundation;
 - [x] dedicated physical ReFm beta UI implemented software-side;
 - [x] runtime user/supervisor stack instrumentation implemented software-side;
+- [x] device-to-browser current-state synchronization implemented software-side;
 - [ ] comfortable FM-1 CPU headroom proven physically;
 - [ ] runtime stack headroom proven physically;
 - [ ] physical UI/controls validated;
-- [ ] bidirectional browser editor;
+- [ ] full bidirectional browser project/pattern transfer;
 - [ ] USB MIDI/TRS MIDI/USB audio validated;
 - [ ] save/load validated physically;
 - [ ] recovery/return-to-official proven;
