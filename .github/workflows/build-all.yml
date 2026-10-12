@@ -3,6 +3,9 @@ name: Build all artifacts
 on:
   push:
     branches: [main]
+    tags:
+      - 'v*'
+      - 'hardware-test-*'
   workflow_dispatch:
 
 permissions:
@@ -202,3 +205,76 @@ jobs:
             build/target/felucca-sample-experiment.syms
           if-no-files-found: error
           retention-days: 14
+
+  release:
+    name: Publish FM-1 GitHub Release
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [host, fm1-target]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Download verified FM-1 artifact from this build
+        uses: actions/download-artifact@v4
+        with:
+          name: refm-fm1-experimental-${{ github.sha }}
+          path: release
+
+      - name: Verify release payload
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s release/TheReFmB1rth-experimental.fwsc
+          test -s release/manifest.json
+          test -s release/SHA256SUMS
+          test -s release/target-memory.json
+          (cd release && sha256sum -c SHA256SUMS)
+
+      - name: Prepare release notes
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > release-notes.md <<EOF
+          ## TheReFmB1rth FM-1 hardware build
+
+          **Experimental hardware firmware. First physical tests should be treated as a beta.**
+
+          Built from commit \`${GITHUB_SHA}\` using the pinned Felucca/JieLi toolchain and the repository's target memory and manifest verification gates.
+
+          ### Install asset
+          - \`TheReFmB1rth-experimental.fwsc\` — FM-1 update package
+
+          ### Verification / diagnostics
+          - \`SHA256SUMS\`
+          - \`manifest.json\`
+          - \`target-memory.json\`
+          - \`refm-overlay.txt\`
+          - \`refm-ui-overlay.txt\`
+
+          Keep a known-good recovery path available before flashing experimental firmware.
+          EOF
+
+      - name: Publish release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          EXTRA=()
+          case "$TAG" in
+            hardware-test-*|*-alpha*|*-beta*|*-rc*) EXTRA+=(--prerelease) ;;
+          esac
+          gh release create "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "TheReFmB1rth $TAG" \
+            --notes-file release-notes.md \
+            "${EXTRA[@]}" \
+            release/TheReFmB1rth-experimental.fwsc \
+            release/TheReFmB1rth-app.bin \
+            release/ota.bin \
+            release/manifest.json \
+            release/SHA256SUMS \
+            release/target-memory.json \
+            release/refm-overlay.txt \
+            release/refm-ui-overlay.txt
