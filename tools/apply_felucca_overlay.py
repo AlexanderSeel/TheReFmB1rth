@@ -25,7 +25,7 @@ REFM_SOURCES = [
     "proto/midi_transport.c", "proto/song.c", "proto/project_store.c", "proto/groovebox.c",
     "proto/midi_router.c", "proto/groovebox_midi.c", "proto/pattern_bank.c",
     "proto/groovebox_pattern.c", "proto/ui_graph_model.c", "proto/ui240.c", "integration/refm_target.c",
-    "integration/refm_felucca_bridge.c",
+    "integration/refm_felucca_bridge.c", "integration/refm_editor_readback.c",
 ]
 
 
@@ -62,13 +62,70 @@ def copy_runtime(dst: Path) -> None:
 
 def patch_audio(dst: Path) -> None:
     audio = dst / "firmware" / "src" / "audio.c"
-    replace_once(audio, "    mix_block(out, n);\n", "    refm_felucca_audio_block(out, n);\n")
-    replace_once(audio, "#define HALF_WORDS (HALF_FRAMES * 2u)\n", "#define HALF_WORDS (HALF_FRAMES * 2u)\nextern void refm_felucca_audio_block(int32_t *out, uint32_t frames);\n")
+    replace_once(
+        audio,
+        "    mix_block(out, n);\n",
+        "    refm_felucca_audio_block(out, n);\n"
+        "    refm_felucca_emit_state_readback_if_pending();\n",
+    )
+    replace_once(
+        audio,
+        "#define HALF_WORDS (HALF_FRAMES * 2u)\n",
+        "#define HALF_WORDS (HALF_FRAMES * 2u)\n"
+        "extern void refm_felucca_audio_block(int32_t *out, uint32_t frames);\n"
+        "extern void refm_felucca_emit_state_readback_if_pending(void);\n",
+    )
 
 
 def patch_midi(dst: Path) -> None:
     usb = dst / "firmware" / "src" / "usb.c"
-    replace_once(usb, "static int midi_enqueue(uint32_t pkt, uint32_t source)\n{\n", "#ifdef REFM_APP\nextern void refm_felucca_midi_packet(uint32_t packet);\n#define REFM_MIRROR_MIDI(pkt) refm_felucca_midi_packet(pkt)\n#else\n#define REFM_MIRROR_MIDI(pkt) ((void)0)\n#endif\nstatic int midi_enqueue(uint32_t pkt, uint32_t source)\n{\n    REFM_MIRROR_MIDI(pkt);\n")
+    replace_once(
+        usb,
+        "static int midi_enqueue(uint32_t pkt, uint32_t source)\n{\n",
+        "#ifdef REFM_APP\n"
+        "extern void refm_felucca_midi_packet(uint32_t packet);\n"
+        "extern void refm_felucca_request_state_readback(void);\n"
+        "#define REFM_MIRROR_MIDI(pkt) refm_felucca_midi_packet(pkt)\n"
+        "static void refm_editor_query(uint32_t pkt)\n"
+        "{\n"
+        "    uint8_t st = (uint8_t)((pkt >> 8) & 0xffu);\n"
+        "    uint8_t cc = (uint8_t)((pkt >> 16) & 0x7fu);\n"
+        "    uint8_t v = (uint8_t)((pkt >> 24) & 0x7fu);\n"
+        "    if ((st & 0xf0u) == 0xb0u && (st & 0x0fu) == 0x0fu && cc == 107u && v >= 64u)\n"
+        "        refm_felucca_request_state_readback();\n"
+        "}\n"
+        "#define REFM_EDITOR_QUERY(pkt) refm_editor_query(pkt)\n"
+        "#else\n"
+        "#define REFM_MIRROR_MIDI(pkt) ((void)0)\n"
+        "#define REFM_EDITOR_QUERY(pkt) ((void)0)\n"
+        "#endif\n"
+        "static int midi_enqueue(uint32_t pkt, uint32_t source)\n"
+        "{\n"
+        "    REFM_MIRROR_MIDI(pkt);\n"
+        "    REFM_EDITOR_QUERY(pkt);\n",
+    )
+    replace_once(
+        usb,
+        "static void midi_out_event(uint32_t pkt)            /* from the audio ISR */\n"
+        "{\n"
+        "    if (usb.config && mo_w - mo_r < MQ) {\n"
+        "        midi_out_q[mo_w % MQ] = pkt;\n"
+        "        RING_PUBLISH();\n"
+        "        mo_w++;\n"
+        "    }\n"
+        "}\n",
+        "static void midi_out_event(uint32_t pkt)            /* from the audio ISR */\n"
+        "{\n"
+        "    if (usb.config && mo_w - mo_r < MQ) {\n"
+        "        midi_out_q[mo_w % MQ] = pkt;\n"
+        "        RING_PUBLISH();\n"
+        "        mo_w++;\n"
+        "    }\n"
+        "}\n"
+        "#ifdef REFM_APP\n"
+        "void refm_platform_midi_out_event(uint32_t pkt) { midi_out_event(pkt); }\n"
+        "#endif\n",
+    )
     felucca = dst / "firmware" / "src" / "felucca.c"
     replace_once(felucca, '#include "usb.c"\n', '#define REFM_APP 1\n#include "usb.c"\n#undef REFM_APP\n')
 
