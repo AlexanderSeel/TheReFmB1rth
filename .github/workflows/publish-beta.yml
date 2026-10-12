@@ -88,41 +88,53 @@ jobs:
         run: |
           set -euo pipefail
           cat > release-notes.md <<EOF
-          ## TheReFmB1rth $TAG — first beta candidate
+          ## TheReFmB1rth $TAG — corrective FM-1 beta
 
-          This is the first beta candidate produced after the initial physical FM-1 test exposed the control/UI integration problems in the earlier hardware-test build.
+          This prerelease contains the corrective hardware architecture produced after the first physical FM-1 test exposed disconnected Felucca/ReFm control paths, plus the browser/readback and runtime-diagnostic work added since beta.1.
 
-          Built from commit \`$HEAD_SHA\` only after the exact commit passed host DSP/integration tests, WASM build, JieLi FM-1 target build, target memory budgets, package manifest/checksum verification and the target sample link-size experiment.
+          Built from commit \`$HEAD_SHA\` only after that exact commit passed host DSP/integration tests, the browser/WASM build, JieLi FM-1 target compile/link, target memory budgets, package manifest/checksum verification and the target sample link-size experiment.
 
-          ### Hardware workflow in this beta
+          ### Physical workflow
           - dedicated 240×240 ReFm pages: **HOME / ACID / STEP / DRUM / MIXER / FX / SONG / PROJECT**
           - physical keyboard routed directly to the selected **ACID A / ACID B** engine
-          - physical **PLAY** starts/stops the ReFm sequencer rather than Felucca's old sequencer
-          - fresh Pattern A contains a small audible factory demonstration so PLAY is immediately testable
-          - simple four-knob page mappings shown directly on the LCD
+          - physical **PLAY** starts/stops the ReFm sequencer instead of Felucca's old audible sequencer
+          - fresh Pattern A contains an audible factory demonstration for immediate PLAY testing
           - 16-step ACID editing with NOTE / REST / TIE, Accent, Slide and probability
           - 808/909 lane editing with OFF / HIT / ACCENT
-          - mixer level/pan/delay/reverb editing plus mute/solo
-          - master drive/delay/reverb/filter editing
-          - four project save/load slots using Felucca's CRC-checked A/B storage
-          - held-note panic when changing into editor pages or switching machine
-          - target-only idle ACID fast path to reduce wasted CPU while voices are silent
-          - browser installer/editor and browser-safe firmware channel
+          - mixer level/pan/delay/reverb plus mute/solo and master FX editing
+          - four project save/load slots using Felucca's CRC-checked storage
+          - held-note panic on editor-page/machine transitions
+          - target-only idle ACID fast path to reduce wasted DSP work
+
+          ### Browser/editor additions
+          - device-to-browser live state synchronization
+          - START / CONTINUE / STOP through the firmware MIDI realtime path
+          - full A–H ReFm project backup and restore using the versioned project codec, project CRC and chunked SysEx transport
+          - restore changes live RAM only; persistence still requires the normal FM-1 project SAVE action
+          - one-click read-only runtime diagnostic capture for CPU, DMA lateness and user/supervisor stack headroom
+          - downloadable runtime JSON compatible with \`tools/target_runtime_report.py\`
+
+          ### Physical beta gates shown in the browser
+          - zero DMA deadline misses
+          - sustained audio CPU <= 75%
+          - peak render <= 82% of one DMA-half deadline
+          - user-stack free headroom >= 4096 bytes
+          - supervisor/ISR-stack free headroom >= 1024 bytes
 
           ### Install asset
           - \`TheReFmB1rth-experimental.fwsc\`
 
-          ### Diagnostics / verification
+          ### Verification assets
           - \`SHA256SUMS\`
           - \`manifest.json\`
           - \`target-memory.json\`
           - \`refm-overlay.txt\`
           - \`refm-ui-overlay.txt\`
 
-          ### Beta status
-          This build is **software-gated beta firmware, not yet hardware-proven stable firmware**. It still requires the second physical FM-1 validation pass: sustained audio/CPU/late-buffer measurements, UI/keys/transport, USB + TRS MIDI, USB audio, project save/load and rollback/recovery.
+          ### Status
+          This remains **software-gated beta firmware, not hardware-proven stable firmware**. The next required step is the second physical FM-1 pass covering LCD/control behavior, live keys, Pattern A, sustained stress diagnostics, USB/TRS MIDI, USB audio, project persistence and rollback/recovery.
 
-          Keep the known-good V15/recovery path available while testing.
+          Keep the verified official V15/recovery path available while testing. No custom firmware has a zero-brick guarantee.
           EOF
 
       - name: Create beta release from exact verified commit
