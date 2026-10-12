@@ -37,6 +37,11 @@ def main() -> int:
         check=True,
         cwd=ROOT,
     )
+    subprocess.run(
+        [sys.executable, str(ROOT / "tools" / "fix_target_beta_rom.py"), str(root)],
+        check=True,
+        cwd=ROOT,
+    )
 
     h = hashlib.sha256()
     for path in (
