@@ -35,6 +35,22 @@ Configured pinned-stack ranges are:
 
 The default beta gate requires at least **4096 bytes user-stack free** and **1024 bytes supervisor-stack free** after the complete stress run.
 
+## Browser capture path
+
+Corrective beta builds expose a **read-only** diagnostic snapshot through Felucca's existing editor SysEx framing using reserved command `91`. The command returns the same `felucca_dbg` fields consumed by the command-line checker; it does not reset counters, write flash, or alter the ReFm transport/audio state.
+
+In the browser live editor:
+
+1. connect the FM-1 over USB MIDI;
+2. run the factory pattern or the stress workload for the desired duration;
+3. press **CAPTURE RUNTIME**;
+4. inspect the immediate PASS/FAIL summary;
+5. use **DOWNLOAD DIAGNOSTIC JSON** to save the raw snapshot.
+
+The browser uses the same beta limits as `target_runtime_report.py`: 75% sustained CPU, 82% peak render, zero late DMA halves, at least 4096 bytes user-stack free and at least 1024 bytes supervisor-stack free. The downloaded JSON deliberately stays in the raw `felucca_dbg` shape so it can be independently re-evaluated by the repository CLI rather than trusting the browser display alone.
+
+The diagnostic counters are cumulative since boot/reset. For a clean validation capture, reboot the exact firmware under test immediately before the workload, then capture after the required run. A future explicit counter-reset command should only be added if it can be proven not to disturb the audio ISR.
+
 ## Required stress pattern
 
 Use the same logical load as `tests/bench_groovebox.c`:
@@ -48,7 +64,7 @@ Use the same logical load as `tests/bench_groovebox.c`:
 7. master drive, compressor, performance low-pass and delay active;
 8. exercise UI + MIDI while the pattern runs so main-loop/TIMER5 interaction is represented.
 
-Run for at least several minutes, including transport start/stop, pattern changes and parameter edits. Reset the diagnostic counters immediately before the test if the tooling permits it so the result belongs to this run.
+Run for at least several minutes, including transport start/stop, pattern changes and parameter edits. Use a fresh boot for a run-specific cumulative diagnostic capture.
 
 ## Acceptance criteria
 
@@ -65,7 +81,7 @@ These are beta-entry limits, not claims about the absolute silicon limit. If UI/
 
 ## Capturing a report
 
-Create a JSON snapshot with the Felucca/ReFm diagnostic values, for example:
+The browser download is already a compatible raw snapshot. A manually captured snapshot has the same shape, for example:
 
 ```json
 {
@@ -81,7 +97,7 @@ Create a JSON snapshot with the Felucca/ReFm diagnostic values, for example:
 }
 ```
 
-For the complete beta gate, run:
+For the complete beta gate, independently verify the browser capture with:
 
 ```sh
 python3 tools/target_runtime_report.py fm1-runtime.json \
@@ -101,7 +117,7 @@ Do **not** guess `HALF_FRAMES`; use the value from the exact Felucca build being
 
 `tests/bench_groovebox.c` exists only to detect relative DSP-cost regressions in CI. It intentionally runs an abusive two-ACID + two-drum + full-FX workload. A high `realtime_x` on an x86 GitHub runner is useful when comparing commits, but it must never be translated into an FM-1 CPU percentage.
 
-`tests/test_target_runtime_report.py` verifies the combined physical gate logic on the host, including missing stack fields, insufficient stack headroom and audio deadline failures. It does not simulate target stack usage.
+`tests/test_target_runtime_report.py` verifies the combined physical gate logic on the host, including missing stack fields, insufficient stack headroom and audio deadline failures. `tests/test_runtime_diagnostics_browser.py` keeps the browser/firmware diagnostic command and beta thresholds aligned with those CLI gates. Neither test simulates target stack usage.
 
 ## Release policy
 
