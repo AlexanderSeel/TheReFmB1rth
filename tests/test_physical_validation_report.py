@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import unittest
 
-from tools.physical_validation_report import validate
+from tools.physical_validation_report import REQUIRED_CHECKS, validate
 
 
 def runtime(pass_=True):
@@ -26,10 +26,7 @@ def report():
             "asset": "TheReFmB1rth-experimental.fwsc",
             "bytes": 609849,
         },
-        "checks": {
-            "install": {"status": "pass", "note": ""},
-            "rollback": {"status": "pass", "note": ""},
-        },
+        "checks": {key: {"status": "pass", "note": ""} for key in REQUIRED_CHECKS},
         "runtime": {"factory": runtime(), "stress": runtime()},
     }
 
@@ -44,8 +41,15 @@ class PhysicalValidationReportTests(unittest.TestCase):
             expected_sha256=r["target"]["sha256"],
         )
         self.assertTrue(out["pass"])
+        self.assertEqual(out["checks_total"], len(REQUIRED_CHECKS))
         self.assertEqual(out["checks_not_pass"], [])
         self.assertEqual(out["runtime_failures"], [])
+
+    def test_incomplete_report_is_rejected(self):
+        r = report()
+        del r["checks"]["usb_audio"]
+        with self.assertRaisesRegex(ValueError, "missing checks: usb_audio"):
+            validate(r)
 
     def test_pending_or_na_physical_check_never_passes(self):
         for status in ("pending", "na", "fail"):
