@@ -31,6 +31,7 @@ enum {
 static refm_target_t g_refm REFM_POOL;
 static uint8_t g_refm_ready;
 static uint8_t g_external_clock_seen;
+static uint8_t g_panel_playing;
 
 #ifdef REFM_FELUCCA_PLATFORM
 static uint8_t g_project_io[REFM_PROJECT_IO_CAPACITY] REFM_POOL;
@@ -55,6 +56,7 @@ void refm_felucca_init(uint16_t bpm) {
     refm_target_init(&g_refm, bpm);
     g_refm_ready = 1u;
     g_external_clock_seen = 0u;
+    g_panel_playing = 0u;
 }
 
 void refm_felucca_audio_block(int32_t *out, uint32_t frames) {
@@ -94,6 +96,33 @@ void refm_felucca_midi_packet(uint32_t packet) {
     if (n == 2u) refm_target_midi_byte(&g_refm, d2);
 }
 
+/* Physical FM-1 keyboard -> ReFm engine. Felucca still owns scanning/debounce;
+   the overlay calls this only for changed note keys. Track 0/1 are ACID A/B.
+   Drum keyboard mapping will be added with the dedicated drum page instead of
+   guessing a chromatic-to-GM mapping here. */
+void refm_felucca_key_note(uint8_t track, uint8_t note, uint8_t on) {
+    uint8_t status;
+    if (track >= 2u || note > 127u) return;
+    ensure_ready();
+    status = (uint8_t)((on ? 0x90u : 0x80u) | track);
+    refm_target_midi_byte(&g_refm, status);
+    refm_target_midi_byte(&g_refm, note);
+    refm_target_midi_byte(&g_refm, on ? 108u : 0u);
+}
+
+/* Mirror the physical PLAY state into the ReFm internal transport. This is
+   deliberately edge-triggered so the panel can continue to use Felucca's
+   proven debounce/UI code while ReFm owns the audible sequencer clock. */
+void refm_felucca_panel_transport(uint8_t playing) {
+    ensure_ready();
+    playing = playing ? 1u : 0u;
+    if (playing == g_panel_playing) return;
+    g_panel_playing = playing;
+    refm_target_set_external_clock(&g_refm, 0u);
+    g_external_clock_seen = 0u;
+    refm_target_midi_byte(&g_refm, playing ? 0xFAu : 0xFCu);
+}
+
 void refm_felucca_use_internal_clock(uint16_t bpm) {
     ensure_ready();
     g_refm.groovebox.transport.bpm = bpm;
@@ -106,7 +135,10 @@ void refm_felucca_panic(void) {
     refm_target_panic(&g_refm);
 }
 
-/* Called by the pinned Felucca UI overlay after a physical encoder edit. */
+/* Called by the pinned Felucca UI overlay after a physical encoder edit.
+   Only the stock-like ACID four-knob page is accepted now. The old ADSR/LFO
+   hooks remain in the ABI for project compatibility but are intentionally not
+   exposed by the panel overlay. */
 void refm_felucca_ui_param(uint8_t track, uint8_t kind, uint8_t slot, int16_t value) {
     acid303_t *a;
     uint8_t v;
@@ -115,27 +147,10 @@ void refm_felucca_ui_param(uint8_t track, uint8_t kind, uint8_t slot, int16_t va
     a = &g_refm.groovebox.acid[track];
     v = clamp_u7(value);
     switch (kind) {
-    case REFM_UI_ADSR:
-        if (slot == 0u) a->amp_attack = v;
-        else if (slot == 1u) a->amp_decay = v;
-        else if (slot == 2u) a->amp_sustain = v;
-        else if (slot == 3u) a->amp_release = v;
-        break;
-    case REFM_UI_LFO:
-        if (slot == 0u) a->lfo_rate = v;
-        else if (slot == 1u) a->lfo_shape = (uint8_t)(v & 3u);
-        else if (slot == 2u) a->lfo_phase = (uint32_t)v << 25;
-        break;
-    case REFM_UI_LFO_FILTER: {
-        int32_t n = value < 0 ? -(int32_t)value : (int32_t)value;
-        if (n > 64) n = 64;
-        a->lfo_amount = (uint8_t)(n * 127 / 64);
-        break;
-    }
     case REFM_UI_FILTER:
-        if (slot == 0u) a->cutoff = (uint16_t)((uint32_t)v * 30000u / 127u);
-        else if (slot == 1u) a->resonance = (uint16_t)((uint32_t)v * 30000u / 127u);
-        else if (slot == 2u) a->env_mod = (uint16_t)((uint32_t)v * 30000u / 127u);
+        if (slot == 0u) a->cutoff = (uint16_t)((uint32_t)v * 32767u / 127u);
+        else if (slot == 1u) a->resonance = (uint16_t)((uint32_t)v * 32767u / 127u);
+        else if (slot == 2u) a->env_mod = (uint16_t)((uint32_t)v * 32767u / 127u);
         else if (slot == 3u) a->decay = (uint16_t)((uint32_t)v * 32767u / 127u);
         break;
     default:
@@ -150,14 +165,10 @@ int refm_felucca_ui_curve(uint8_t track, uint8_t kind, int16_t *out, uint32_t co
     if (track >= 2u || !out || count < UI_GRAPH_POINTS) return 0;
     ensure_ready();
     a = &g_refm.groovebox.acid[track];
-    if (kind == REFM_UI_ADSR) {
-        ui_graph_adsr(&g, a->amp_attack, a->amp_decay, a->amp_sustain, a->amp_release);
-    } else if (kind == REFM_UI_LFO) {
-        ui_graph_lfo(&g, (ui_lfo_shape_t)(a->lfo_shape & 3u), (uint8_t)(a->lfo_phase >> 24), a->lfo_amount);
-    } else if (kind == REFM_UI_FILTER) {
-        ui_graph_filter(&g, (uint8_t)((uint32_t)a->cutoff * 127u / 30000u),
-                        (uint8_t)((uint32_t)a->resonance * 127u / 30000u),
-                        (uint8_t)((uint32_t)a->env_mod * 127u / 30000u));
+    if (kind == REFM_UI_FILTER) {
+        ui_graph_filter(&g, (uint8_t)((uint32_t)a->cutoff * 127u / 32767u),
+                        (uint8_t)((uint32_t)a->resonance * 127u / 32767u),
+                        (uint8_t)((uint32_t)a->env_mod * 127u / 32767u));
     } else {
         return 0;
     }
