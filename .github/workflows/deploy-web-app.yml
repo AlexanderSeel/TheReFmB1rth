@@ -20,6 +20,8 @@ concurrency:
 jobs:
   validate:
     runs-on: ubuntu-24.04
+    outputs:
+      pages_ready: ${{ steps.pages.outcome }}
     steps:
       - uses: actions/checkout@v4
       - name: Validate static app
@@ -37,15 +39,18 @@ jobs:
           grep -q 'logicalImage' web/app/fm1pkg.js
           grep -q '0xe0000000' web/app/fm1ota.js
           grep -q '0xf0000000' web/app/fm1ota.js
-      - name: Configure/enable GitHub Pages
+          grep -q '16-STEP PROGRAMMER' web/app/index.html
+          grep -q 'cc(102' web/app/app.js
+      - name: Configure GitHub Pages when repository Pages is enabled
+        id: pages
+        continue-on-error: true
         uses: actions/configure-pages@v5
-        with:
-          enablement: true
       - uses: actions/upload-pages-artifact@v3
         with:
           path: web/app
 
   deploy:
+    if: needs.validate.outputs.pages_ready == 'success'
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
