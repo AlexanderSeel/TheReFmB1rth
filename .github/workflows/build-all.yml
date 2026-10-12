@@ -299,3 +299,33 @@ jobs:
             release/target-memory.json \
             release/refm-overlay.txt \
             release/refm-ui-overlay.txt
+
+      - name: Publish CORS-safe browser firmware channel
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ASSET=TheReFmB1rth-experimental.fwsc
+          SHA=$(sha256sum "release/$ASSET" | awk '{print $1}')
+          SIZE=$(stat -c %s "release/$ASSET")
+          CHANNEL="$RUNNER_TEMP/firmware-channel"
+          rm -rf "$CHANNEL"
+          mkdir -p "$CHANNEL"
+          cp "release/$ASSET" "$CHANNEL/$ASSET"
+          python3 - "$CHANNEL/latest.json" "$GITHUB_REF_NAME" "$GITHUB_SHA" "$ASSET" "$SHA" "$SIZE" <<'PY'
+          import json,sys
+          out,tag,commit,asset,sha,size=sys.argv[1:]
+          with open(out,'w',encoding='utf-8') as f:
+              json.dump({'tag':tag,'commit':commit,'asset':asset,'sha256':sha,'bytes':int(size)},f,indent=2,sort_keys=True)
+              f.write('\n')
+          PY
+          cd "$CHANNEL"
+          git init
+          git checkout --orphan firmware-channel
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add "$ASSET" latest.json
+          git commit -m "publish browser firmware ${GITHUB_REF_NAME}"
+          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git push --force origin firmware-channel
