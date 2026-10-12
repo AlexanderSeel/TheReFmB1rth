@@ -48,6 +48,7 @@ async function capture(panel){
   if(payload.length!==1+FIELDS.length*5)throw new Error(`Unexpected diagnostic payload length ${payload.length}.`);
   const snapshot={};FIELDS.forEach((name,i)=>snapshot[name]=r32(payload,1+i*5));
   const report=evaluate(snapshot);render(panel,snapshot,report);status(report.pass?'RUNTIME PASS':'RUNTIME FAIL',report.pass);
+  window.dispatchEvent(new CustomEvent('refm-runtime-diagnostic',{detail:{captured_at:new Date().toISOString(),snapshot,report}}));
 }
 function install(){
   const connect=document.querySelector('#connectEditor');if(!connect)return;
