@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Full ReFm project transfer over the pinned Felucca editor SysEx envelope.
-const HDR=[0xF0,0x7D,0x46,0x4C,68];
+const COMMAND=90;
+const HDR=[0xF0,0x7D,0x46,0x4C,COMMAND];
 const DEVICE_RE=/fm-1|felucca|composite|sinco|usb-midi/i;
 const MAX_PROJECT=3840;
 const CHUNK=256;
@@ -30,7 +31,7 @@ function request(link,args,timeout=2500){
     const done=(fn,v)=>{clearTimeout(timer);link.input.removeEventListener('midimessage',onMidi);fn(v);};
     const onMidi=e=>{
       const d=[...e.data];
-      if(d.length<7||d[0]!==0xF0||d[d.length-1]!==0xF7||d[1]!==0x7D||d[2]!==0x46||d[3]!==0x4C||d[4]!==68)return;
+      if(d.length<7||d[0]!==0xF0||d[d.length-1]!==0xF7||d[1]!==0x7D||d[2]!==0x46||d[3]!==0x4C||d[4]!==COMMAND)return;
       done(resolve,d.slice(5,-1));
     };
     link.input.addEventListener('midimessage',onMidi);
