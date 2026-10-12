@@ -28,8 +28,11 @@ jobs:
           test -s .upstream/felucca/.refm-ui-overlay
           grep -q 'refm_felucca_audio_block(out, n);' .upstream/felucca/firmware/src/audio.c
           grep -q 'REFM_MIRROR_MIDI(pkt);' .upstream/felucca/firmware/src/usb.c
+          grep -q 'refm_platform_midi_out_event' .upstream/felucca/firmware/src/usb.c
           grep -q '#define REFM_APP 1' .upstream/felucca/firmware/src/felucca.c
           grep -q 'refm_platform_storage_save' .upstream/felucca/firmware/src/felucca.c
+          grep -q 'refm_backup_handle(cmd, a, na)' .upstream/felucca/firmware/src/editor.c
+          grep -q '#define ED_REFM_PROJECT 90u' .upstream/felucca/firmware/refm/integration/refm_editor_backup.h
           grep -q 'Compact dual-bassline visual language' .upstream/felucca/firmware/src/ui_graph.c
           grep -q '\*refm_objs' .upstream/felucca/tools/build.py
       - name: Compile and link copied ReFmB1rth target sources
@@ -49,6 +52,7 @@ jobs:
           #include <stdint.h>
           int refm_platform_storage_save(uint32_t slot, const void *src, uint32_t len) { (void)slot; (void)src; (void)len; return -1; }
           int refm_platform_storage_load(uint32_t slot, void *dst, uint32_t max) { (void)slot; (void)dst; (void)max; return -1; }
+          void refm_platform_midi_out_event(uint32_t packet) { (void)packet; }
           EOF
           cc -std=c11 -Wall -Wextra -Werror -O2 \
             -I.upstream/felucca/firmware/refm/proto \
