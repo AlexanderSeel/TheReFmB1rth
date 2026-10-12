@@ -44,7 +44,7 @@ function esc(s=''){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt
 function download(name,text,type='application/json'){const a=document.createElement('a');const u=URL.createObjectURL(new Blob([text],{type}));a.href=u;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(u),1000);}
 function runtimeLabel(x){if(!x)return 'NOT CAPTURED';return x.report?.pass?`PASS · ${x.report.sustained_cpu_pct.toFixed(1)}% CPU · peak ${x.report.peak_render_pct.toFixed(1)}% · late ${x.snapshot.late}`:`FAIL · ${(x.report?.failures||[]).join('; ')}`;}
 function counts(){const vals=CHECKS.map(([id])=>state.checks[id]?.status||'pending');return {pass:vals.filter(x=>x==='pass').length,fail:vals.filter(x=>x==='fail').length,pending:vals.filter(x=>x==='pending').length,na:vals.filter(x=>x==='na').length,total:vals.length};}
-function allReady(){const c=counts();return c.fail===0&&c.pending===0&&state.runtime.factory?.report?.pass===true&&state.runtime.stress?.report?.pass===true;}
+function allReady(){return CHECKS.every(([id])=>state.checks[id]?.status==='pass')&&state.runtime.factory?.report?.pass===true&&state.runtime.stress?.report?.pass===true;}
 function renderSummary(){
   const c=counts(),el=document.querySelector('#validationSummary');if(!el)return;
   const target=state.target?`${state.target.tag} · ${String(state.target.commit||'').slice(0,10)}`:'target release not loaded';
@@ -64,7 +64,11 @@ function renderRows(){
 }
 async function loadTarget(){
   const status=document.querySelector('#validationTarget');status.textContent='Loading firmware-channel metadata…';
-  try{const r=await fetch(`${CHANNEL_META}?v=${Date.now()}`,{cache:'no-store'});if(!r.ok)throw new Error(`HTTP ${r.status}`);const m=await r.json();if(!m.tag||!m.commit||!m.sha256)throw new Error('metadata incomplete');state.target={tag:m.tag,commit:m.commit,asset:m.asset,sha256:m.sha256,bytes:m.bytes,captured_at:new Date().toISOString()};status.textContent=`${m.tag} · ${m.commit.slice(0,12)} · ${m.sha256.slice(0,12)}…`;save();}catch(e){status.textContent=`Target metadata unavailable: ${e.message}`;}
+  try{
+    const r=await fetch(`${CHANNEL_META}?v=${Date.now()}`,{cache:'no-store'});if(!r.ok)throw new Error(`HTTP ${r.status}`);const m=await r.json();if(!m.tag||!m.commit||!m.sha256)throw new Error('metadata incomplete');
+    if(state.target?.commit&&state.target.commit!==m.commit){const previous=state.target.commit;state=emptyState();state.notes=`Validation reset automatically because target changed from ${previous} to ${m.commit}.`;renderRows();renderRuntime();const notes=document.querySelector('#validationNotes');if(notes)notes.value=state.notes;}
+    state.target={tag:m.tag,commit:m.commit,asset:m.asset,sha256:m.sha256,bytes:m.bytes,captured_at:new Date().toISOString()};status.textContent=`${m.tag} · ${m.commit.slice(0,12)} · ${m.sha256.slice(0,12)}…`;save();
+  }catch(e){status.textContent=`Target metadata unavailable: ${e.message}`;}
 }
 function assignRuntime(slot){if(!lastRuntime)return;state.runtime[slot]={...lastRuntime,assigned_at:new Date().toISOString()};save();renderRuntime();}
 function renderRuntime(){
