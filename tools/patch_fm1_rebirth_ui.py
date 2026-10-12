@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
-"""Add the compact ReFm visual overlay and first physical-hardware fixes.
+"""Apply the compact ReFm visual layer and physical-hardware beta integration.
 
-The step-light strip remains a temporary Felucca-based visual while the real
-ReFm 240x240 pages are implemented. Hardware beta fixes are applied after this
-visual patch so every target/release build gets the keyboard/transport bridge,
-legacy mapping cleanup and silent-voice CPU fast path.
+The initial overlay still adds the 16 grouped step lamps expected by the host
+contract, then the hardware-beta patch takes over the normal 240x240 page and
+panel workflow with dedicated ReFm screens and controls.
 """
 from __future__ import annotations
 import argparse, hashlib, subprocess, sys
@@ -30,7 +29,7 @@ def main() -> int:
         raise SystemExit("apply the ReFmB1rth Felucca overlay first")
     graph = root / "firmware" / "src" / "ui_graph.c"
     old = """    return 1;\n}\n\nstatic void draw_graph(void)\n"""
-    new = """    /* Temporary 16-step transport strip. Dedicated ReFm pages replace\n       Felucca's page hierarchy in the next hardware UI milestone. */\n    {\n        extern uint8_t refm_felucca_step(void);\n        uint32_t st = refm_felucca_step() & 15u;\n        for (i = 0; i < 16; ++i) {\n            int32_t sx = 11 + i * 13 + (i / 4) * 4;\n            uint16_t sc = ((uint32_t)i == st) ? T_ACCENT : T_RAISE;\n            cv_rect(sx, graph_ht - 7, 9, 4, sc);\n        }\n    }\n    return 1;\n}\n\nstatic void draw_graph(void)\n"""
+    new = """    /* 16 grouped step lamps: temporary graph-level compatibility; the\n       dedicated ReFm beta renderer replaces normal Felucca pages afterwards. */\n    {\n        extern uint8_t refm_felucca_step(void);\n        uint32_t st = refm_felucca_step() & 15u;\n        for (i = 0; i < 16; ++i) {\n            int32_t sx = 11 + i * 13 + (i / 4) * 4;\n            uint16_t sc = ((uint32_t)i == st) ? T_ACCENT : T_RAISE;\n            cv_rect(sx, graph_ht - 7, 9, 4, sc);\n        }\n    }\n    return 1;\n}\n\nstatic void draw_graph(void)\n"""
     replace_once(graph, old, new)
 
     subprocess.run(
@@ -42,15 +41,16 @@ def main() -> int:
     h = hashlib.sha256()
     for path in (
         graph,
+        root / "firmware" / "src" / "ui_draw.c",
         root / "firmware" / "src" / "seq.c",
         root / "firmware" / "src" / "ui_input.c",
         root / "firmware" / "refm" / "proto" / "acid303.c",
     ):
         h.update(path.read_bytes())
     (root / ".refm-ui-overlay").write_text(
-        f"style=hardware-beta-temporary\nsha256={h.hexdigest()}\n"
+        f"style=refm-hardware-beta\nsha256={h.hexdigest()}\n"
     )
-    print("FM-1 temporary UI + hardware beta fixes applied")
+    print("FM-1 dedicated ReFm hardware beta UI applied")
     return 0
 
 
