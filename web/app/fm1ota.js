@@ -27,7 +27,28 @@ async function handshake(link,tries=3){link.drain();for(let t=0;t<tries;t++){if(
 
 export class Updater{
   constructor(access,log=()=>{}){this.access=access;this.log=log;}
-  async find(filter){const outs=[...this.access.outputs.values()];for(const input of this.access.inputs.values()){if(input.state==='disconnected')continue;if(!/fm-1|felucca|ota|composite|sinco|usb-midi/i.test(input.name||''))continue;const output=outs.find(o=>o.name===input.name&&o.state!=='disconnected');if(!output)continue;try{await input.open();await output.open();}catch{continue;}const link=new Link(input,output);const id=await handshake(link,2);if(id&&(!filter||filter(id)))return{link,id,name:input.name};link.close();}return null;}
+  candidatePairs(){
+    const outs=[...this.access.outputs.values()].filter(o=>o.state!=='disconnected');
+    const pairs=[];
+    for(const input of this.access.inputs.values()){
+      if(input.state==='disconnected')continue;
+      if(!/fm-1|felucca|ota|composite|sinco|usb-midi/i.test(input.name||''))continue;
+      const output=outs.find(o=>o.name===input.name);
+      if(output)pairs.push({input,output});
+    }
+    return pairs;
+  }
+  async find(filter){
+    const pairs=this.candidatePairs();
+    if(pairs.length>1)throw fail('multiple',`More than one possible FM-1 MIDI device is connected (${pairs.map(p=>p.input.name).join(', ')}). Disconnect the others before flashing.`);
+    for(const {input,output} of pairs){
+      try{await input.open();await output.open();}catch{continue;}
+      const link=new Link(input,output);const id=await handshake(link,2);
+      if(id&&(!filter||filter(id)))return{link,id,name:input.name};
+      link.close();
+    }
+    return null;
+  }
   async identify(){const dev=await this.find(id=>!isOta(id));if(!dev)return null;const info={name:dev.name,...dev.id};dev.link.close();return info;}
   async waitFor(filter,ms){const end=Date.now()+ms;while(Date.now()<end){const dev=await this.find(filter);if(dev)return dev;await sleep(1000);}return null;}
   async serve(link,image,finishAddr,idleMs,onProgress){let served=0,last=Date.now();for(;;){const pkt=await link.read(1000);if(!pkt){if(link.lost)return{served,finished:false,lost:true};if(Date.now()-last>idleMs)return{served,finished:false};continue;}const r=parseRequest(pkt);if(!r)continue;last=Date.now();if(r.addr===0xe0000000||r.addr===0xf0000000){link.send(response(r.addr,[...new TextEncoder().encode('success'),0]));if(r.addr===finishAddr)return{served,finished:true};continue;}if(r.len>MAXDATA||r.addr+r.len>image.length)throw fail('badreq',`Bad device request ${r.addr.toString(16)}+${r.len}`);await sleep(10);if(!link.send(response(r.addr,Array.from(image.subarray(r.addr,r.addr+r.len)),r.fl)))return{served,finished:false,lost:true};served++;onProgress?.(served,r.addr);}}
