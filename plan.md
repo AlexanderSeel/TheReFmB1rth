@@ -53,7 +53,9 @@ Root cause confirmed: Felucca still owned the physical panel/keyboard/transport 
 - [x] target runtime stack-watermark instrumentation added for user + supervisor/ISR stacks;
 - [x] combined physical runtime report now gates CPU, DMA lateness and minimum stack headroom;
 - [x] browser can request a device-state snapshot and synchronize the live editor from the FM-1;
-- [x] exact readback checkpoint `8e6daf2f0345e297c21c5b3270de2498f981e8ba` passed host, WASM, FM-1 target package, target-memory, manifest/SHA and sample-link experiment gates.
+- [x] browser can back up and restore the complete versioned ReFm project blob, including the A–H pattern bank;
+- [x] exact readback checkpoint `8e6daf2f0345e297c21c5b3270de2498f981e8ba` passed host, WASM, FM-1 target package, target-memory, manifest/SHA and sample-link experiment gates;
+- [x] exact full-transfer checkpoint `993eeb40255d75bbe3b344fa9c6c400816b05820` passed CI, WASM, real JieLi FM-1 app/loader/FWSC build, target-memory budgets, release manifest/SHA verification and sample-link experiment.
 
 The current code is a **software-gated beta candidate** until the second physical validation pass succeeds.
 
@@ -182,7 +184,11 @@ Physical validation still required:
 - [x] device-to-editor current-state readback over a reserved channel-16 CC envelope;
 - [x] readback response is deferred to the audio context so Felucca's MIDI OUT ring keeps its single-producer assumption;
 - [x] browser sync updates machine/pattern/step plus ACID, drum and mixer editor state without echoing writes back to the FM-1;
-- [ ] full A–H pattern/project dump + restore;
+- [x] full A–H pattern/project backup + restore over Felucca's existing editor SysEx framing;
+- [x] project transfer reuses the normal ReFm versioned project blob instead of introducing a second serialization format;
+- [x] project transfer uses 256-byte 7-bit-packed chunks, an outer CRC32, staging-generation protection and the inner ReFm project CRC/version checks;
+- [x] project backup/restore is refused while ReFm transport is playing;
+- [x] browser restore changes the live project only; normal physical PROJECT SAVE remains the explicit persistence step;
 - [ ] consolidated polished editor/WASM application after physical beta is stable.
 
 ---
@@ -227,6 +233,7 @@ These are the main blockers between **beta candidate** and **hardware-proven bet
 - [x] A–H pattern persistence;
 - [x] song/mixer/FX persistence baseline;
 - [x] four physical beta project slots;
+- [x] complete project blob can be exported/restored through the browser without bypassing the project codec;
 - [ ] physical corrupted-project recovery test;
 - [ ] explicit migration tests once project format changes after beta.
 
@@ -241,7 +248,7 @@ These are the main blockers between **beta candidate** and **hardware-proven bet
 - [x] CORS-safe browser firmware channel;
 - [x] one-shot `Publish verified beta` workflow only consumes a successful exact-head `Build all artifacts` result;
 - [x] `v0.1.0-beta.1` published as the initial prerelease from commit `3b881e3f845a71f7fdf280b2f0b5016d84b3a254`;
-- [x] explicitly treat `beta.1` as older than the later runtime-stack/readback corrections — do not present those fixes as part of `beta.1`;
+- [x] explicitly treat `beta.1` as older than the later runtime-stack/readback/project-transfer corrections — do not present those fixes as part of `beta.1`;
 - [ ] publish the next beta (normally `v0.1.0-beta.2`) only from a chosen exact-green corrective commit;
 - [ ] second physical hardware validation;
 - [ ] only later consider public FM-1 Firmware Hub registration.
@@ -250,14 +257,14 @@ These are the main blockers between **beta candidate** and **hardware-proven bet
 
 # Immediate beta tasks
 
-1. Preserve `8e6daf2f0345e297c21c5b3270de2498f981e8ba` as the first fully green target checkpoint with runtime-stack diagnostics + device-state readback.
-2. Complete full A–H pattern/project dump + restore without bypassing the existing project codec/CRC path.
-3. Get the resulting exact `main` through host + WASM + real JieLi FM-1 target + memory/package gates.
-4. Publish the next prerelease only from the chosen exact-green corrective commit; do not overwrite/relabel `v0.1.0-beta.1`.
+1. Preserve `993eeb40255d75bbe3b344fa9c6c400816b05820` as the first fully green target checkpoint containing runtime-stack diagnostics, device-state readback and complete browser project backup/restore.
+2. Expose the physical CPU/late/stack diagnostic snapshot through the browser so the second hardware pass can collect acceptance data without manual memory reads.
+3. Get that diagnostic-browser checkpoint through host + WASM + real JieLi FM-1 target + memory/package gates.
+4. Publish the next prerelease only from a chosen exact-green corrective commit; do not overwrite/relabel `v0.1.0-beta.1`.
 5. Install that corrective beta through the browser app.
 6. Validate HOME / ACID / STEP / DRUM / MIXER / FX / SONG / PROJECT pages on the actual LCD.
 7. Validate live keys, PLAY/STOP, factory Pattern A and editing without lag/stuck notes.
-8. Capture `felucca_dbg` CPU/late timing plus the user/supervisor stack-watermark fields and run `target_runtime_report.py`.
+8. Capture factory-pattern and worst-case stress diagnostics and run `target_runtime_report.py` against them.
 9. Verify USB MIDI, TRS MIDI, USB audio and physical project save/load.
 10. Prove rollback/recovery and repeat the update/rollback cycle.
 
@@ -276,10 +283,10 @@ These are the main blockers between **beta candidate** and **hardware-proven bet
 - [x] dedicated physical ReFm beta UI implemented software-side;
 - [x] runtime user/supervisor stack instrumentation implemented software-side;
 - [x] device-to-browser current-state synchronization implemented software-side;
+- [x] full bidirectional browser project/pattern transfer implemented software-side;
 - [ ] comfortable FM-1 CPU headroom proven physically;
 - [ ] runtime stack headroom proven physically;
 - [ ] physical UI/controls validated;
-- [ ] full bidirectional browser project/pattern transfer;
 - [ ] USB MIDI/TRS MIDI/USB audio validated;
 - [ ] save/load validated physically;
 - [ ] recovery/return-to-official proven;
