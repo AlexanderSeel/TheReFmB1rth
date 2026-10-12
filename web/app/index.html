@@ -76,6 +76,16 @@
         <button class="machine" data-machine="3">909</button>
       </div>
 
+      <article class="card rack transportPanel">
+        <div class="rackHead"><div><span>TRANSPORT</span><small>MIDI realtime · shared with the FM-1 sequencer</small></div><div class="status" id="transportStatus">STOPPED</div></div>
+        <div class="toggles">
+          <button data-transport="start" class="primary">START</button>
+          <button data-transport="continue">CONTINUE</button>
+          <button data-transport="stop" class="danger">STOP</button>
+        </div>
+        <p class="editorHint">START resets the ReFm sequencer to step 1. CONTINUE resumes from the current transport position. STOP leaves the selected pattern intact.</p>
+      </article>
+
       <article class="card rack acidPanel" id="acidPanel">
         <div class="rackHead"><div><span id="acidName">ACID A</span><small>303-style live controls</small></div><div class="waveSwitch"><button data-wave="0" class="active">SAW</button><button data-wave="1">SQUARE</button></div></div>
         <div class="controls">
@@ -130,5 +140,6 @@
   </main>
   <footer>Experimental hardware tool · Chromium Web MIDI + SysEx required · GPL-3.0-only</footer>
   <script type="module" src="./app.js"></script>
+  <script type="module" src="./transport.js"></script>
 </body>
 </html>
