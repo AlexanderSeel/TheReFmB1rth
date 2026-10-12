@@ -65,7 +65,7 @@
 
     <section id="editor" class="page">
       <div class="hero card compact">
-        <div><div class="eyebrow">DIRECT WEB MIDI</div><h2>Live hardware editor</h2><p>Changes are sent immediately to the connected FM-1.</p></div>
+        <div><div class="eyebrow">DIRECT WEB MIDI</div><h2>Live hardware editor</h2><p>Performance controls and 16-step pattern writes are sent immediately to the connected FM-1.</p></div>
         <button id="connectEditor" class="primary">CONNECT EDITOR</button>
       </div>
 
@@ -103,6 +103,23 @@
       <article class="card patternPanel">
         <div class="rackHead"><div><span>PATTERN</span><small>A–H</small></div></div>
         <div class="patterns" id="patterns"></div>
+      </article>
+
+      <article class="card rack sequencerPanel">
+        <div class="rackHead"><div><span>16-STEP PROGRAMMER</span><small id="seqSubtitle">ACID A · pattern A</small></div><div class="seqMode" id="seqMode">STEP 01</div></div>
+        <div class="seqSteps" id="seqSteps"></div>
+        <div id="acidStepEditor" class="stepEditor">
+          <div class="stepTypes" id="stepTypes"><button data-step-type="0">REST</button><button data-step-type="1" class="active">NOTE</button><button data-step-type="2">TIE</button></div>
+          <label>NOTE<input id="stepNote" type="number" min="0" max="127" value="48"></label>
+          <label>PROBABILITY<input id="stepProbability" type="range" min="0" max="100" value="100"><output>100%</output></label>
+          <button id="stepAccent">ACCENT</button>
+          <button id="stepSlide">SLIDE</button>
+        </div>
+        <div id="drumStepEditor" class="stepEditor hidden">
+          <div class="voiceSelect" id="voiceSelect"></div>
+          <div class="stepTypes" id="drumStates"><button data-drum-state="0" class="active">OFF</button><button data-drum-state="1">HIT</button><button data-drum-state="2">ACCENT</button></div>
+        </div>
+        <p class="editorHint">The pattern editor uses the reserved hardware-editor CC protocol (102–106). It does not depend on the browser emulator.</p>
       </article>
 
       <article class="card drumPanel hidden" id="drumPanel">
