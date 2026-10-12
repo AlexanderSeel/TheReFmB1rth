@@ -20,6 +20,22 @@ Before flashing:
 
 No custom firmware has a zero-brick guarantee.
 
+## 0A. Open the browser VALIDATION page
+
+The browser app now contains a **VALIDATION** tab for this complete pass.
+
+At the start of the session:
+
+1. open **VALIDATION**;
+2. verify the target shown is `v0.1.0-beta.2` and commit `2b4c537cc1a1f8c42c43ee953e14e27d7740837b`;
+3. use **REFRESH TARGET** only when intentionally changing to a newer firmware-channel build;
+4. record every physical check as PASS / FAIL / NOT TESTED and add observations beside the check;
+5. keep the page open during the session — results are saved automatically in browser local storage.
+
+The report is deliberately tied to the exact firmware-channel commit and SHA. If the target commit changes, previously recorded hardware results are reset rather than silently carried forward to another binary. `N/A` does not count as release-ready PASS.
+
+At the end of the session export both **JSON** and **Markdown** from the VALIDATION page and keep them with the raw runtime JSON files.
+
 ## 1. Install beta.2
 
 Use the browser installer and load the current firmware-channel package.
@@ -39,6 +55,8 @@ Pass conditions:
 - device reboots into TheReFmB1rth;
 - browser reconnect/identity check succeeds;
 - no recovery intervention is required.
+
+Record **Install & boot** on the VALIDATION page immediately after this step.
 
 ## 2. Basic boot + LCD
 
@@ -169,10 +187,11 @@ Pass conditions:
 
 With Pattern A playing normally for at least several minutes:
 
-1. use **CAPTURE RUNTIME** in the browser;
-2. download the diagnostic JSON;
-3. record the browser PASS/FAIL result;
-4. optionally verify on a PC:
+1. use **CAPTURE RUNTIME** in the LIVE EDITOR;
+2. download the raw diagnostic JSON;
+3. open **VALIDATION** and press **ASSIGN LATEST** beside **Factory Pattern A**;
+4. record the browser PASS/FAIL result;
+5. optionally verify the raw JSON on a PC:
 
 ```sh
 python3 tools/target_runtime_report.py fm1-runtime.json --half-frames 128
@@ -187,7 +206,7 @@ Required gate:
 - user-stack free >= 4096 B
 - supervisor/ISR-stack free >= 1024 B
 
-Keep the JSON as hardware evidence.
+Keep the raw JSON as hardware evidence; the VALIDATION report also embeds the assigned snapshot and evaluated gate result.
 
 ## 11. Worst-case four-machine stress capture
 
@@ -201,7 +220,10 @@ Build the heaviest practical pattern:
 - continuously edit pages/steps/knobs;
 - send MIDI while playing.
 
-Run for several minutes, then capture/download runtime diagnostics again.
+Run for several minutes, then:
+
+1. capture/download runtime diagnostics again;
+2. open **VALIDATION** and press **ASSIGN LATEST** beside **Worst-case stress**.
 
 The same CPU/late/stack gate must pass. Do not relax thresholds to make the firmware pass.
 
@@ -261,10 +283,12 @@ A beta cannot be called hardware-proven until rollback has been demonstrated on 
 
 For the beta.2 validation record keep:
 
+- exported `refm-physical-validation-*.json` from the VALIDATION page;
+- exported `refm-physical-validation-*.md` human-readable report;
 - installation result and exact beta tag/commit/SHA;
 - photos/screenshots of all eight ReFm pages;
-- factory-pattern runtime JSON;
-- worst-case runtime JSON;
+- raw factory-pattern runtime JSON;
+- raw worst-case runtime JSON;
 - USB MIDI result;
 - TRS MIDI result;
 - USB audio result;
@@ -275,5 +299,5 @@ For the beta.2 validation record keep:
 
 ## Decision
 
-- **PASS / hardware-proven beta:** every mandatory runtime, control, persistence and rollback gate passes.
+- **PASS / hardware-proven beta:** the VALIDATION page reports **HARDWARE GATES · PASS** and every mandatory runtime, control, persistence and rollback gate passes.
 - **FAIL / corrective build required:** any DMA late event, stack gate failure, unusable physical workflow, persistence corruption, USB/TRS regression or inability to recover/rollback.
