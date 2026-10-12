@@ -49,7 +49,9 @@ Root cause confirmed: Felucca still owned the physical panel/keyboard/transport 
 - [x] fresh Pattern A contains an audible factory demo so PLAY is testable immediately;
 - [x] host bridge test covers fresh boot → sound → PLAY → step advance → STOP → page changes;
 - [x] exact JieLi target build passes Felucca ROM/register checks, memory budgets, manifest and SHA verification;
-- [x] verified one-shot beta publisher workflow added.
+- [x] verified one-shot beta publisher workflow added;
+- [x] target runtime stack-watermark instrumentation added for user + supervisor/ISR stacks;
+- [x] combined physical runtime report now gates CPU, DMA lateness and minimum stack headroom.
 
 The first beta is a **software-gated beta candidate** until the second physical validation pass succeeds.
 
@@ -183,6 +185,14 @@ Physical validation still required:
 
 # M6.2 — Physical beta performance gates
 
+Software-side instrumentation/tooling:
+
+- [x] target-only user-stack watermark with conservative active-frame safety band;
+- [x] target-only supervisor/ISR-stack watermark before interrupts are enabled;
+- [x] stack high-water fields exposed through `felucca_dbg`;
+- [x] `target_runtime_report.py` combines CPU, DMA deadline and stack-headroom gates;
+- [x] host regression tests cover healthy, missing-field, low-stack and late-DMA reports.
+
 These are the main blockers between **beta candidate** and **hardware-proven beta**:
 
 - [ ] capture physical `felucca_dbg` while factory Pattern A plays;
@@ -190,8 +200,8 @@ These are the main blockers between **beta candidate** and **hardware-proven bet
 - [ ] `late == 0`;
 - [ ] sustained audio CPU <= 75%;
 - [ ] peak audio render <= 82% of DMA-half deadline;
-- [ ] runtime user-stack high-water measurement;
-- [ ] runtime system/ISR-stack high-water measurement;
+- [ ] physical user-stack free headroom >= 4096 bytes;
+- [ ] physical supervisor/ISR-stack free headroom >= 1024 bytes;
 - [ ] guard bands intact;
 - [ ] several-minute UI + keyboard + MIDI + transport stress test;
 - [ ] USB MIDI verified;
@@ -237,7 +247,7 @@ These are the main blockers between **beta candidate** and **hardware-proven bet
 2. Install that beta through the browser app.
 3. Validate HOME / ACID / STEP / DRUM / MIXER / FX / SONG / PROJECT pages on the actual LCD.
 4. Validate live keys, PLAY/STOP, factory Pattern A and editing without lag/stuck notes.
-5. Capture `felucca_dbg` CPU/late timing and add runtime stack-watermark diagnostics.
+5. Capture `felucca_dbg` CPU/late timing plus the new user/supervisor stack-watermark fields and run `target_runtime_report.py`.
 6. Verify USB MIDI, TRS MIDI, USB audio and physical project save/load.
 7. Prove rollback/recovery.
 8. Fix only findings from the second hardware pass before promoting to the next beta.
@@ -255,8 +265,9 @@ These are the main blockers between **beta candidate** and **hardware-proven bet
 - [x] release hashes/provenance;
 - [x] loader-mediated installer foundation;
 - [x] dedicated physical ReFm beta UI implemented software-side;
+- [x] runtime user/supervisor stack instrumentation implemented software-side;
 - [ ] comfortable FM-1 CPU headroom proven physically;
-- [ ] runtime stack headroom proven;
+- [ ] runtime stack headroom proven physically;
 - [ ] physical UI/controls validated;
 - [ ] bidirectional browser editor;
 - [ ] USB MIDI/TRS MIDI/USB audio validated;
