@@ -31,7 +31,7 @@ static void acid_cc(groovebox_t *g, unsigned a, uint8_t cc, uint8_t v)
     else if (cc == 1u) s->env_mod = cc16(v);
     else if (cc == 75u) s->accent = cc16(v);
     else if (cc == 76u) s->drive = cc16(v);
-    else if (cc == 77u) s->wave = v >= 64u ? ACID303_SQUARE : ACID303_SAW;
+    else if (cc == 77u) s->square = v >= 64u;
     else track_mix_cc(g, a, cc, v);
 }
 
