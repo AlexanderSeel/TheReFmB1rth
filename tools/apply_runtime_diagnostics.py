@@ -4,7 +4,9 @@
 
 This patch is target-only and deliberately avoids replacing Felucca's existing
 stack guard. It paints only memory that is safe at early boot, then reports a
-high-water estimate through the existing `felucca_dbg` .noinit structure.
+high-water estimate through the existing `felucca_dbg` .noinit structure. The
+same counters are exposed read-only through editor SysEx command 91 so browser
+hardware validation can capture the target-runtime gate without raw memory reads.
 """
 from __future__ import annotations
 
@@ -128,15 +130,38 @@ static void refm_stack_watermark_update(void)
     replace_once(main, init_anchor, init_patch)
 
 
+def patch_editor(dst: Path) -> None:
+    editor = dst / "firmware" / "src" / "editor.c"
+    replace_once(
+        editor,
+        '#include "../refm/integration/refm_editor_backup.h"\n',
+        '#include "../refm/integration/refm_editor_backup.h"\n'
+        '#include "../refm/integration/refm_editor_diagnostics.h"\n',
+    )
+    replace_once(
+        editor,
+        '    if (refm_backup_handle(cmd, a, na)) { ed_send(); return; }\n',
+        '    if (refm_backup_handle(cmd, a, na)) { ed_send(); return; }\n'
+        '    if (refm_diagnostics_handle(cmd, a, na)) { ed_send(); return; }\n',
+    )
+
+
 def write_stamp(dst: Path) -> None:
-    tracked = [dst / "firmware" / "src" / "audio.c", dst / "firmware" / "src" / "main.c"]
+    tracked = [
+        dst / "firmware" / "src" / "audio.c",
+        dst / "firmware" / "src" / "main.c",
+        dst / "firmware" / "src" / "editor.c",
+        dst / "firmware" / "refm" / "integration" / "refm_editor_diagnostics.h",
+    ]
     h = hashlib.sha256()
     for path in tracked:
         h.update(path.relative_to(dst).as_posix().encode())
         h.update(path.read_bytes())
     (dst / STAMP).write_text(
         f"upstream={PIN}\nsha256={h.hexdigest()}\n"
-        "fields=ustack_used,sstack_used,ustack_free,sstack_free\n"
+        "fields=halves,last_us,max_us,cpu_q8,late,nested,timer_irqs,ui_frames,"
+        "ustack_used,ustack_free,sstack_used,sstack_free\n"
+        "editor_command=91\n"
     )
 
 
@@ -148,8 +173,9 @@ def main() -> int:
     verify_pin(dst)
     patch_audio(dst)
     patch_main(dst)
+    patch_editor(dst)
     write_stamp(dst)
-    print("ReFm runtime stack-watermark diagnostics applied")
+    print("ReFm runtime stack-watermark diagnostics + editor capture applied")
     return 0
 
 
