@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import pathlib
+import re
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -15,7 +16,8 @@ class BrowserRuntimeDiagnosticsTests(unittest.TestCase):
             "ustack_used", "ustack_free", "sstack_used", "sstack_free",
         ):
             self.assertIn(f"felucca_dbg.{field}", header)
-        self.assertNotIn("= 0", header.split("static int refm_diagnostics_handle", 1)[1])
+        handler = header.split("static int refm_diagnostics_handle", 1)[1]
+        self.assertIsNone(re.search(r"felucca_dbg\.[A-Za-z0-9_]+\s*=", handler))
         self.assertIn("refm_editor_diagnostics.h", patch)
         self.assertIn("refm_diagnostics_handle(cmd, a, na)", patch)
         self.assertIn("editor_command=91", patch)
