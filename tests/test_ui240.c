@@ -34,13 +34,12 @@ int main(void)
     assert(v.accent == 1u);
     assert(v.slide == 1u);
 
-    {
-        uint8_t old_note = g.acid_seq[1].step[5].note;
-        ui240_edit_acid_step(&ui, &g, 0u, 1);
-        assert(g.acid_seq[1].step[5].note == old_note + 1u);
-        ui240_edit_acid_step(&ui, &g, 3u, -1);
-        assert(g.acid_seq[1].step[5].probability == 95u);
-    }
+    ui240_edit_acid_step(&ui, &g, 0u, 1);
+    assert(g.acid_seq[1].step[5].note == 24u); /* empty step enters playable range */
+    ui240_edit_acid_step(&ui, &g, 0u, 1);
+    assert(g.acid_seq[1].step[5].note == 25u);
+    ui240_edit_acid_step(&ui, &g, 3u, -1);
+    assert(g.acid_seq[1].step[5].probability == 95u);
 
     ui240_set_acid_step_type(&ui, &g, UI240_STEP_TIE);
     ui240_snapshot(&ui, &g, &v);
