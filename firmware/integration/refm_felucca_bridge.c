@@ -64,6 +64,8 @@ static int8_t g_project_result;
 static uint8_t g_project_io[REFM_PROJECT_IO_CAPACITY] REFM_POOL;
 extern int refm_platform_storage_save(uint32_t slot, const void *src, uint32_t len);
 extern int refm_platform_storage_load(uint32_t slot, void *dst, uint32_t max);
+int refm_felucca_storage_save(uint8_t slot);
+int refm_felucca_storage_load(uint8_t slot);
 #endif
 
 static uint8_t clamp_u7(int32_t v) {
@@ -76,10 +78,45 @@ static int8_t sign_step(int16_t delta) {
     return delta < 0 ? -1 : delta > 0 ? 1 : 0;
 }
 
+/* A fresh firmware must make sound when PLAY is pressed. Pattern A is therefore
+   a deliberately small factory demonstration, not an implicit test fixture:
+   ACID A supplies an obvious 4-note line, ACID B a sparse answer, and the 808
+   gives kick/snare/closed-hat. Users can immediately overwrite or save it. */
+static void seed_beta_pattern(void) {
+    groovebox_t *g = &g_refm.groovebox;
+    static const uint8_t acid_a[16] = {36,36,43,36, 39,36,46,43, 36,48,43,39, 36,43,46,34};
+    static const uint8_t acid_b[16] = {48,0,0,0, 0,0,43,0, 46,0,0,0, 0,0,39,0};
+    uint8_t i;
+
+    for (i = 0u; i < 16u; ++i) {
+        seq16_step_t *a = &g->acid_seq[0].step[i];
+        seq16_step_t *b = &g->acid_seq[1].step[i];
+        a->note = acid_a[i];
+        a->flags = SEQ16_GATE;
+        a->probability = 100u;
+        if ((i & 3u) == 0u) a->flags |= SEQ16_ACCENT;
+        if (i == 2u || i == 6u || i == 13u) a->flags |= SEQ16_SLIDE;
+        b->probability = 100u;
+        if (acid_b[i]) {
+            b->note = acid_b[i];
+            b->flags = (uint8_t)(SEQ16_GATE | ((i == 0u || i == 8u) ? SEQ16_ACCENT : 0u));
+        } else {
+            b->note = 48u;
+            b->flags = 0u;
+        }
+        if ((i & 3u) == 0u) g->drum_hits[0][i] |= (uint16_t)(1u << DRUM_BD);
+        if (i == 4u || i == 12u) g->drum_hits[0][i] |= (uint16_t)(1u << DRUM_SD);
+        if ((i & 1u) == 0u) g->drum_hits[0][i] |= (uint16_t)(1u << DRUM_CH);
+        if (i == 0u || i == 8u) g->drum_accents[0][i] |= (uint16_t)(1u << DRUM_BD);
+    }
+    groovebox_pattern_store(&g->patterns, g, 0u);
+}
+
 static void ensure_ready(void) {
     if (!g_refm_ready) {
         refm_target_init(&g_refm, 128u);
         ui240_init(&g_ui);
+        seed_beta_pattern();
         g_refm_ready = 1u;
     }
 }
@@ -87,6 +124,7 @@ static void ensure_ready(void) {
 void refm_felucca_init(uint16_t bpm) {
     refm_target_init(&g_refm, bpm);
     ui240_init(&g_ui);
+    seed_beta_pattern();
     g_refm_ready = 1u;
     g_external_clock_seen = 0u;
     g_panel_playing = 0u;
@@ -137,9 +175,6 @@ int refm_felucca_keys_are_editor(void) {
            g_ui.page == UI240_EXT;
 }
 
-/* Physical FM-1 keyboard -> selected ReFm ACID engine. The keyboard remains
-   playable on HOME/ACID/MIXER/FX and is deliberately disabled on step/project
-   editors so editing can never create accidental notes. */
 void refm_felucca_key_note(uint8_t track, uint8_t note, uint8_t on) {
     uint8_t status;
     (void)track;
@@ -305,8 +340,6 @@ void refm_felucca_ui_action(uint8_t action) {
     }
 }
 
-/* Stable tiny getter ABI for the monolithic Felucca renderer. Keeping the
-   renderer dependent on integers only avoids sharing Felucca-private types. */
 uint16_t refm_felucca_ui_value(uint8_t id) {
     ui240_view_t v;
     ensure_ready();
@@ -338,8 +371,6 @@ uint16_t refm_felucca_ui_value(uint8_t id) {
     }
 }
 
-/* Legacy temporary Felucca parameter hook retained only for compatibility with
-   old editor CC paths. Dedicated beta pages use refm_felucca_ui_encoder(). */
 void refm_felucca_ui_param(uint8_t track, uint8_t kind, uint8_t slot, int16_t value) {
     acid303_t *a;
     uint8_t v;
