@@ -2,785 +2,367 @@
 
 ## Goal
 
-Create a GPL-compatible, ReBirth-inspired replacement firmware for the M-VAVE FM-1 built on the proven Felucca firmware foundation.
+Build a GPL-compatible, original replacement firmware for the M-VAVE FM-1 using the pinned Felucca hardware foundation.
 
-Target instrument concept:
+Instrument concept:
 
-- **ACID 1** — monophonic 303-inspired bass synth
-- **ACID 2** — second independent 303-inspired bass synth
-- **DRUM A** — 808-inspired drum machine
-- **DRUM B** — 909-inspired drum machine
-- shared pattern/song sequencer
-- mixer + distortion + compressor + delay + performance filter
-- USB MIDI + TRS MIDI + USB audio
-- project/pattern persistence
-- browser/WASM emulator before hardware flashing
+- **ACID A** — 303-inspired mono bass synth
+- **ACID B** — second independent acid synth
+- **808** — synthesized 808-inspired drum machine
+- **909** — synthesized/sample-hybrid 909-inspired drum machine
+- A–H pattern sequencing + song/chain mode
+- four-channel mixer
+- distortion, delay, reverb, compressor/performance filtering
+- USB/TRS MIDI + USB audio through Felucca
+- project persistence
+- WASM reference/emulator
+- browser installer + direct hardware editor
 
-The project must be an original implementation inspired by classic workflow and sound. Do not ship Roland, Propellerhead, ReBirth, TB-303, TR-808 or TR-909 artwork, logos, proprietary ROMs, copyrighted factory samples, copied source code, or other protected assets unless their license explicitly permits redistribution.
-
----
-
-# Non-negotiable safety rules
-
-The FM-1 must never be used as the first test target.
-
-A hardware image may only be considered flashable after all of the following pass:
-
-1. firmware builds from a clean checkout;
-2. host-side DSP/sequencer/storage tests pass;
-3. WASM/browser emulator starts and can render/play all machines;
-4. firmware size fits the known FM-1 flash/XIP budget;
-5. RAM/pool/stack use is measured and within limits;
-6. CPU/render budget passes worst-case patterns;
-7. package checksum is generated and verified;
-8. installer performs FM-1 identity check before writing;
-9. updater validates package identity/version/length before erase/write;
-10. recovery instructions and official-firmware recovery path are documented before first flash;
-11. the user has a known-good recovery method available before experimental flashing.
-
-**Never bypass the Felucca update loader or write arbitrary offsets directly to flash during normal installation.**
-
-If an install fails and the device cannot boot, recovery may require the separate FM-1-transporter hardware method. Experimental flashing therefore remains opt-in and explicitly marked unsafe until validated on real hardware.
+No Roland/Propellerhead/ReBirth artwork, logos, proprietary source, ROMs, or non-redistributable samples are shipped.
 
 ---
 
-# Foundation
+# Current checkpoint — 2026-10-12
 
-Use **Felucca** as the hardware/firmware platform rather than starting from the factory firmware.
+## Implemented
 
-Reuse or adapt, under GPL-3.0-only compatibility:
+- [x] pinned Felucca 1.0.5 foundation at `3dd2b0852bc310a2c1bf00c2d443ac19202c2140`;
+- [x] GPL/provenance documentation (`UPSTREAM.md`, third-party DSP/sample docs);
+- [x] reproducible Linux/JieLi AC79 GitHub target build;
+- [x] real `.fwsc` target package generation;
+- [x] SHA-256 release artifacts + release manifest;
+- [x] static XIP/RAM/pool budget gate;
+- [x] two independent ACID engines;
+- [x] 808 + 909, 11 lanes each;
+- [x] A–H pattern bank;
+- [x] song sequencer;
+- [x] MIDI routing for ACID A/B, 808, 909;
+- [x] start/stop/continue and external clock path;
+- [x] four-channel mixer;
+- [x] distortion, delay and shared reverb;
+- [x] project save/load using Felucca CRC-checked A/B storage;
+- [x] WASM hardware-rack editor/emulator;
+- [x] TB-303 step-write workflow in browser UI;
+- [x] browser AudioWorklet playback path;
+- [x] host DSP/integration/stress tests;
+- [x] deterministic audio render fingerprint infrastructure;
+- [x] target CPU-report tooling for physical `felucca_dbg` captures;
+- [x] guarded experimental command-line installer path;
+- [x] hardware-test GitHub Release workflow for `.fwsc` publishing;
+- [x] first integrated browser **Installer + Live Editor** under `web/app`;
+- [x] Web MIDI package/device identity preflight;
+- [x] browser `.fwsc` SHA-256 display;
+- [x] browser OTA install/resume using the proven Felucca loader-mediated protocol;
+- [x] browser refuses ambiguous multiple FM-1 MIDI devices;
+- [x] direct live editor CC control for cutoff/resonance/env-mod/decay/accent/distortion/wave, level/pan/delay/reverb sends, mute/solo;
+- [x] GitHub Pages deployment workflow for the installer/editor.
 
-- FM-1 HAL
-- LCD driver and UI renderer
-- key/knob/encoder/LED input layer
-- audio output path
-- USB MIDI
-- TRS MIDI
-- USB audio
-- clock/sync infrastructure
-- flash persistence layer
-- update loader / `.fwsc` packaging
-- command-line installer
-- browser/WASM emulator
-- host regression tests
-- CPU budget tests
-- project/preset backup patterns where useful
+## Important architecture decision
 
-Expected target constraints inherited from Felucca:
-
-- 44.1 kHz stereo audio
-- limited XIP/code region
-- roughly 96 KiB general RAM plus dedicated pool region
-- fixed-point-friendly embedded DSP
-- four logical tracks map naturally to 2 acid + 2 drum machines
-
----
-
-# Repository structure target
-
-```text
-TheReFmB1rth/
-├─ firmware/
-│  ├─ hal/
-│  ├─ loader/
-│  └─ src/
-│     ├─ app/
-│     ├─ audio/
-│     ├─ dsp/
-│     ├─ machines/
-│     │  ├─ acid303.c
-│     │  ├─ acid303.h
-│     │  ├─ drum808.c
-│     │  ├─ drum808.h
-│     │  ├─ drum909.c
-│     │  └─ drum909.h
-│     ├─ sequencer/
-│     │  ├─ transport.c
-│     │  ├─ pattern.c
-│     │  ├─ song.c
-│     │  ├─ swing.c
-│     │  └─ automation.c
-│     ├─ mixer/
-│     ├─ fx/
-│     ├─ storage/
-│     ├─ midi/
-│     └─ ui/
-├─ assets/
-│  ├─ samples-cc0/
-│  └─ fonts/
-├─ tools/
-│  ├─ fetch_samples.py
-│  ├─ verify_samples.py
-│  ├─ fm1_install.py
-│  ├─ make_package.py
-│  └─ preflight.py
-├─ tests/
-│  ├─ dsp/
-│  ├─ sequencer/
-│  ├─ storage/
-│  ├─ installer/
-│  └─ golden/
-├─ web/
-│  ├─ emu/
-│  └─ installer/
-├─ docs/
-│  ├─ FLASH_SAFETY.md
-│  ├─ SAMPLE_SOURCES.md
-│  ├─ ARCHITECTURE.md
-│  └─ DSP_NOTES.md
-├─ build.sh
-├─ README.md
-├─ LICENSE
-└─ plan.md
-```
+The browser/WASM ACID engine is the high-quality sound reference and may use more CPU/memory than the FM-1. The embedded FM-1 engine stays fixed-point and target-budget constrained. Sound changes must be evaluated against js303/Open303/reference recordings instead of adding unverified coloration.
 
 ---
 
-# Phase 0 — bootstrap and provenance
+# Safety gate before first physical flash
 
-## 0.1 Import Felucca foundation
+The project uses Felucca's update loader and does **not** intentionally raw-write arbitrary flash offsets during normal installation.
 
-- [ ] import the current Felucca firmware/tooling baseline while retaining all required copyright/license notices;
-- [ ] preserve GPL-3.0-only license compatibility;
-- [ ] preserve third-party SDK/license texts required by release packaging;
-- [ ] record the exact upstream Felucca commit used as the initial base;
-- [ ] create `UPSTREAM.md` describing divergence and update strategy.
+Required before/for the first physical test:
 
-## 0.2 Rebrand safely
+- [x] clean target build;
+- [x] host tests;
+- [x] WASM build;
+- [x] package SHA-256;
+- [x] package identity validation;
+- [x] XIP/RAM/pool static gate;
+- [x] recovery documentation;
+- [x] official V15 SHA pinned for return-to-stock verification;
+- [x] FM-1-transporter documented as last-resort recovery;
+- [x] loader-mediated browser installer;
+- [ ] verify the exact hardware-test tag/release build is green before flashing;
+- [ ] prepare known-good official V15 package locally;
+- [ ] confirm OCT-/boot/update recovery path on the test device;
+- [ ] have FM-1-transporter/RP2040 recovery hardware ready;
+- [ ] perform first controlled install;
+- [ ] prove boot/display/audio/buttons after install;
+- [ ] prove USB MIDI + TRS MIDI;
+- [ ] prove USB audio;
+- [ ] prove save/load on device;
+- [ ] prove return to official/Felucca firmware after the first experiment.
 
-- [ ] use `TheReFmB1rth` / a distinct product identity in UI and package metadata;
-- [ ] no Roland or Propellerhead logos/artwork;
-- [ ] no ReBirth skin recreation;
-- [ ] classic machine names may be used only in documentation as descriptive references where appropriate.
-
-## 0.3 Build baseline
-
-- [ ] clean build on Linux;
-- [ ] clean build using the JieLi AC79 toolchain;
-- [ ] package generation works;
-- [ ] browser emulator works;
-- [ ] all inherited tests pass before feature changes.
-
-Exit criterion: an unmodified/rebranded baseline builds and emulates successfully.
-
----
-
-# Phase 1 — safe install/recovery infrastructure
-
-This phase is required **before first experimental device flash**.
-
-## 1.1 Installer preflight
-
-Add `tools/preflight.py` and corresponding installer checks:
-
-- [ ] enumerate MIDI devices;
-- [ ] identify expected FM-1 identity;
-- [ ] reject unknown devices;
-- [ ] read current firmware/package identity where supported;
-- [ ] verify `.fwsc` magic/header/size;
-- [ ] SHA-256 package verification;
-- [ ] require explicit `--experimental` for development firmware;
-- [ ] require explicit typed confirmation for first experimental flash;
-- [ ] never choose a MIDI output automatically if multiple possible FM-1 devices are present;
-- [ ] refuse flashing when package identity does not match FM-1 target;
-- [ ] log every update stage and received acknowledgement.
-
-## 1.2 Package safety
-
-- [ ] deterministic build artifact naming;
-- [ ] `SHA256SUMS` for every release artifact;
-- [ ] release manifest with upstream commit + local commit + build options;
-- [ ] verify app image fits linker XIP bounds;
-- [ ] verify RAM/pool symbols fit linker memory map;
-- [ ] prevent package creation on overflow;
-- [ ] prevent release packaging if tests fail.
-
-## 1.3 Recovery documentation
-
-- [ ] document return-to-official-firmware procedure;
-- [ ] document boot-mode symptoms;
-- [ ] document FM-1-transporter as last-resort recovery;
-- [ ] document required backup steps before experimental testing;
-- [ ] explicitly state that no firmware can guarantee zero brick risk.
-
-Exit criterion: installer and package validation can reject intentionally corrupted packages in automated tests.
+No custom firmware has a zero-brick guarantee.
 
 ---
 
-# Phase 2 — sequencer core
+# M0 — Foundation
 
-Create machine-independent sequencing first.
-
-## Pattern model
-
-Each acid track:
-
-- pitch
-- gate
-- tie
-- slide
-- accent
-- octave/transposition
-- probability
-- micro-timing offset
-- optional per-step parameter locks
-
-Each drum track:
-
-- up to 11 core drum voices
-- per-step trigger
-- accent/velocity
-- probability
-- flam/ratchet
-- micro-timing
-- optional per-step parameter locks
-
-Global:
-
-- 16-step native page
-- 32/48/64-step extended patterns
-- pattern A–H initially
-- copy/paste/clear
-- pattern chaining
-- song mode
-- swing
-- external MIDI clock
-- internal MIDI clock
-- start/stop/continue
-
-Tests:
-
-- [ ] exact event ordering;
-- [ ] swing timing;
-- [ ] slide continuity;
-- [ ] accent timing;
-- [ ] pattern wrap;
-- [ ] pattern change quantization;
-- [ ] clock drift over long runs.
+- [x] pin Felucca upstream;
+- [x] preserve GPL notices and upstream provenance;
+- [x] build with JieLi AC79 toolchain;
+- [x] generate `.fwsc`;
+- [x] CI host/WASM/target builds;
+- [x] target memory report.
 
 ---
 
-# Phase 3 — ACID engine
+# M1/M2 — ACID A + ACID B
 
-Build one high-quality monophonic acid synth and instantiate it twice.
+Implemented:
 
-## Signal path
+- [x] saw + square;
+- [x] tune/pitch;
+- [x] cutoff;
+- [x] resonance;
+- [x] Env Mod;
+- [x] decay;
+- [x] accent;
+- [x] slide;
+- [x] tie/rest/note sequencing;
+- [x] oscillator phase continuity;
+- [x] two independent instances;
+- [x] per-track distortion;
+- [x] source-note slide semantics;
+- [x] high-register oscillator regression tests;
+- [x] WASM HQ reference path;
+- [x] js303-informed square/control/VCA baseline.
 
-```text
-oscillator
-  -> pre-filter drive
-  -> resonant nonlinear low-pass filter
-  -> accent/envelope modulation
-  -> VCA
-  -> track drive
-```
+Open sound work:
 
-## Parameters
+- [ ] controlled A/B against real TB-303 reference recordings at matched knob positions;
+- [ ] calibrate FM-1 fixed-point cutoff/resonance/env-mod position mapping against the approved WASM reference;
+- [ ] validate square character on physical FM-1 DAC/headphones;
+- [ ] validate diode-style distortion level/knee on hardware;
+- [ ] profile whether any HQ improvements can safely move from WASM to FM-1.
 
-- waveform: saw / square
-- tune
-- cutoff
-- resonance
-- envelope modulation
-- decay
-- accent
-- drive
-- level
-- pan
-
-## Behaviour to model carefully
-
-- [ ] monophonic note priority;
-- [ ] oscillator phase continuity;
-- [ ] slide is continuous rather than retriggered portamento;
-- [ ] envelope retrigger rules depend on tied/slid steps;
-- [ ] accent modifies amplitude and filter behaviour;
-- [ ] resonance/cutoff interaction;
-- [ ] useful self-oscillation approximation if CPU budget allows;
-- [ ] nonlinear saturation around filter path;
-- [ ] stable fixed-point implementation;
-- [ ] no denorm/NaN/overflow conditions.
-
-## Quality modes
-
-Profile before deciding on oversampling:
-
-- ECO: 1x
-- NORMAL: 2x if affordable
-- HQ: optional 4x only if the FM-1 CPU budget proves sufficient
-
-Do not make oversampling a release requirement if it threatens real-time stability.
-
-Exit criterion: two ACID engines + sequencer run simultaneously under target CPU budget.
+Do not reintroduce non-stock LFO/ADSR UI into the ACID workflow.
 
 ---
 
-# Phase 4 — 808 drum machine
+# M3/M4 — 808 + 909
 
-Preferred implementation order:
+- [x] 11 logical drum voices per machine;
+- [x] synthesized baseline voices;
+- [x] independent 808/909 pattern lanes;
+- [x] open-hat choke behavior;
+- [x] optional sample voice path;
+- [x] CC0/Public Domain sample provenance tooling;
+- [x] WASM full audition sample set;
+- [x] conservative FM-1 sample candidate budget experiment;
+- [ ] listening approval of each synthesized drum voice;
+- [ ] decide final firmware sample subset after physical CPU/XIP test;
+- [ ] improve individual voice parameters/editor controls where audible benefit is proven.
 
-1. synthesized voices where practical;
-2. CC0/Public Domain samples only where this materially improves sound/CPU use;
-3. no proprietary ROM/sample dumps.
-
-Core voices:
-
-- BD
-- SD
-- CP
-- RS/CL
-- CH
-- OH
-- LT
-- MT
-- HT
-- CY
-- CB
-
-Per-voice controls should mimic the useful musical ranges rather than blindly duplicating vintage panel labels.
-
-Example synthesis methods:
-
-- kick: decaying sine + pitch envelope + transient
-- snare: two resonant tonal components + filtered noise
-- clap: multi-burst noise envelope
-- hats/cymbal: multiple square/metal oscillators + high-pass/band-pass shaping
-- toms: resonant decaying oscillators with pitch envelopes
-- cowbell: paired pulse/square oscillators + envelope
-
-Exit criterion: full 808-style pattern plays without samples except cymbal/hats if samples prove preferable.
+Target samples remain opt-in until the hardware budget and listening tests pass.
 
 ---
 
-# Phase 5 — 909 drum machine
+# M5 — Sequencer, song, mixer and FX
 
-Core voices:
+Implemented:
 
-- BD
-- SD
-- RS
-- CP
-- CH
-- OH
-- LT
-- MT
-- HT
-- CR
-- RD
+- [x] 16-step native pattern;
+- [x] A–H banks;
+- [x] pattern quantized switching;
+- [x] song mode;
+- [x] probability;
+- [x] accent/slide/tie;
+- [x] MIDI clock integration;
+- [x] mixer level/pan;
+- [x] mute/solo state;
+- [x] delay sends;
+- [x] reverb sends;
+- [x] master distortion;
+- [x] delay;
+- [x] lightweight stereo reverb;
+- [x] compressor/performance filtering baseline;
+- [x] save/load project state.
 
-Implementation strategy:
+Open:
 
-- synthesize kick/snare/toms/clap/hat-like components where practical;
-- use openly licensed sample assets for crash/ride if synthesis is not convincing;
-- preprocess every bundled asset to target sample rate/bit depth and remove unnecessary silence;
-- document source URL, source license, original hash and processed hash.
-
-Exit criterion: 909 + 808 + both acid engines run together at worst-case trigger density with no audio underruns.
-
----
-
-# Phase 6 — sample asset policy and tooling
-
-## Approved research candidates
-
-### 808
-
-Preferred source candidate:
-
-- Michael Fischer / Edward Loveall TR-808 set as distributed by open-source music projects under Public Domain / CC0 lineage.
-
-Do not assume a random mirror is safe. Verify the repository license and provenance before importing actual audio files.
-
-### 909
-
-Preferred source candidate:
-
-- Oramics `TR-909 Detroit`, listed as public-domain/open licensed by the Oramics sampled collection.
-
-Alternative/preferred for firmware where practical:
-
-- synthesize original 808/909-inspired voices from documented circuit/DSP principles;
-- CC0 `octalmusic/octal-samples` is useful reference/provenance research because its shipped sounds are synthesized from scratch or derived from verified public-domain material and released CC0.
-
-## Tooling
-
-Create `tools/fetch_samples.py` that:
-
-- downloads only pinned URLs/commit hashes;
-- validates SHA-256 of source files;
-- converts to mono/stereo as required;
-- resamples to 44.1 kHz;
-- normalizes only where explicitly configured;
-- trims silence conservatively;
-- emits C/asset format expected by firmware;
-- writes processed hashes;
-- never downloads non-redistributable SampleRadar-style packs into release artifacts.
-
-Create `assets/samples-cc0/ATTRIBUTION.md` with per-file provenance.
-
-Release builds must fail if an asset has no declared license/provenance entry.
+- [ ] 32/48/64-step extended pattern UX;
+- [ ] richer drum ratchet/flam editing;
+- [ ] parameter locks/automation;
+- [ ] longer delay/reverb on FM-1 using a memory-efficient implementation if hardware profiling permits;
+- [ ] performance shortcuts such as stutter/filter sweep only after core hardware beta is stable.
 
 ---
 
-# Phase 7 — mixer and effects
+# M6 — FM-1 physical UI
 
-Mixer per machine:
+Target: a page-based 240×240 hardware groovebox, not the desktop rack squeezed onto the LCD.
 
-- level
-- pan
-- mute
-- solo
-- send A
-- send B
+Current state:
 
-Master/performance effects:
+- [x] ReFm target bridge exposes BPM/pattern/step;
+- [x] ACID filter graph model;
+- [x] compact 16-step light strip overlay;
+- [x] Felucca renderer remains the hardware foundation;
+- [x] UI mockup/design direction defined for ACID, sequencer, drums, mixer, chain/song and menu.
 
-- distortion
-- compressor
-- tempo delay
-- optional lightweight reverb if CPU budget permits
-- performance filter/PCF-style sweep
-- master limiter
+Open and high priority:
 
-Performance shortcuts:
+- [ ] remove stale physical ADSR/LFO bindings from ReFm ACID pages;
+- [ ] implement dedicated **Home** page: BPM, play, pattern, A/B/808/909 status;
+- [ ] implement **ACID main** page: wave, cutoff, resonance, Env Mod, decay;
+- [ ] implement **ACID secondary** page: tune, accent, distortion, level;
+- [ ] implement **ACID step-write** page with NOTE/REST/TIE, pitch, accent and slide;
+- [ ] implement **808/909** lane selection + 16-step programming page;
+- [ ] implement **Mixer** page with level/mute/solo/delay/reverb sends;
+- [ ] implement **FX** page for distortion/delay/reverb/master;
+- [ ] implement **Pattern/Chain/Song** pages;
+- [ ] implement physical project save/load controls;
+- [ ] add host-render snapshots/tests for all ReFm-specific 240×240 pages.
 
-- stutter/repeat
-- filter sweep
-- tape stop if affordable
-- mute groups
-
-All effects must have CPU regression tests.
-
----
-
-# Phase 8 — FM-1 physical UI
-
-The FM-1 should feel like a hardware groovebox, not a desktop UI squeezed onto 240×240.
-
-## Home
-
-- BPM
-- current pattern/song position
-- ACID1 / ACID2 / 808 / 909 status
-- mute states
-- transport
-
-## Acid edit page
-
-Four primary knobs per page:
-
-1. cutoff
-2. resonance
-3. env mod
-4. decay
-
-secondary page:
-
-1. accent
-2. drive
-3. tune
-4. level
-
-## Acid step page
-
-- keyboard LEDs represent step activity/playhead;
-- selected step shows note/octave/accent/slide;
-- physical keys edit steps;
-- modifiers edit accent/slide/tie.
-
-## Drum page
-
-- select instrument with encoder/knob;
-- keys become 16-step programmer;
-- LED brightness conveys normal/accent/current playhead;
-- second page edits tuning/decay/tone/level.
-
-## Mixer page
-
-- machine levels
-- mute/solo
-- FX sends
-
-## Song page
-
-- pattern chain
-- repeat count
-- insert/delete/copy
+This is the largest remaining software item before the UI shown in the mockups exists on the physical display.
 
 ---
 
-# Phase 9 — MIDI
+# M6.1 — Browser installer + hardware editor
 
-Default mapping:
+Implemented first usable version:
 
-- CH1: ACID 1
-- CH2: ACID 2
-- CH10: selected drum machine / GM-style drum input
-- optional CH3: 808
-- optional CH4: 909
+- [x] `web/app/index.html` integrated installer/editor;
+- [x] local `.fwsc` selection/drop;
+- [x] load latest `.fwsc` from GitHub Releases;
+- [x] SHA-256 + package identity display;
+- [x] Web MIDI + SysEx connection;
+- [x] running-device identity handshake;
+- [x] model mismatch rejection;
+- [x] multiple-device ambiguity rejection;
+- [x] explicit `FLASH THE FM-1` safety unlock;
+- [x] OTA loader handoff;
+- [x] interrupted-loader resume;
+- [x] post-install identity verification;
+- [x] live ACID controls;
+- [x] live mixer sends/level/pan/mute/solo;
+- [x] note audition;
+- [x] drum audition pads;
+- [x] A–H pattern program change;
+- [x] GitHub Pages action.
 
-Required:
+Next editor work:
 
-- MIDI note in
-- MIDI clock in/out
-- start/stop/continue
-- program/pattern change option
-- CC mapping for major controls
-- panic/all-notes-off
-- USB + TRS paths
-
-Optional later:
-
-- compact SysEx editor protocol
-- full browser editor
-- pattern backup/restore
-
----
-
-# Phase 10 — browser emulator
-
-The emulator is a release gate, not a convenience feature.
-
-Required:
-
-- same DSP source as firmware;
-- same sequencer source;
-- same UI drawing code where practical;
-- simulated FM-1 buttons/keys/knobs;
-- WebAudio output;
-- pattern/project persistence in browser;
-- keyboard MIDI-style input;
-- deterministic render tests.
-
-Add a CPU approximation/per-block instrumentation view for development.
+- [ ] device-to-editor state readback instead of transmit-only CC controls;
+- [ ] transport controls;
+- [ ] actual 16-step hardware pattern editing/backup via a compact SysEx protocol;
+- [ ] full 808/909 lane parameter editing;
+- [ ] shared master FX editing;
+- [ ] project backup/restore;
+- [ ] release selector with manifest/SHA cross-check against `manifest.json`/`SHA256SUMS`;
+- [ ] PWA/offline shell after installer behavior is hardware-proven.
 
 ---
 
-# Phase 11 — web editor
+# M6.2 — Physical performance gates
 
-After firmware behaviour stabilizes:
+Still blocking any claim of hardware-beta completion:
 
-- React + TypeScript
-- machine rack view
-- two acid panels
-- 808/909-style grid without copied trademarked artwork
-- pattern editor
-- song arranger
-- mixer
-- automation editor
-- project backup/restore
-- Web MIDI direct FM-1 connection
-- offline virtual mode using the same WASM DSP where possible
+- [ ] capture physical `felucca_dbg` under the four-machine worst-case stress pattern;
+- [ ] `late == 0`;
+- [ ] sustained audio CPU <= 75%;
+- [ ] peak audio render <= 82% of the DMA-half deadline;
+- [ ] runtime user-stack high-water measurement;
+- [ ] runtime system/ISR-stack high-water measurement;
+- [ ] verify guard bands remain intact;
+- [ ] several-minute UI + MIDI + transport stress test;
+- [ ] repeated update/rollback test.
 
-This editor is optional for the first hardware milestone.
+`tests/bench_groovebox.c` is a regression benchmark only. Its x86 realtime factor is not an FM-1 CPU percentage.
 
 ---
 
-# Phase 12 — persistence
+# M7 — Persistence and migration
 
-Store:
-
-- machine patches
-- patterns
-- songs
-- mixer state
-- FX state
-- global settings
-
-Requirements:
-
-- versioned project format;
-- CRC/checksum;
-- atomic write strategy where possible;
-- old-format migration tests;
-- never overwrite loader/reserved flash sectors;
-- corrupted project data must not prevent boot.
+- [x] versioned project payload;
+- [x] CRC/checksum path;
+- [x] Felucca A/B atomic commit storage;
+- [x] A–H pattern persistence;
+- [x] song/mixer/FX persistence baseline;
+- [ ] explicit migration tests once project format changes after first hardware beta;
+- [ ] corrupted-on-device project recovery test on physical hardware.
 
 ---
 
-# Phase 13 — testing matrix
+# M8 — MIDI / editor protocol
 
-## DSP
-
-- golden render hashes
-- silence/DC checks
-- clipping checks
-- stress patterns
-- fixed-point overflow tests
-- filter stability tests
-
-## CPU
-
-Worst-case benchmark:
-
-- ACID1 continuous resonant slide
-- ACID2 continuous resonant slide
-- all 808 voices active
-- all 909 voices active
-- distortion + compressor + delay + limiter
-- UI update
-- incoming MIDI clock
-
-Keep headroom; do not ship at 99–100% theoretical budget.
-
-Current implementation adds two distinct gates:
-
-- host regression benchmark: `tests/bench_groovebox.c` runs both dense ACID engines, all 22 drum voices and master FX together; this is for commit-to-commit cost comparison only;
-- physical FM-1 gate: `tools/target_cpu_report.py` evaluates captured Felucca `felucca_dbg` timing and requires zero DMA `late` events with conservative sustained/peak margin below Felucca's 85% emergency shedding threshold.
-
-See `docs/TARGET_CPU_PROFILING.md`. A host `realtime_x` number must never be treated as an FM-1 CPU percentage.
-
-## Storage
-
-- interrupted write simulation
-- corrupted CRC
-- invalid format version
-- full pattern banks
-- zero/out-of-range mixer delay state must be normalized before delay-buffer indexing
-
-## Installer
-
-- wrong MIDI device
-- disconnected device
-- corrupt package
-- truncated package
-- wrong product ID
-- timeout at every update phase
-- retry without destructive duplicate erase
+- [x] CH1 ACID A;
+- [x] CH2 ACID B;
+- [x] CH3 808;
+- [x] CH4 909;
+- [x] CH10 selected drum target;
+- [x] notes;
+- [x] program/pattern change;
+- [x] major ACID CC controls;
+- [x] mixer level/pan/delay/reverb/mute/solo CC controls;
+- [x] panic/all-notes-off path;
+- [ ] compact ReFm SysEx state/editor protocol;
+- [ ] pattern dump/restore;
+- [ ] project dump/restore;
+- [ ] transport controls in browser editor;
+- [ ] state subscription/readback.
 
 ---
 
-# Phase 14 — first hardware bring-up
+# M9 — Browser/WASM reference
 
-The first hardware milestone should be deliberately minimal.
-
-Build profile:
-
-- one ACID engine
-- no sample assets
-- no experimental flash layout changes
-- inherited Felucca update loader
-- simple UI
-- audio output
-- USB MIDI
-
-Bring-up sequence:
-
-1. run complete host test suite;
-2. run emulator;
-3. verify linker/map report;
-4. generate package + SHA256;
-5. run installer `--info` only;
-6. confirm recovery resources are available;
-7. flash one known test FM-1;
-8. verify boot/display/audio/buttons/USB;
-9. return to official firmware/Felucca and verify recovery path;
-10. only then expand device tests.
-
-Never test a new loader and new application image simultaneously.
+- [x] shared sequencer/groovebox core;
+- [x] WebAudio output;
+- [x] AudioWorklet consumer;
+- [x] ReBirth-inspired original rack UI;
+- [x] dual ACID panels;
+- [x] 808/909 grids;
+- [x] sample audition;
+- [x] FX board;
+- [x] pattern JSON import/export;
+- [x] deterministic render tests;
+- [ ] move WASM rendering fully off the main thread;
+- [ ] merge the transitional timing overlay cleanly into the main rack code;
+- [ ] add objective js303/Open303 comparison renders to CI;
+- [ ] eventually consolidate the WASM rack and direct hardware editor into one polished application.
 
 ---
 
-# Initial milestone order
+# Release / GitHub
 
-## M0 — safe baseline
-- Felucca base imported
-- licensing/provenance preserved
-- clean build
-- emulator works
-- tests green
-
-## M1 — Acid prototype
-- one acid engine
-- 16-step note/accent/slide sequencer
-- emulator demo
-- golden DSP tests
-
-## M2 — Twin acid
-- two independent acid engines
-- mixer
-- MIDI channels 1/2
-
-## M3 — 808
-- synthesized 808-style kit
-- drum step UI
-
-## M4 — 909
-- synthesized/sample hybrid 909-style kit
-- approved open assets only
-
-## M5 — complete groovebox
-- song mode
-- mixer
-- effects
-- save/load
-- MIDI sync
-
-## M6 — hardware beta
-- safe installer preflight
-- package verification
-- documented recovery
-- experimental hardware test
-
-## M7 — editor
-- Web MIDI editor
-- offline WASM instrument
-
----
-
-# Definition of done for v1.0
-
-- [ ] 2 acid machines playable and sequenced independently;
-- [ ] 808 and 909 machine sections run simultaneously;
-- [ ] stable 44.1 kHz output with comfortable CPU headroom;
-- [ ] pattern + song modes;
-- [ ] swing, accent, slide, probability;
-- [ ] mixer and essential effects;
-- [ ] USB MIDI + TRS MIDI clock/input;
-- [ ] USB audio still works;
-- [ ] save/load projects;
-- [ ] browser emulator;
-- [ ] complete host/regression test suite;
-- [ ] all bundled samples have auditable open licenses;
-- [ ] release includes hashes and provenance;
-- [ ] safe installer refuses mismatched/corrupt packages;
-- [ ] documented recovery/return-to-official path;
-- [ ] no known flash/RAM/stack/CPU budget violations.
-
----
-
-# Current implementation checkpoint — 2026-10-08
-
-Implemented in the active `main` line:
-
-- pinned Felucca overlay with reproducible JieLi/AC79 GitHub target build;
-- two ACID engines, two 11-voice drum machines, A–H pattern banks, song, MIDI, persistence and four-track mixer/FX;
-- browser/WASM hardware-rack editor with x0x-style ACID note programming, dual 808/909 grids, per-lane sample/synth routing and real mixer/master-FX controls;
-- Open303-informed 303 signal path with measured cutoff/env mapping, 44.486 Hz pre-ladder HPF, four-stage nonlinear ladder, 150 Hz feedback HPF, 24 Hz post conditioning and 200 Hz two-stage gain de-click;
-- Open303-informed VCA articulation coupling (~0.45× main envelope plus accent-scaled envelope gain) and tests for stock-style slide/accent timing;
-- deterministic current groovebox audio fingerprint `93117892d0a0d7a7`;
-- defensive mixer delay-length normalization discovered by the new full-system stress benchmark;
-- host four-machine stress benchmark baseline around 97× realtime on the GitHub x86 runner; this is a regression number, not target proof;
-- physical CPU/underrun report tooling based on Felucca `felucca_dbg` with zero-late and conservative sustained/peak acceptance limits;
-- static XIP/RAM/pool gates and separate target sample link-size experiments.
-
-Still blocking physical beta:
-
-- physical FM-1 CPU/underrun capture under the exact four-machine stress pattern plus UI/MIDI interaction;
-- runtime stack watermark under worst-case load;
-- controlled listening/reference A/B of oscillator level, resonance, accent/VCA and slide against Open303/js303 references;
-- compact physical mixer/song/drum/ACID note UI and physical project save/load controls;
-- final Worker/AudioWorklet browser timing architecture;
-- recovery preparation and a controlled first hardware installation.
+- [x] normal main builds publish temporary Actions artifacts;
+- [x] hardware-test/v* tag builds can publish GitHub Releases;
+- [x] release contains `.fwsc`, app binary, OTA binary, manifest, checksums and memory report;
+- [x] hardware-test/alpha/beta/rc tags are prereleases;
+- [x] browser app can fetch a released `.fwsc`;
+- [ ] publish first `hardware-test-*` tag only after the exact tagged CI run is green;
+- [ ] optionally register a later proven release with the public FM-1 Firmware Hub.
 
 ---
 
 # Immediate next tasks
 
-1. Complete one clean GitHub host/WASM/JieLi build at the current Open303-coupled DSP baseline and record the new target-memory numbers/artifacts.
-2. Build a repeatable reference-render comparison set for normal note, accent, slide, accent+slide, low-cutoff envelope and high-resonance cases; do not add further analog coloration without evidence from those comparisons.
-3. Add a practical capture path for the physical Felucca `felucca_dbg` snapshot and run `tools/target_cpu_report.py` on a real FM-1 before calling CPU headroom proven.
-4. Implement a runtime stack-watermark diagnostic/gate for the FM-1 target.
-5. Transfer the browser x0x ACID programming workflow plus mixer/drum/song/project controls to the compact physical FM-1 UI.
-6. Finish the Worker/AudioWorklet architecture and then grow the browser rack into the full React/Web MIDI editor.
-7. Keep target drum samples opt-in until listening approval and repeat the XIP/CPU gates for any sample set considered for firmware.
+1. **Finish/validate the integrated installer/editor build** and deploy it through GitHub Pages.
+2. **Replace the stale Felucca ACID ADSR/LFO physical pages** with real ReFm ACID main + step-write pages.
+3. Add the remaining **drum, mixer, FX, song and project pages** for the 240×240 display.
+4. Add a **compact SysEx editor protocol** for pattern/state readback so the web editor can become bidirectional.
+5. Add a **runtime stack watermark** diagnostic and report it alongside `felucca_dbg`.
+6. Run the exact tagged target build and perform the **first controlled hardware installation** with recovery resources prepared.
+7. Capture physical CPU/underrun/stack data before enabling larger target FX buffers or target drum samples.
+8. Continue 303 sound calibration only through controlled A/B comparisons; avoid another speculative oscillator/filter rewrite.
+
+---
+
+# Definition of done for v1.0
+
+- [x] two independently playable/sequenced acid machines;
+- [x] 808 + 909 run simultaneously;
+- [x] pattern + song baseline;
+- [x] accent/slide/probability;
+- [x] mixer + essential FX baseline;
+- [x] browser emulator/reference;
+- [x] release hashes/provenance;
+- [x] safe loader-mediated installer foundation;
+- [ ] proven comfortable FM-1 CPU headroom;
+- [ ] proven runtime stack headroom;
+- [ ] complete physical 240×240 ReFm UI;
+- [ ] bidirectional browser hardware editor;
+- [ ] USB MIDI/TRS MIDI/USB audio verified on physical beta;
+- [ ] save/load verified on physical beta;
+- [ ] recovery/return-to-official proven on hardware;
+- [ ] all final bundled samples have auditable licenses;
+- [ ] no known flash/RAM/stack/CPU budget violations.
