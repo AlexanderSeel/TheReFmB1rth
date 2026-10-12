@@ -1,0 +1,183 @@
+name: Publish verified beta
+
+on:
+  workflow_run:
+    workflows: ["Build all artifacts"]
+    types: [completed]
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  publish:
+    name: Publish verified FM-1 beta
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out the exact verified commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Resolve one-shot beta request
+        id: beta
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [ ! -s .release-beta ]; then
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "No .release-beta marker on verified commit; nothing to publish."
+            exit 0
+          fi
+          TAG=$(tr -d '[:space:]' < .release-beta)
+          case "$TAG" in
+            v*-beta.*|v*-beta*) ;;
+            *) echo "Invalid beta tag in .release-beta: $TAG" >&2; exit 1 ;;
+          esac
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $TAG already exists; one-shot publisher is idempotent."
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "publish=true" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Download FM-1 artifact from the verified build
+        if: steps.beta.outputs.publish == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          gh run download "$RUN_ID" \
+            --repo "$GITHUB_REPOSITORY" \
+            --name "refm-fm1-experimental-$HEAD_SHA" \
+            --dir release
+
+      - name: Verify exact release payload again
+        if: steps.beta.outputs.publish == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s release/TheReFmB1rth-experimental.fwsc
+          test -s release/TheReFmB1rth-app.bin
+          test -s release/ota.bin
+          test -s release/manifest.json
+          test -s release/SHA256SUMS
+          test -s release/target-memory.json
+          (cd release && sha256sum -c SHA256SUMS)
+          python3 tools/release_manifest.py \
+            release/TheReFmB1rth-experimental.fwsc \
+            --verify release/manifest.json
+
+      - name: Prepare beta release notes
+        if: steps.beta.outputs.publish == 'true'
+        shell: bash
+        env:
+          TAG: ${{ steps.beta.outputs.tag }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          cat > release-notes.md <<EOF
+          ## TheReFmB1rth $TAG — first beta candidate
+
+          This is the first beta candidate produced after the initial physical FM-1 test exposed the control/UI integration problems in the earlier hardware-test build.
+
+          Built from commit \`$HEAD_SHA\` only after the exact commit passed host DSP/integration tests, WASM build, JieLi FM-1 target build, target memory budgets, package manifest/checksum verification and the target sample link-size experiment.
+
+          ### Hardware workflow in this beta
+          - dedicated 240×240 ReFm pages: **HOME / ACID / STEP / DRUM / MIXER / FX / SONG / PROJECT**
+          - physical keyboard routed directly to the selected **ACID A / ACID B** engine
+          - physical **PLAY** starts/stops the ReFm sequencer rather than Felucca's old sequencer
+          - fresh Pattern A contains a small audible factory demonstration so PLAY is immediately testable
+          - simple four-knob page mappings shown directly on the LCD
+          - 16-step ACID editing with NOTE / REST / TIE, Accent, Slide and probability
+          - 808/909 lane editing with OFF / HIT / ACCENT
+          - mixer level/pan/delay/reverb editing plus mute/solo
+          - master drive/delay/reverb/filter editing
+          - four project save/load slots using Felucca's CRC-checked A/B storage
+          - held-note panic when changing into editor pages or switching machine
+          - target-only idle ACID fast path to reduce wasted CPU while voices are silent
+          - browser installer/editor and browser-safe firmware channel
+
+          ### Install asset
+          - \`TheReFmB1rth-experimental.fwsc\`
+
+          ### Diagnostics / verification
+          - \`SHA256SUMS\`
+          - \`manifest.json\`
+          - \`target-memory.json\`
+          - \`refm-overlay.txt\`
+          - \`refm-ui-overlay.txt\`
+
+          ### Beta status
+          This build is **software-gated beta firmware, not yet hardware-proven stable firmware**. It still requires the second physical FM-1 validation pass: sustained audio/CPU/late-buffer measurements, UI/keys/transport, USB + TRS MIDI, USB audio, project save/load and rollback/recovery.
+
+          Keep the known-good V15/recovery path available while testing.
+          EOF
+
+      - name: Create beta release from exact verified commit
+        if: steps.beta.outputs.publish == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.beta.outputs.tag }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          gh release create "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$HEAD_SHA" \
+            --title "TheReFmB1rth $TAG" \
+            --notes-file release-notes.md \
+            --prerelease \
+            release/TheReFmB1rth-experimental.fwsc \
+            release/TheReFmB1rth-app.bin \
+            release/ota.bin \
+            release/manifest.json \
+            release/SHA256SUMS \
+            release/target-memory.json \
+            release/refm-overlay.txt \
+            release/refm-ui-overlay.txt
+
+      - name: Publish CORS-safe beta firmware channel
+        if: steps.beta.outputs.publish == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.beta.outputs.tag }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          ASSET=TheReFmB1rth-experimental.fwsc
+          SHA=$(sha256sum "release/$ASSET" | awk '{print $1}')
+          SIZE=$(stat -c %s "release/$ASSET")
+          CHANNEL="$RUNNER_TEMP/firmware-channel"
+          rm -rf "$CHANNEL"
+          mkdir -p "$CHANNEL"
+          cp "release/$ASSET" "$CHANNEL/$ASSET"
+          python3 - "$CHANNEL/latest.json" "$TAG" "$HEAD_SHA" "$ASSET" "$SHA" "$SIZE" <<'PY'
+          import json,sys
+          out,tag,commit,asset,sha,size=sys.argv[1:]
+          with open(out,'w',encoding='utf-8') as f:
+              json.dump({'tag':tag,'commit':commit,'asset':asset,'sha256':sha,'bytes':int(size)},f,indent=2,sort_keys=True)
+              f.write('\n')
+          PY
+          cd "$CHANNEL"
+          git init
+          git checkout --orphan firmware-channel
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add "$ASSET" latest.json
+          git commit -m "publish browser firmware $TAG"
+          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git push --force origin firmware-channel
