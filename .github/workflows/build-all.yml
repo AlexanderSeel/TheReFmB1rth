@@ -68,7 +68,9 @@ jobs:
           grep -q "_refm_wasm_enable_samples" build/wasm/refm.js
           grep -q "_refm_wasm_set_acid_wave" build/wasm/refm.js
       - name: Record checksums
-        run: sha256sum build/wasm/index.html build/wasm/worklet.html build/wasm/worklet_client.js build/wasm/refm_audio_worklet.js build/wasm/refm.js build/wasm/refm.wasm build/wasm/sample_controls.js build/wasm/fx_board.js build/wasm/rebirth_skin.css build/wasm/rebirth_skin.js build/wasm/sample-manifest.json build/wasm/sample-lock.json build/wasm/target-sample-budget.json > build/wasm/SHA256SUMS
+        run: |
+          cd build/wasm
+          sha256sum index.html worklet.html worklet_client.js refm_audio_worklet.js refm.js refm.wasm sample_controls.js fx_board.js rebirth_skin.css rebirth_skin.js sample-manifest.json sample-lock.json target-sample-budget.json > SHA256SUMS
       - uses: actions/upload-artifact@v4
         with:
           name: refm-wasm-${{ github.sha }}
@@ -151,7 +153,11 @@ jobs:
           cp .upstream/felucca/.refm-ui-overlay build/target/refm-ui-overlay.txt
           python3 tools/release_manifest.py build/target/TheReFmB1rth-experimental.fwsc --commit "${GITHUB_SHA}" --output build/target/manifest.json
           python3 tools/release_manifest.py build/target/TheReFmB1rth-experimental.fwsc --verify build/target/manifest.json
-          sha256sum build/target/TheReFmB1rth-experimental.fwsc build/target/TheReFmB1rth-app.bin build/target/ota.bin > build/target/SHA256SUMS
+          (
+            cd build/target
+            sha256sum TheReFmB1rth-experimental.fwsc TheReFmB1rth-app.bin ota.bin > SHA256SUMS
+            sha256sum -c SHA256SUMS
+          )
       - name: Prepare conservative sample link-size experiment
         run: |
           python3 tools/fetch_samples.py
@@ -225,6 +231,8 @@ jobs:
         run: |
           set -euo pipefail
           test -s release/TheReFmB1rth-experimental.fwsc
+          test -s release/TheReFmB1rth-app.bin
+          test -s release/ota.bin
           test -s release/manifest.json
           test -s release/SHA256SUMS
           test -s release/target-memory.json
@@ -235,14 +243,26 @@ jobs:
         run: |
           set -euo pipefail
           cat > release-notes.md <<EOF
-          ## TheReFmB1rth FM-1 hardware build
+          ## TheReFmB1rth ${GITHUB_REF_NAME}
 
-          **Experimental hardware firmware. First physical tests should be treated as a beta.**
+          **Experimental FM-1 hardware-test firmware. Keep a known-good recovery path available before flashing.**
 
-          Built from commit \`${GITHUB_SHA}\` using the pinned Felucca/JieLi toolchain and the repository's target memory and manifest verification gates.
+          Built from commit \`${GITHUB_SHA}\` using the pinned Felucca/JieLi toolchain. The package passed the repository's host DSP tests, target build, target memory budget and release-manifest/checksum verification before publication.
+
+          ### Included
+          - ACID A + ACID B 303-style engines
+          - SAW / SQUARE, cutoff, resonance, Env Mod, decay and accent
+          - per-ACID distortion
+          - 16-step sequencing with NOTE / REST / TIE, Accent and Slide
+          - 808 + 909-inspired drum engines
+          - A-H pattern bank and song sequencing
+          - mixer, delay and reverb sends
+          - MIDI control and live web-editor integration
+          - compact 240x240 FM-1 UI work in progress
+          - browser installer support for this release asset
 
           ### Install asset
-          - \`TheReFmB1rth-experimental.fwsc\` — FM-1 update package
+          - \`TheReFmB1rth-experimental.fwsc\` — FM-1 update package used by the web installer
 
           ### Verification / diagnostics
           - \`SHA256SUMS\`
@@ -251,7 +271,8 @@ jobs:
           - \`refm-overlay.txt\`
           - \`refm-ui-overlay.txt\`
 
-          Keep a known-good recovery path available before flashing experimental firmware.
+          ### Hardware-test status
+          This remains an experimental hardware build. Do not treat it as a stable release until physical FM-1 CPU/underrun, UI, MIDI, persistence and recovery tests have passed.
           EOF
 
       - name: Publish release assets
