@@ -47,7 +47,7 @@ def patch_main(dst: Path) -> None:
         main,
         "extern uint32_t _pool_start[], _pool_end[], _rt_start[], _rt_end[], _rt_load[];\n",
         "extern uint32_t _pool_start[], _pool_end[], _rt_start[], _rt_end[], _rt_load[];\n"
-        "extern uint32_t _ustack_lo[], _ustack_top[], _sstack_lo[], _sstack_top[];\n",
+        "extern char _ustack_top[];\n",
     )
 
     helper_anchor = "/* power-on: the parts with their default sounds (TRK_DEF); the sequencers empty */\n"
@@ -80,9 +80,9 @@ static void refm_stack_watermark_init(void)
     stop &= ~(uintptr_t)3u;
     refm_ustack_fill_end = (uint32_t *)stop;
 
-    for (p = _ustack_lo; p < refm_ustack_fill_end; ++p)
+    for (p = (uint32_t *)(void *)_ustack_lo; p < refm_ustack_fill_end; ++p)
         *p = REFM_STACK_FILL;
-    for (p = _sstack_lo; p < _sstack_top; ++p)
+    for (p = (uint32_t *)(void *)_sstack_lo; p < (uint32_t *)(void *)_sstack_top; ++p)
         *p = REFM_STACK_FILL;
 }
 
@@ -96,8 +96,8 @@ static uint32_t refm_stack_first_dirty(uint32_t *lo, uint32_t *hi)
 
 static void refm_stack_watermark_update(void)
 {
-    uint32_t u_dirty = refm_stack_first_dirty(_ustack_lo, refm_ustack_fill_end);
-    uint32_t s_dirty = refm_stack_first_dirty(_sstack_lo, _sstack_top);
+    uint32_t u_dirty = refm_stack_first_dirty((uint32_t *)(void *)_ustack_lo, refm_ustack_fill_end);
+    uint32_t s_dirty = refm_stack_first_dirty((uint32_t *)(void *)_sstack_lo, (uint32_t *)(void *)_sstack_top);
     uint32_t u_lo = (uint32_t)(uintptr_t)_ustack_lo;
     uint32_t u_top = (uint32_t)(uintptr_t)_ustack_top;
     uint32_t s_lo = (uint32_t)(uintptr_t)_sstack_lo;
