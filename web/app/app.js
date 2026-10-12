@@ -1,5 +1,6 @@
 import { inspectPackage } from './fm1pkg.js';
 import { Updater } from './fm1ota.js';
+import { installReadback } from './readback.js';
 
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
@@ -159,4 +160,5 @@ $('#stepSlide').addEventListener('click',()=>{const s=currentAcidStep();s.slide=
 const voiceSelect=$('#voiceSelect');drumMap.forEach(([name],i)=>{const b=document.createElement('button');b.textContent=name;b.addEventListener('click',()=>{state.selectedVoice=i;cc(104,i);refreshSequencer();});voiceSelect.appendChild(b);});
 $$('#drumStates button').forEach(b=>b.addEventListener('click',()=>{state.drumPatterns[state.machine-2][state.pattern][state.selectedStep][state.selectedVoice]=Number(b.dataset.drumState);pushDrumStep();refreshSequencer();}));
 
+installReadback({state,refreshSequencer,ensureMidi,setMidiStatus});
 updateUnlock();refreshSequencer();
