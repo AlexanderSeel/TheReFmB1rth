@@ -225,10 +225,14 @@ void ui240_edit_mixer(ui240_state_t *ui, groovebox_t *g, uint8_t slot, int8_t de
     else if (slot == 1u) t->pan = add_s16(t->pan, delta, 2048, -32767, 32767);
     else if (slot == 2u) {
         int n = (int)t->delay_send + (delta > 0 ? 4 : -4);
-        if (n < 0) n = 0; if (n > 127) n = 127; t->delay_send = (uint8_t)n;
+        if (n < 0) n = 0;
+        if (n > 127) n = 127;
+        t->delay_send = (uint8_t)n;
     } else if (slot == 3u) {
         int n = (int)t->reverb_send + (delta > 0 ? 4 : -4);
-        if (n < 0) n = 0; if (n > 127) n = 127; t->reverb_send = (uint8_t)n;
+        if (n < 0) n = 0;
+        if (n > 127) n = 127;
+        t->reverb_send = (uint8_t)n;
     }
 }
 
