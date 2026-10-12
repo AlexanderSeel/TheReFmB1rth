@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>TheReFmB1rth FM-1</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <div class="eyebrow">M-VAVE FM-1</div>
+      <h1>TheReFmB1rth</h1>
+    </div>
+    <div class="status" id="midiStatus">MIDI OFFLINE</div>
+  </header>
+
+  <nav class="tabs" aria-label="App pages">
+    <button class="tab active" data-tab="installer">INSTALLER</button>
+    <button class="tab" data-tab="editor">LIVE EDITOR</button>
+  </nav>
+
+  <main>
+    <section id="installer" class="page active">
+      <div class="hero card">
+        <div>
+          <div class="eyebrow">HARDWARE TEST</div>
+          <h2>Install a verified FM-1 firmware package</h2>
+          <p>Uses the loader-mediated Web MIDI update flow inherited from Felucca. No direct raw-flash writer is used.</p>
+        </div>
+        <button id="connectInstall" class="primary">CONNECT FM-1</button>
+      </div>
+
+      <div class="grid two">
+        <article class="card">
+          <h3>1 · Firmware</h3>
+          <div class="drop" id="dropZone">
+            <input id="fwFile" type="file" accept=".fwsc,application/octet-stream" />
+            <strong>Choose or drop .fwsc</strong>
+            <span>or load the newest GitHub hardware-test release</span>
+          </div>
+          <button id="loadRelease" class="secondary wide">LOAD LATEST GITHUB RELEASE</button>
+          <dl class="meta">
+            <div><dt>Identity</dt><dd id="pkgProduct">—</dd></div>
+            <div><dt>Size</dt><dd id="pkgSize">—</dd></div>
+            <div><dt>SHA-256</dt><dd id="pkgSha">—</dd></div>
+          </dl>
+        </article>
+
+        <article class="card">
+          <h3>2 · Device & safety</h3>
+          <div class="deviceBox">
+            <span class="lamp" id="deviceLamp"></span>
+            <div><strong id="deviceIdentity">No FM-1 detected</strong><small id="devicePort">Connect through Chrome/Edge Web MIDI</small></div>
+          </div>
+          <label class="check"><input id="riskCheck" type="checkbox" /> I understand this is experimental firmware and recovery may require FM-1-transporter.</label>
+          <label class="field"><span>Type to unlock</span><input id="confirmText" autocomplete="off" placeholder="FLASH THE FM-1" /></label>
+          <button id="installBtn" class="danger wide" disabled>INSTALL FIRMWARE</button>
+          <button id="resumeBtn" class="secondary wide" disabled>RESUME OTA LOADER</button>
+          <div class="progress"><div id="progressBar"></div></div>
+          <pre id="installLog" class="log">Ready.</pre>
+        </article>
+      </div>
+    </section>
+
+    <section id="editor" class="page">
+      <div class="hero card compact">
+        <div><div class="eyebrow">DIRECT WEB MIDI</div><h2>Live hardware editor</h2><p>Changes are sent immediately to the connected FM-1.</p></div>
+        <button id="connectEditor" class="primary">CONNECT EDITOR</button>
+      </div>
+
+      <div class="machineTabs">
+        <button class="machine active" data-machine="0">ACID A</button>
+        <button class="machine" data-machine="1">ACID B</button>
+        <button class="machine" data-machine="2">808</button>
+        <button class="machine" data-machine="3">909</button>
+      </div>
+
+      <article class="card rack acidPanel" id="acidPanel">
+        <div class="rackHead"><div><span id="acidName">ACID A</span><small>303-style live controls</small></div><div class="waveSwitch"><button data-wave="0" class="active">SAW</button><button data-wave="1">SQUARE</button></div></div>
+        <div class="controls">
+          <label>CUTOFF<input class="knob" data-cc="74" type="range" min="0" max="127" value="64"><output>64</output></label>
+          <label>RESONANCE<input class="knob" data-cc="71" type="range" min="0" max="127" value="30"><output>30</output></label>
+          <label>ENV MOD<input class="knob" data-cc="1" type="range" min="0" max="127" value="64"><output>64</output></label>
+          <label>DECAY<input class="knob" data-cc="73" type="range" min="0" max="127" value="64"><output>64</output></label>
+          <label>ACCENT<input class="knob" data-cc="75" type="range" min="0" max="127" value="64"><output>64</output></label>
+          <label>DISTORTION<input class="knob" data-cc="76" type="range" min="0" max="127" value="0"><output>0</output></label>
+        </div>
+        <div class="keyboard" id="keyboard"></div>
+      </article>
+
+      <article class="card rack mixerPanel">
+        <div class="rackHead"><div><span>MIXER / SENDS</span><small id="mixTrackName">ACID A</small></div></div>
+        <div class="controls mixerControls">
+          <label>LEVEL<input data-cc="7" type="range" min="0" max="127" value="110"><output>110</output></label>
+          <label>PAN<input data-cc="10" type="range" min="0" max="127" value="64"><output>64</output></label>
+          <label>DELAY<input data-cc="94" type="range" min="0" max="127" value="0"><output>0</output></label>
+          <label>REVERB<input data-cc="91" type="range" min="0" max="127" value="0"><output>0</output></label>
+        </div>
+        <div class="toggles"><button data-toggle-cc="120">MUTE</button><button data-toggle-cc="119">SOLO</button></div>
+      </article>
+
+      <article class="card patternPanel">
+        <div class="rackHead"><div><span>PATTERN</span><small>A–H</small></div></div>
+        <div class="patterns" id="patterns"></div>
+      </article>
+
+      <article class="card drumPanel hidden" id="drumPanel">
+        <div class="rackHead"><div><span id="drumName">808</span><small>audition pads</small></div></div>
+        <div class="pads" id="drumPads"></div>
+      </article>
+    </section>
+  </main>
+  <footer>Experimental hardware tool · Chromium Web MIDI + SysEx required · GPL-3.0-only</footer>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
