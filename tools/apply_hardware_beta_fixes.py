@@ -27,9 +27,6 @@ def main() -> int:
     if not (root / ".refm-overlay").is_file():
         raise SystemExit("apply ReFm overlay before hardware beta fixes")
 
-    # The physical keyboard stays on Felucca's proven key scanner/debounce, but
-    # its note edges are routed to the currently selected ReFm ACID machine.
-    # Editor pages deliberately suppress NOTE ON while always forwarding NOTE OFF.
     seq = root / "firmware" / "src" / "seq.c"
     replace_once(
         seq,
@@ -54,8 +51,6 @@ def main() -> int:
         "    }\n"
     )
 
-    # Stop pretending Felucca ENV/LFO pages are ReFm pages. The beta takes over
-    # the panel below; this cleanup keeps the fallback integration semantically safe.
     ui = root / "firmware" / "src" / "ui_input.c"
     replace_once(
         ui,
@@ -77,8 +72,6 @@ def main() -> int:
         "        else switch (pg->graph) {\n"
     )
 
-    # Full beta panel takeover. The printed FM-1 labels are reused as memorable
-    # shortcuts, while the LCD always explains the current four-knob mapping.
     input_helper = r'''extern void refm_felucca_ui_action(uint8_t action);
 extern void refm_felucca_ui_encoder(uint8_t encoder, int16_t delta);
 extern uint16_t refm_felucca_ui_value(uint8_t id);
@@ -88,25 +81,25 @@ static int refm_beta_input(uint32_t pressed)
     int32_t s;
     uint16_t page = refm_felucca_ui_value(0u);
 #define RB_HIT(lbl) ((pressed & (1u << panel.btn[(lbl)])) != 0u)
-    if (RB_HIT(B_HOME)) refm_felucca_ui_action(0u);       /* HOME */
-    if (RB_HIT(B_ENV))  refm_felucca_ui_action(1u);       /* ACID A */
-    if (RB_HIT(B_LFO))  refm_felucca_ui_action(2u);       /* ACID B */
-    if (RB_HIT(B_SEQ))  refm_felucca_ui_action(3u);       /* STEP */
-    if (RB_HIT(B_ARP))  refm_felucca_ui_action(4u);       /* DRUM / 808-909 */
-    if (RB_HIT(B_GLO))  refm_felucca_ui_action(5u);       /* MIXER */
-    if (RB_HIT(B_FX))   refm_felucca_ui_action(6u);       /* FX */
-    if (RB_HIT(B_SCL))  refm_felucca_ui_action(7u);       /* SONG */
-    if (RB_HIT(B_SAVE)) refm_felucca_ui_action(8u);       /* PROJECT */
-    if (RB_HIT(B_PLAY)) refm_felucca_ui_action(9u);       /* transport */
-    if (RB_HIT(B_EDIT)) refm_felucca_ui_action(10u);      /* context: wave/accent/hit/mute */
-    if (RB_HIT(B_REC))  refm_felucca_ui_action(11u);      /* alternate: slide/solo */
+    if (RB_HIT(B_HOME)) refm_felucca_ui_action(0u);
+    if (RB_HIT(B_ENV))  refm_felucca_ui_action(1u);
+    if (RB_HIT(B_LFO))  refm_felucca_ui_action(2u);
+    if (RB_HIT(B_SEQ))  refm_felucca_ui_action(3u);
+    if (RB_HIT(B_ARP))  refm_felucca_ui_action(4u);
+    if (RB_HIT(B_GLO))  refm_felucca_ui_action(5u);
+    if (RB_HIT(B_FX))   refm_felucca_ui_action(6u);
+    if (RB_HIT(B_SCL))  refm_felucca_ui_action(7u);
+    if (RB_HIT(B_SAVE)) refm_felucca_ui_action(8u);
+    if (RB_HIT(B_PLAY)) refm_felucca_ui_action(9u);
+    if (RB_HIT(B_EDIT)) refm_felucca_ui_action(10u);
+    if (RB_HIT(B_REC))  refm_felucca_ui_action(11u);
     if (RB_HIT(B_OCTDN)) {
-        if (page == 7u) refm_felucca_ui_action(12u);      /* project LOAD */
-        else refm_felucca_ui_encoder(5u, -1);             /* previous machine */
+        if (page == 7u) refm_felucca_ui_action(12u);
+        else refm_felucca_ui_encoder(5u, -1);
     }
     if (RB_HIT(B_OCTUP)) {
-        if (page == 7u) refm_felucca_ui_action(13u);      /* project SAVE */
-        else refm_felucca_ui_encoder(5u, 1);              /* next machine */
+        if (page == 7u) refm_felucca_ui_action(13u);
+        else refm_felucca_ui_encoder(5u, 1);
     }
 #undef RB_HIT
 
@@ -118,8 +111,6 @@ static int refm_beta_input(uint32_t pressed)
     if ((s = panel_enc(EN_ALGO)) != 0) refm_felucca_ui_encoder(5u, (int16_t)s);
     if ((s = panel_enc(EN_SELECT)) != 0) refm_felucca_ui_encoder(6u, (int16_t)s);
 
-    /* Felucca's own sequencer/record/page state stays stopped. ReFm owns the
-       audible transport and editor, which removes the double-engine mismatch. */
     song.grid = 0u;
     song.playing = 0u;
     song.rec = 0u;
@@ -137,9 +128,6 @@ static int refm_beta_input(uint32_t pressed)
         "    if (refm_beta_input(pressed)) { (void)notes; (void)now; (void)id; (void)b; (void)k; return; }\n"
     )
 
-    # A real page renderer replaces the old Felucca cards. It redraws only when
-    # the compact ReFm view changes, avoiding the lag from repainting 240x240 at
-    # every UI frame.
     draw = root / "firmware" / "src" / "ui_draw.c"
     renderer = r'''extern uint16_t refm_felucca_ui_value(uint8_t id);
 
@@ -296,8 +284,8 @@ static void draw_refm_beta(void)
 '''
     replace_once(
         draw,
-        "static void ui_draw_page(uint32_t counting);\nstatic void ui_draw(void)\n{\n",
-        renderer + "static void ui_draw_page(uint32_t counting);\nstatic void ui_draw(void)\n{\n"
+        "static void ui_draw(void)\n{\n",
+        renderer + "static void ui_draw(void)\n{\n"
     )
     replace_once(
         draw,
@@ -305,8 +293,6 @@ static void draw_refm_beta(void)
         "    style_apply();\n    draw_refm_beta();\n    return;\n"
     )
 
-    # Silent ACID voices were still evaluating the 2x ladder every sample. Once
-    # the release is fully idle that work is unnecessary on the FM-1.
     acid = root / "firmware" / "refm" / "proto" / "acid303.c"
     replace_once(
         acid,
