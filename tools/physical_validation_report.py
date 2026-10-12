@@ -9,6 +9,16 @@ import sys
 
 EXPECTED_SCHEMA = 1
 RUNTIME_SLOTS = ("factory", "stress")
+REQUIRED_CHECKS = (
+    "install",
+    "home", "acid", "step", "drum", "mixer", "fx", "song", "project",
+    "encoders", "keys", "transport",
+    "step_edit", "drum_edit",
+    "browser_sync", "project_backup", "project_restore",
+    "usb_midi", "trs_midi", "usb_audio",
+    "physical_save", "corrupt_recovery",
+    "rollback", "repeat_cycle",
+)
 
 
 def fail(msg: str) -> None:
@@ -35,9 +45,14 @@ def validate(report: dict, expected_tag: str | None = None, expected_commit: str
     checks = report.get("checks") or {}
     if not checks:
         fail("validation report contains no physical checks")
-    failed = sorted(k for k, v in checks.items() if (v or {}).get("status") == "fail")
-    pending = sorted(k for k, v in checks.items() if (v or {}).get("status") == "pending")
-    not_pass = sorted(k for k, v in checks.items() if (v or {}).get("status") != "pass")
+    missing_checks = sorted(set(REQUIRED_CHECKS) - set(checks))
+    unknown_checks = sorted(set(checks) - set(REQUIRED_CHECKS))
+    if missing_checks:
+        fail(f"validation report is incomplete; missing checks: {', '.join(missing_checks)}")
+
+    failed = sorted(k for k in REQUIRED_CHECKS if (checks.get(k) or {}).get("status") == "fail")
+    pending = sorted(k for k in REQUIRED_CHECKS if (checks.get(k) or {}).get("status") == "pending")
+    not_pass = sorted(k for k in REQUIRED_CHECKS if (checks.get(k) or {}).get("status") != "pass")
 
     runtime = report.get("runtime") or {}
     runtime_failures: list[str] = []
@@ -65,10 +80,11 @@ def validate(report: dict, expected_tag: str | None = None, expected_commit: str
     summary = {
         "pass": ready,
         "target": {k: target.get(k) for k in ("tag", "commit", "sha256", "asset", "bytes")},
-        "checks_total": len(checks),
+        "checks_total": len(REQUIRED_CHECKS),
         "checks_failed": failed,
         "checks_pending": pending,
         "checks_not_pass": not_pass,
+        "checks_unknown": unknown_checks,
         "runtime": runtime_summary,
         "runtime_failures": runtime_failures,
     }
