@@ -136,6 +136,21 @@ def patch_storage(dst: Path) -> None:
     replace_once(felucca, '#include "storage.c"\n', wrappers)
 
 
+def patch_editor_transfer(dst: Path) -> None:
+    editor = dst / "firmware" / "src" / "editor.c"
+    replace_once(
+        editor,
+        '#include "editor_backup.c"\n',
+        '#include "editor_backup.c"\n#include "../refm/integration/refm_editor_backup.h"\n',
+    )
+    replace_once(
+        editor,
+        '    if (ed_backup_handle(cmd, a, na)) { ed_send(); return; }\n',
+        '    if (ed_backup_handle(cmd, a, na)) { ed_send(); return; }\n'
+        '    if (refm_backup_handle(cmd, a, na)) { ed_send(); return; }\n',
+    )
+
+
 def patch_ui(dst: Path) -> None:
     ui_input = dst / "firmware" / "src" / "ui_input.c"
     replace_once(ui_input, "    *vp = (int16_t)v;\n    if (pg->scope != SC_GLOBAL) motion_capture(TSEL, (uint32_t)(vp - TSEL->p), *vp);\n", "    *vp = (int16_t)v;\n    if (song.sel < 2u) {\n        uint8_t rk = 0u;\n        if (pg->fam == FAM_ENV && pg->graph == GR_ADSR) rk = 1u;\n        else if (pg->fam == FAM_LFO && pg->graph == GR_LFO) rk = 2u;\n        else if (pg->fam == FAM_LFO && pg->id[slot] == P_LD_FLT) rk = 3u;\n        else if (pg->fam == FAM_EDIT && pg->id[slot] >= P_E0 && pg->id[slot] <= P_E3) rk = 4u;\n        if (rk) refm_felucca_ui_param(song.sel, rk, (uint8_t)slot, *vp);\n    }\n    if (pg->scope != SC_GLOBAL) motion_capture(TSEL, (uint32_t)(vp - TSEL->p), *vp);\n")
@@ -164,7 +179,7 @@ def patch_build(dst: Path) -> None:
 
 
 def write_stamp(dst: Path) -> None:
-    files = [dst / "firmware" / "src" / "audio.c", dst / "firmware" / "src" / "usb.c", dst / "firmware" / "src" / "felucca.c", dst / "firmware" / "src" / "ui_input.c", dst / "firmware" / "src" / "ui_graph.c", dst / "tools" / "build.py", dst / "firmware" / "refm" / "sources.txt"]
+    files = [dst / "firmware" / "src" / "audio.c", dst / "firmware" / "src" / "usb.c", dst / "firmware" / "src" / "felucca.c", dst / "firmware" / "src" / "editor.c", dst / "firmware" / "src" / "ui_input.c", dst / "firmware" / "src" / "ui_graph.c", dst / "tools" / "build.py", dst / "firmware" / "refm" / "sources.txt", dst / "firmware" / "refm" / "integration" / "refm_editor_backup.h"]
     h = hashlib.sha256()
     for path in files:
         h.update(path.relative_to(dst).as_posix().encode())
@@ -184,6 +199,7 @@ def main() -> int:
     patch_audio(dst)
     patch_midi(dst)
     patch_storage(dst)
+    patch_editor_transfer(dst)
     patch_ui(dst)
     patch_build(dst)
     write_stamp(dst)
