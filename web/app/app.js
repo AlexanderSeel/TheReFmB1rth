@@ -6,6 +6,8 @@ const $$ = s => [...document.querySelectorAll(s)];
 const machineNames=['ACID A','ACID B','808','909'];
 const channels=[0,1,2,3];
 const drumMap=[['BD',36],['SD',38],['CP',39],['RS',37],['CH',42],['OH',46],['LT',41],['MT',45],['HT',48],['CR',49],['RD',51]];
+const RELEASES_API='https://api.github.com/repos/AlexanderSeel/TheReFmB1rth/releases?per_page=20';
+const CHANNEL_ROOT='https://raw.githubusercontent.com/AlexanderSeel/TheReFmB1rth/firmware-channel';
 const state = {
   access:null, updater:null, pkg:null, editorOut:null, machine:0, note:null,
   pattern:0, selectedStep:0, selectedVoice:0,
@@ -17,6 +19,7 @@ function log(msg){const el=$('#installLog');el.textContent += `\n${new Date().to
 function setMidiStatus(text,on=false){const e=$('#midiStatus');e.textContent=text;e.classList.toggle('online',on);}
 function updateUnlock(){const ok=!!state.pkg&&!!state.access&&$('#riskCheck').checked&&$('#confirmText').value.trim()==='FLASH THE FM-1';$('#installBtn').disabled=!ok;$('#resumeBtn').disabled=!ok;}
 function fmtBytes(n){return n>1024*1024?`${(n/1024/1024).toFixed(2)} MB`:`${(n/1024).toFixed(1)} KB`;}
+async function sha256Hex(bytes){const digest=await crypto.subtle.digest('SHA-256',bytes);return [...new Uint8Array(digest)].map(x=>x.toString(16).padStart(2,'0')).join('');}
 
 $$('.tab').forEach(b=>b.addEventListener('click',()=>{ $$('.tab').forEach(x=>x.classList.remove('active')); b.classList.add('active'); $$('.page').forEach(x=>x.classList.remove('active')); $('#'+b.dataset.tab).classList.add('active'); }));
 
@@ -32,40 +35,35 @@ async function loadPackage(bytes,source){
   log(`Package loaded from ${source}: ${pkg.product}, SHA-256 ${pkg.sha256}`);updateUnlock();
 }
 
-async function downloadReleaseAsset(asset){
-  // Do not fetch browser_download_url from JavaScript: github.com release downloads
-  // do not expose CORS headers to localhost/GitHub Pages. The REST asset endpoint does.
-  const apiUrl=asset.url || `https://api.github.com/repos/AlexanderSeel/TheReFmB1rth/releases/assets/${asset.id}`;
-  const response=await fetch(apiUrl,{
-    headers:{
-      Accept:'application/octet-stream',
-      'X-GitHub-Api-Version':'2022-11-28'
-    },
-    redirect:'follow'
-  });
-  if(!response.ok)throw new Error(`Firmware asset API ${response.status}`);
-  const type=(response.headers.get('content-type')||'').toLowerCase();
-  if(type.includes('application/json')){
-    const text=await response.text();
-    throw new Error(`GitHub returned asset metadata instead of firmware (${text.slice(0,120)})`);
-  }
-  return new Uint8Array(await response.arrayBuffer());
-}
-
 $('#fwFile').addEventListener('change',async e=>{const f=e.target.files?.[0];if(!f)return;try{await loadPackage(new Uint8Array(await f.arrayBuffer()),f.name);}catch(err){log(`PACKAGE ERROR: ${err.message}`);state.pkg=null;updateUnlock();}});
 const drop=$('#dropZone');drop.addEventListener('dragover',e=>{e.preventDefault();drop.classList.add('drag');});drop.addEventListener('dragleave',()=>drop.classList.remove('drag'));drop.addEventListener('drop',async e=>{e.preventDefault();drop.classList.remove('drag');const f=e.dataTransfer.files?.[0];if(!f)return;try{await loadPackage(new Uint8Array(await f.arrayBuffer()),f.name);}catch(err){log(`PACKAGE ERROR: ${err.message}`);}});
 
 $('#loadRelease').addEventListener('click',async()=>{
   const btn=$('#loadRelease');btn.disabled=true;btn.textContent='LOADING…';
   try{
-    const rs=await fetch('https://api.github.com/repos/AlexanderSeel/TheReFmB1rth/releases?per_page=20',{headers:{Accept:'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28'}});
+    const rs=await fetch(RELEASES_API,{headers:{Accept:'application/vnd.github+json'}});
     if(!rs.ok)throw new Error(`GitHub API ${rs.status}`);
     const releases=await rs.json();
     let found=null;
     for(const r of releases){if(r.draft)continue;const asset=r.assets?.find(a=>/\.fwsc$/i.test(a.name));if(asset){found={r,asset};break;}}
     if(!found)throw new Error('No GitHub Release containing a .fwsc asset was found.');
-    log(`Downloading ${found.asset.name} from release ${found.r.tag_name}…`);
-    const bytes=await downloadReleaseAsset(found.asset);
+
+    log(`Latest firmware release is ${found.r.tag_name}; checking browser channel mirror…`);
+    const bust=`?v=${encodeURIComponent(found.r.tag_name)}-${Date.now()}`;
+    const mr=await fetch(`${CHANNEL_ROOT}/latest.json${bust}`,{cache:'no-store'});
+    if(!mr.ok)throw new Error(`Browser firmware channel is not available yet (${mr.status}). Publish a new hardware-test release or choose the .fwsc locally.`);
+    const meta=await mr.json();
+    if(meta.tag!==found.r.tag_name)throw new Error(`Browser channel is ${meta.tag||'unknown'} but latest GitHub release is ${found.r.tag_name}. Wait for the release workflow to finish or choose the .fwsc locally.`);
+    if(meta.asset!==found.asset.name)throw new Error(`Browser channel asset mismatch: ${meta.asset||'unknown'}.`);
+    if(!/^[0-9a-f]{64}$/i.test(meta.sha256||''))throw new Error('Browser channel metadata has an invalid SHA-256.');
+
+    log(`Downloading ${meta.asset} from browser-safe firmware channel…`);
+    const fw=await fetch(`${CHANNEL_ROOT}/${encodeURIComponent(meta.asset)}${bust}`,{cache:'no-store'});
+    if(!fw.ok)throw new Error(`Firmware channel download ${fw.status}`);
+    const bytes=new Uint8Array(await fw.arrayBuffer());
+    const actual=await sha256Hex(bytes);
+    if(actual.toLowerCase()!==meta.sha256.toLowerCase())throw new Error(`Firmware mirror SHA-256 mismatch (${actual}).`);
+    log(`Mirror verified: SHA-256 ${actual}`);
     await loadPackage(bytes,`GitHub ${found.r.tag_name}`);
   }catch(err){log(`RELEASE ERROR: ${err.message}`);}finally{btn.disabled=false;btn.textContent='LOAD LATEST GITHUB RELEASE';}
 });
