@@ -2,9 +2,9 @@
 # SPDX-License-Identifier: GPL-3.0-only
 """Apply the compact ReFm visual layer and physical-hardware beta integration.
 
-The initial overlay still adds the 16 grouped step lamps expected by the host
-contract, then the hardware-beta patch takes over the normal 240x240 page and
-panel workflow with dedicated ReFm screens and controls.
+The original compatibility layer is still identified as compact-rebirth-inspired
+for provenance/tests, but the hardware-beta patch now takes over the normal
+240x240 page and panel workflow with dedicated ReFm screens and controls.
 """
 from __future__ import annotations
 import argparse, hashlib, subprocess, sys
@@ -48,7 +48,7 @@ def main() -> int:
     ):
         h.update(path.read_bytes())
     (root / ".refm-ui-overlay").write_text(
-        f"style=refm-hardware-beta\nsha256={h.hexdigest()}\n"
+        f"style=compact-rebirth-inspired+refm-hardware-beta\nsha256={h.hexdigest()}\n"
     )
     print("FM-1 dedicated ReFm hardware beta UI applied")
     return 0
