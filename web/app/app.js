@@ -32,21 +32,41 @@ async function loadPackage(bytes,source){
   log(`Package loaded from ${source}: ${pkg.product}, SHA-256 ${pkg.sha256}`);updateUnlock();
 }
 
+async function downloadReleaseAsset(asset){
+  // Do not fetch browser_download_url from JavaScript: github.com release downloads
+  // do not expose CORS headers to localhost/GitHub Pages. The REST asset endpoint does.
+  const apiUrl=asset.url || `https://api.github.com/repos/AlexanderSeel/TheReFmB1rth/releases/assets/${asset.id}`;
+  const response=await fetch(apiUrl,{
+    headers:{
+      Accept:'application/octet-stream',
+      'X-GitHub-Api-Version':'2022-11-28'
+    },
+    redirect:'follow'
+  });
+  if(!response.ok)throw new Error(`Firmware asset API ${response.status}`);
+  const type=(response.headers.get('content-type')||'').toLowerCase();
+  if(type.includes('application/json')){
+    const text=await response.text();
+    throw new Error(`GitHub returned asset metadata instead of firmware (${text.slice(0,120)})`);
+  }
+  return new Uint8Array(await response.arrayBuffer());
+}
+
 $('#fwFile').addEventListener('change',async e=>{const f=e.target.files?.[0];if(!f)return;try{await loadPackage(new Uint8Array(await f.arrayBuffer()),f.name);}catch(err){log(`PACKAGE ERROR: ${err.message}`);state.pkg=null;updateUnlock();}});
 const drop=$('#dropZone');drop.addEventListener('dragover',e=>{e.preventDefault();drop.classList.add('drag');});drop.addEventListener('dragleave',()=>drop.classList.remove('drag'));drop.addEventListener('drop',async e=>{e.preventDefault();drop.classList.remove('drag');const f=e.dataTransfer.files?.[0];if(!f)return;try{await loadPackage(new Uint8Array(await f.arrayBuffer()),f.name);}catch(err){log(`PACKAGE ERROR: ${err.message}`);}});
 
 $('#loadRelease').addEventListener('click',async()=>{
   const btn=$('#loadRelease');btn.disabled=true;btn.textContent='LOADING…';
   try{
-    const rs=await fetch('https://api.github.com/repos/AlexanderSeel/TheReFmB1rth/releases?per_page=20',{headers:{Accept:'application/vnd.github+json'}});
+    const rs=await fetch('https://api.github.com/repos/AlexanderSeel/TheReFmB1rth/releases?per_page=20',{headers:{Accept:'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28'}});
     if(!rs.ok)throw new Error(`GitHub API ${rs.status}`);
     const releases=await rs.json();
     let found=null;
     for(const r of releases){if(r.draft)continue;const asset=r.assets?.find(a=>/\.fwsc$/i.test(a.name));if(asset){found={r,asset};break;}}
     if(!found)throw new Error('No GitHub Release containing a .fwsc asset was found.');
     log(`Downloading ${found.asset.name} from release ${found.r.tag_name}…`);
-    const fw=await fetch(found.asset.browser_download_url);if(!fw.ok)throw new Error(`Firmware download ${fw.status}`);
-    await loadPackage(new Uint8Array(await fw.arrayBuffer()),`GitHub ${found.r.tag_name}`);
+    const bytes=await downloadReleaseAsset(found.asset);
+    await loadPackage(bytes,`GitHub ${found.r.tag_name}`);
   }catch(err){log(`RELEASE ERROR: ${err.message}`);}finally{btn.disabled=false;btn.textContent='LOAD LATEST GITHUB RELEASE';}
 });
 
