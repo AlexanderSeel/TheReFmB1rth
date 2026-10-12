@@ -4,7 +4,10 @@
 
 /*
  * ReFm project transfer over Felucca's existing editor SysEx envelope:
- *   F0 7D 46 4C 68 op ... F7
+ *   F0 7D 46 4C 90 op ... F7
+ *
+ * Command 90 is outside the pinned Felucca 1.0.5 editor command ranges
+ * (notably FM6 uses 68..71 and MENU uses 72..73).
  *
  * The implementation deliberately reuses editor_backup.c's 3840-byte staging
  * area, 7-bit packer/unpacker and zlib-compatible CRC32.  The transferred bytes
@@ -21,7 +24,7 @@
  * rc 0 success, 1 malformed/range, 2 CRC/project validation, 3 transport
  * running, 5 staging generation changed.
  */
-#define ED_REFM_PROJECT 68u
+#define ED_REFM_PROJECT 90u
 
 extern int refm_felucca_save(uint8_t *out, size_t cap, size_t *written);
 extern int refm_felucca_load(const uint8_t *blob, size_t len);
@@ -51,6 +54,8 @@ static uint32_t refm_bk_begin(const uint8_t *a, uint32_t n)
     uint32_t len, crc;
     if (n != 11u || refm_felucca_ui_value(3u))
         return n == 11u ? 3u : 1u;
+    if (a[5] > 15u || a[10] > 15u)
+        return 1u;
     len = ed_bk_r32(a + 1u);
     crc = ed_bk_r32(a + 6u);
     if (!len || len > ED_BK_MAX)
@@ -117,7 +122,7 @@ static int refm_backup_handle(uint32_t cmd, const uint8_t *a, uint32_t n)
         return 1;
     }
     if (op == 1u) {
-        uint32_t off = n >= 6u ? ed_bk_r32(a + 1u) : 0u;
+        uint32_t off = n >= 6u && a[5] <= 15u ? ed_bk_r32(a + 1u) : 0u;
         uint32_t count = n == 8u ? (uint32_t)a[6] | (uint32_t)a[7] << 7 : 0u;
         rc = !refm_bk_valid || refm_bk_gen != proj_wire_gen ? 5u :
              n != 8u || a[5] > 15u || !count || count > 256u || off > refm_bk_len || count > refm_bk_len - off ? 1u : 0u;
