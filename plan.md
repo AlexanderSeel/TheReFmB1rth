@@ -176,9 +176,9 @@ Physical validation still required:
 - [x] live ACID/mixer controls;
 - [x] 16-step Acid/808/909 editing protocol;
 - [x] note/drum audition;
+- [x] browser START / CONTINUE / STOP using the firmware MIDI realtime transport path;
 - [ ] device-to-editor state readback;
 - [ ] pattern/project dump + restore;
-- [ ] transport controls in browser editor;
 - [ ] consolidated polished editor/WASM application after physical beta is stable.
 
 ---
@@ -191,7 +191,8 @@ Software-side instrumentation/tooling:
 - [x] target-only supervisor/ISR-stack watermark before interrupts are enabled;
 - [x] stack high-water fields exposed through `felucca_dbg`;
 - [x] `target_runtime_report.py` combines CPU, DMA deadline and stack-headroom gates;
-- [x] host regression tests cover healthy, missing-field, low-stack and late-DMA reports.
+- [x] host regression tests cover healthy, missing-field, low-stack and late-DMA reports;
+- [x] target stack-symbol declarations/casts aligned with Felucca's linker/guard declarations.
 
 These are the main blockers between **beta candidate** and **hardware-proven beta**:
 
@@ -243,14 +244,15 @@ These are the main blockers between **beta candidate** and **hardware-proven bet
 
 # Immediate beta tasks
 
-1. Publish **`v0.1.0-beta.1`** only from an exact green build.
-2. Install that beta through the browser app.
-3. Validate HOME / ACID / STEP / DRUM / MIXER / FX / SONG / PROJECT pages on the actual LCD.
-4. Validate live keys, PLAY/STOP, factory Pattern A and editing without lag/stuck notes.
-5. Capture `felucca_dbg` CPU/late timing plus the new user/supervisor stack-watermark fields and run `target_runtime_report.py`.
-6. Verify USB MIDI, TRS MIDI, USB audio and physical project save/load.
-7. Prove rollback/recovery.
-8. Fix only findings from the second hardware pass before promoting to the next beta.
+1. Get the exact current `main` through a green host + FM-1 target build after the runtime-stack instrumentation fix.
+2. Publish **`v0.1.0-beta.1`** only from that exact green build.
+3. Install that beta through the browser app.
+4. Validate HOME / ACID / STEP / DRUM / MIXER / FX / SONG / PROJECT pages on the actual LCD.
+5. Validate live keys, PLAY/STOP, factory Pattern A and editing without lag/stuck notes.
+6. Capture `felucca_dbg` CPU/late timing plus the new user/supervisor stack-watermark fields and run `target_runtime_report.py`.
+7. Verify USB MIDI, TRS MIDI, USB audio and physical project save/load.
+8. Prove rollback/recovery.
+9. Fix only findings from the second hardware pass before promoting to the next beta.
 
 ---
 
