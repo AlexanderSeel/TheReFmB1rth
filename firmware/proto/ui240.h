@@ -69,6 +69,8 @@ typedef struct {
     uint8_t slide;
     uint8_t step_probability;
     uint8_t drum_state;
+    uint8_t drum_flam;
+    uint8_t flam_width_pct;
     uint8_t mute;
     uint8_t solo;
     uint16_t drum_hits;
@@ -98,6 +100,7 @@ void ui240_edit_acid_step(ui240_state_t *ui, groovebox_t *g, uint8_t slot, int8_
 void ui240_set_acid_step_type(ui240_state_t *ui, groovebox_t *g, ui240_step_type_t type);
 void ui240_toggle_acid_flag(ui240_state_t *ui, groovebox_t *g, uint8_t flag);
 void ui240_edit_drum(ui240_state_t *ui, groovebox_t *g, uint8_t slot, int8_t delta);
+void ui240_toggle_909_flam(ui240_state_t *ui, groovebox_t *g);
 void ui240_edit_mixer(ui240_state_t *ui, groovebox_t *g, uint8_t slot, int8_t delta);
 void ui240_edit_fx(ui240_state_t *ui, groovebox_t *g, uint8_t slot, int8_t delta);
 
