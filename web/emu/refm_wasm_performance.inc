@@ -58,10 +58,41 @@ REFM_EXPORT void refm_wasm_panel_performance_action(uint8_t action)
     refm_wasm_panel_action(action);
 }
 
+/* Fields 36..51 are a Virtual-FM-1 read-only pattern window.  Each field is
+   one of the 16 steps for the machine currently shown on the panel.
+
+   ACID A/B: note | flags<<8 | probability<<16 (same compact shape as
+   refm_wasm_get_acid_step, minus micro-timing).
+
+   808/909: low two bits are OFF/HIT/ACCENT for the currently selected drum
+   lane. Bit 2 marks 909 FLAM.  Keeping this readback in the panel ABI means
+   the LCD renderer shows the exact groovebox pattern rather than inferring a
+   sequence from only selected_step/play_step.
+ */
+static uint32_t panel_sequence_step(uint8_t step)
+{
+    step &= 15u;
+    if (panel_ui.machine < UI240_MACHINE_808) {
+        const seq16_step_t *st = &vm.groovebox.acid_seq[panel_ui.machine].step[step];
+        return (uint32_t)st->note |
+               ((uint32_t)st->flags << 8) |
+               ((uint32_t)st->probability << 16);
+    } else {
+        unsigned d = (unsigned)panel_ui.machine - UI240_MACHINE_808;
+        uint16_t bit = (uint16_t)(1u << (panel_ui.selected_lane < DRUM_VOICES ? panel_ui.selected_lane : 0u));
+        uint32_t state = (vm.groovebox.drum_accents[d][step] & bit) ? 2u :
+                         (vm.groovebox.drum_hits[d][step] & bit) ? 1u : 0u;
+        if (panel_ui.machine == UI240_MACHINE_909 && (vm.groovebox.drum_909_flams[step] & bit))
+            state |= 4u;
+        return state;
+    }
+}
+
 REFM_EXPORT uint32_t refm_wasm_panel_performance_value(uint8_t field)
 {
     if (field == 33u) return panel_modifier;
     if (field == 34u) return panel_focus_active;
     if (field == 35u) return panel_focus_region;
+    if (field >= 36u && field < 52u) return panel_sequence_step((uint8_t)(field - 36u));
     return refm_wasm_panel_value(field);
 }
