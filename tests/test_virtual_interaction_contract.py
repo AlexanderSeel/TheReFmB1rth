@@ -27,24 +27,46 @@ class VirtualInteractionContractTests(unittest.TestCase):
             self.assertIn(marker, self.source)
 
     def test_modifier_primary_action_is_deferred_until_release(self):
-        self.assertIn("if(BUTTON_MOD[name]!==undefined){heldModifierButton=name", self.source)
+        self.assertIn("heldModifierButtons.set(name,state);syncModifier()", self.source)
         self.assertNotIn("g.classList.add('held');fire();", self.source)
-        self.assertIn("const used=modifierUsed,tap=!cancel&&!used", self.source)
+        self.assertIn("tap=wasPrimary&&!cancel&&!used", self.source)
         self.assertIn("if(tap)fire()", self.source)
+
+    def test_multiple_modifier_buttons_are_tracked_and_prioritized(self):
+        self.assertIn("const heldModifierButtons=new Map()", self.source)
+        self.assertIn("const MOD_PRIORITY=['SEQ','ARP','GLO','FX','SAVE','EDIT','REC','SEL']", self.source)
+        self.assertIn("function activeModifierButton()", self.source)
+        self.assertIn("function syncModifier()", self.source)
+        self.assertIn("heldModifierButtons.delete(name)", self.source)
+        # Releasing one button recomputes the layer from buttons still held.
+        self.assertGreaterEqual(self.source.count("syncModifier()"), 3)
+
+    def test_second_button_consumes_primary_tap(self):
+        self.assertIn("else if(primaryModifierButton!==name)modifierUsed=true", self.source)
+        self.assertIn("consumeModifier();fire()", self.source)
+        self.assertIn("else if(m.action!==undefined){consumeModifier();action(m.action);}", self.source)
+
+    def test_long_hold_can_latch_for_desktop_chords(self):
+        self.assertIn("LONG_HOLD_MS=360", self.source)
+        self.assertIn("current.latched=true", self.source)
+        self.assertIn("VIRTUAL HOLD · ${name} LATCHED", self.source)
+        self.assertIn("existing?.latched", self.source)
+        self.assertIn("VIRTUAL HOLD RELEASED", self.source)
 
     def test_sel_tap_clears_temporary_focus_but_consumed_hold_keeps_it(self):
         self.assertIn("function focusExit()", self.source)
-        self.assertIn("if(name==='SEL'&&!used)focusExit()", self.source)
-        # There must be no unconditional focus exit on every SEL release; a
-        # consumed SEL+key/encoder gesture intentionally leaves FOCUS active.
+        self.assertIn("if(name==='SEL'&&tap)focusExit()", self.source)
         self.assertNotIn("if(name==='SEL')focusExit()", self.source)
 
     def test_key_or_encoder_consumes_modifier(self):
-        self.assertIn("if(heldModifierButton)modifierUsed=true", self.source)
-        self.assertIn("if(on&&heldModifierButton)modifierUsed=true", self.source)
+        self.assertIn("function consumeModifier()", self.source)
+        self.assertIn("function encoder(id,d){if(ready&&d){consumeModifier()", self.source)
+        self.assertIn("function key(panelIndex,on){if(ready){if(on)consumeModifier()", self.source)
 
-    def test_blur_releases_virtual_modifier(self):
-        self.assertIn("modifier(MOD.NONE);heldModifierButton=null;modifierUsed=false", self.source)
+    def test_blur_releases_all_virtual_modifiers(self):
+        self.assertIn("function clearModifiers()", self.source)
+        self.assertIn("heldModifierButtons.clear()", self.source)
+        self.assertIn("held.clear();clearModifiers();", self.source)
 
     def test_compatibility_patcher_is_idempotent_for_current_source(self):
         with tempfile.TemporaryDirectory() as td:
