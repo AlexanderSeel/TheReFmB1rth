@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
-"""Apply the compact ReFm visual layer and physical-hardware beta integration.
+"""Apply the compact ReFm visual layer and physical-hardware integration.
 
-The dedicated ReFm renderer owns the normal 240x240 LCD. Legacy Felucca graph
-content is deliberately left untouched; injecting the old compatibility step
-strip caused a stray horizontal pattern line to bleed across ReFm pages on
-physical hardware.
+The older beta passes are retained as migration/build anchors, but the final
+hardware rework pass owns the physical input/audio/button/LCD contract. It is
+applied last so no legacy renderer or keyboard assumption can override the
+hardware-validated correction layer.
 """
 from __future__ import annotations
 import argparse, hashlib, subprocess, sys
@@ -23,9 +23,6 @@ def main() -> int:
         raise SystemExit("apply the ReFmB1rth Felucca overlay first")
     graph = root / "firmware" / "src" / "ui_graph.c"
 
-    # Do not patch ui_graph.c with ReFm step lamps. The dedicated RB-240
-    # renderer already draws its own sequencer state, and the legacy graph
-    # overlay was visible on unrelated physical pages.
     subprocess.run([sys.executable, str(ROOT / "tools" / "apply_hardware_beta_fixes.py"), str(root)], check=True, cwd=ROOT)
     subprocess.run([sys.executable, str(ROOT / "tools" / "apply_keyboard_performance.py"), str(root)], check=True, cwd=ROOT)
     subprocess.run([sys.executable, str(ROOT / "tools" / "apply_hardware_step_navigation.py"), str(root)], check=True, cwd=ROOT)
@@ -41,6 +38,10 @@ def main() -> int:
     subprocess.run([sys.executable, str(ROOT / "tools" / "apply_runtime_diagnostics.py"), str(root)], check=True, cwd=ROOT)
     subprocess.run([sys.executable, str(ROOT / "tools" / "apply_refm_boot_splash.py"), str(root)], check=True, cwd=ROOT)
 
+    # Must be last: beta.4 hardware validation proved that the earlier layered
+    # renderer/input assumptions were not valid on the physical unit.
+    subprocess.run([sys.executable, str(ROOT / "tools" / "apply_hardware_rework.py"), str(root)], check=True, cwd=ROOT)
+
     h = hashlib.sha256()
     for path in (
         graph,
@@ -49,13 +50,14 @@ def main() -> int:
         root / "firmware" / "src" / "ui_input.c",
         root / "firmware" / "src" / "main.c",
         root / "firmware" / "src" / "audio.c",
+        root / "firmware" / "refm" / "integration" / "refm_felucca_bridge.c",
         root / "firmware" / "refm" / "proto" / "acid303.c",
     ):
         h.update(path.read_bytes())
     (root / ".refm-ui-overlay").write_text(
-        f"style=compact-rebirth-inspired+refm-hardware-beta+keyboard-chromatic-map+direct-step-navigation+rb240-beta3-approved+909-flam+keyboard-performance+focus-indicator+exact-pattern-readback+physical-lcd-cleanup+no-legacy-graph-strip+refm-boot-splash\nsha256={h.hexdigest()}\n"
+        f"style=hardware-240x240-clean+direct-isr-keyboard+physical-master+contextual-controls+dirty-regions+no-legacy-graph-strip+refm-boot-splash\nsha256={h.hexdigest()}\n"
     )
-    print("FM-1 dedicated ReFm hardware UI + direct note/drum navigation + exact pattern readback + clean LCD redraw + boot splash + runtime diagnostics applied")
+    print("FM-1 ReFm hardware UI/input/audio correction stack applied")
     return 0
 
 
