@@ -24,7 +24,7 @@ Implemented foundations include:
 
 - two acid engines and two synthesized 11-lane drum engines in one four-machine runtime;
 - 16-step sequencing with accent/slide/tie/probability primitives;
-- complete A–H pattern persistence and quantized song-chain pattern changes;
+- complete A–H pattern persistence, quantized live pattern switching and song-chain pattern changes;
 - level/pan/mute/solo mixer, delay/reverb sends, drive, compressor, delay, performance low-pass and bounded master output;
 - separate RB-240 PCF / Delay / Dist / Comp FX panels over the shared master FX rack;
 - internal clock plus MIDI START/CONTINUE/STOP/CLOCK;
@@ -37,7 +37,9 @@ Implemented foundations include:
 
 ## Keyboard-first live workflow
 
-The physical FM-1 and the built Virtual FM-1 now use the same `ui240_performance` interaction layer. The 27-key keyboard is contextual instead of being only an ACID note keyboard. A normal key press on ACID still plays the selected synth; the held layers below temporarily reinterpret the keyboard for editing and performance.
+The physical FM-1 and the built Virtual FM-1 use the same `ui240_performance` interaction layer. The 27-key keyboard is contextual instead of being only an ACID note keyboard. A normal key press on ACID still plays the selected synth; the held layers below temporarily reinterpret the keyboard for editing and performance.
+
+Modifier-capable panel buttons use the same **tap vs hold** contract on hardware and Virtual FM-1: the normal button action is deferred until release. If a keyboard key or encoder is used while the button is held, the gesture is consumed as a modifier and the normal tap action is suppressed. This prevents `FX + key`, `SAVE + key`, FOCUS navigation, and other performance gestures from also causing an unwanted page jump.
 
 | Hold | Keyboard layer |
 | --- | --- |
@@ -51,6 +53,10 @@ The physical FM-1 and the built Virtual FM-1 now use the same `ui240_performance
 | `SCL/SEL` | enter the quick FOCUS navigation layer |
 
 `HOME` remains the deterministic escape/panic action. Page and machine changes keep the existing stuck-note safety behavior.
+
+### Pattern switching during playback
+
+Direct Pattern A–H selection is immediate while transport is stopped. During playback, a requested pattern is queued and applied on the next 16-step boundary. The current edited pattern is stored at the actual switch point, so a live pattern request does not truncate the current bar or lose last-moment edits. A pending request is also resolved when transport is stopped.
 
 ### 808 vs 909 keyboard workflow
 
@@ -71,6 +77,7 @@ The 909 flam state is the real `drum_909_flams` sequencer state, not a cosmetic 
 - PRESET / ALGORITHM move through the focus regions while FOCUS is active.
 - K1–K4 continue to edit the current focused page using the same page-specific parameter contract.
 - `HOME` exits FOCUS immediately and provides the normal panic-safe escape.
+- An eight-position cyan map in the RB-240 header shows which focus region is active; hardware and Virtual FM-1 use the same focus-state values.
 
 The focus state and modifier state are exposed by both the Felucca bridge and the WASM panel ABI, so browser tests exercise the same state machine as the hardware overlay.
 
@@ -82,7 +89,9 @@ The WASM build uses larger delay/reverb buffers where browser memory permits, wh
 
 ## Virtual/hardware interaction parity
 
-The official Virtual FM-1 artifact is produced by `web/emu/build_wasm.sh`. The build exports the same keyboard-performance ABI used by the hardware bridge and applies the virtual panel mapping after copying the app into `build/wasm/app/`. Physical key index, note value and press/release state are all passed into the shared interaction model, so 808/909 mapping, Pattern A–H switching, mutes/solos, FX actions and FOCUS navigation can be rehearsed before a physical flash.
+The official Virtual FM-1 artifact is produced by `web/emu/build_wasm.sh`. The build exports the same keyboard-performance ABI used by the hardware bridge and applies the virtual panel mapping after copying the app into `build/wasm/app/`. Physical key index, note value and press/release state are all passed into the shared interaction model, so 808/909 mapping, quantized Pattern A–H switching, mutes/solos, FX actions and FOCUS navigation can be rehearsed before a physical flash.
+
+The **VIRTUAL FM-1** browser tab also includes an expandable **VIRTUAL FM-1 HELP / README** directly below the virtual hardware. It documents panel controls, tap/hold gestures, modifier layers, FOCUS navigation, 808/909 key maps, PC-keyboard shortcuts and the project/testing workflow from the current `main` implementation.
 
 ## Build everything in GitHub
 
