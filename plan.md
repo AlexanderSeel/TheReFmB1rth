@@ -17,7 +17,7 @@ No Roland/Propellerhead/ReBirth artwork, logos, proprietary source, ROMs, or non
 
 ---
 
-# Current checkpoint — v0.1.0-beta.2 published, virtual FM-1 pre-flash workflow added, 2026-10-13
+# Current checkpoint — v0.1.0-beta.2 published, virtual FM-1 + RB-240 hardware/virtual UI parity added, 2026-10-13
 
 ## First physical install — completed
 
@@ -166,7 +166,10 @@ Implemented software-side:
 - [x] GLO = MIXER, FX = FX, SCL/SEL = SONG, SAVE = PROJECT, HOME = HOME;
 - [x] PLAY owns ReFm transport;
 - [x] EDIT/REC act as contextual secondary actions;
-- [x] host tests for compact UI state/editing and hardware bridge workflow.
+- [x] host tests for compact UI state/editing and hardware bridge workflow;
+- [x] RB-240 v2 renderer-only skin adds an original ReBirth-inspired metallic/LED visual language without changing control, transport, audio or persistence semantics;
+- [x] physical LCD uses beveled parameter modules, red LED value wells, amber state text, green playing state and amber/cyan page-section bands;
+- [x] MIXER and FX pages add compact hardware-style level/send/effect meters while retaining the existing encoder contract.
 
 Physical beta.2 validation still required:
 
@@ -220,7 +223,10 @@ Physical beta.2 validation still required:
 - [x] LIVE EDITOR **USE VIRTUAL** route mirrors editor CC/program/note traffic into the WASM device;
 - [x] virtual START / CONTINUE / STOP has one realtime-message owner so transport events are not doubled;
 - [x] virtual workflow documented in `docs/VIRTUAL_FM1.md` with `fm1-x0x` GPL-3.0 layout attribution;
-- [ ] further cosmetic/pixel-font/LED polish only after comparing screenshots against the physical FM-1.
+- [x] virtual 240×240 LCD mirrors RB-240 v2 palette, bevels, LED wells, section bands and MIXER/FX meter geometry used by the physical renderer;
+- [x] virtual outer chassis remains close to the dark physical FM-1 geometry so screen/control rehearsal is not confused with the LCD skin;
+- [x] `tests/test_virtual_fm1.py` locks hardware/virtual RB-240 semantic labels, palette primitives and meter coordinates together;
+- [ ] final pixel-font/LED polish after comparing virtual screenshots with the physical FM-1 LCD.
 
 ---
 
