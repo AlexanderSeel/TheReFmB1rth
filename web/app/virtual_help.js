@@ -15,7 +15,7 @@ const HELP_HTML=`
           <h3>Learn the instrument here before using the physical FM-1</h3>
           <p>The virtual unit uses the same <code>ui240</code> state, keyboard-performance mappings and contextual actions as the hardware target. The goal is that muscle memory learned here transfers directly to the FM-1.</p>
         </div>
-        <div class="virtualHelpCallout"><strong>Quick start</strong><br>1. SWITCH ON.<br>2. Press PLAY.<br>3. Use ENV/LFO for ACID A/B or tap ARP for drums.<br>4. Tap SEQ for step editing.<br>5. Hold a modifier and use the FM-1 keyboard for fast actions. A used hold does not also trigger the button's normal tap action.<br>6. Virtual desktop: hold a modifier for ~0.36 s to latch it, then press another button/key/encoder. Click the latched button again to release.</div>
+        <div class="virtualHelpCallout"><strong>Quick start</strong><br>1. SWITCH ON.<br>2. Press PLAY.<br>3. Use ENV/LFO for ACID A/B or tap ARP for drums.<br>4. Tap SEQ for step editing.<br>5. Hold a modifier and use the FM-1 keyboard for fast actions. A used hold does not also trigger the button's normal tap action.<br>6. Virtual desktop: hold a modifier for ~0.36 s to latch it, then press another button/key/encoder. Click the latched button again to release.<br>7. Or use PC-keyboard panel holds: C/V/B/N/M/,/./ for SEQ/ARP/GLO/FX/SAVE/EDIT/REC/SEL.</div>
       </div>
 
       <div class="virtualHelpGrid">
@@ -90,12 +90,15 @@ const HELP_HTML=`
             <tr><td>Q W E R T Y U I</td><td>First eight white FM-1 keys.</td></tr>
             <tr><td>A S D F G H J K</td><td>Next eight white FM-1 keys.</td></tr>
             <tr><td>1–0, −</td><td>Black FM-1 keys.</td></tr>
+            <tr><td>C / V / B / N</td><td>Hold virtual SEQ / ARP / GLO / FX panel buttons.</td></tr>
+            <tr><td>M / , / . / /</td><td>Hold virtual SAVE / EDIT / REC / SEL panel buttons.</td></tr>
             <tr><td>Space</td><td>PLAY / STOP.</td></tr>
             <tr><td>Enter</td><td>REC contextual action.</td></tr>
             <tr><td>Esc</td><td>HOME.</td></tr>
             <tr><td>Z / X</td><td>OCT− / OCT+ behavior.</td></tr>
             <tr><td>↑ / ↓</td><td>SELECT encoder / BPM.</td></tr>
           </tbody></table>
+          <p>The panel-button keyboard shortcuts are real holds: keep the key down, press another mapped button/note/encoder shortcut, then release. A simple press/release without a second control still performs the button's normal tap action.</p>
         </section>
 
         <section class="virtualHelpBlock">
