@@ -32,6 +32,7 @@ def main() -> int:
     subprocess.run([sys.executable, str(ROOT / "tools" / "apply_rb240_beta3_layout.py"), str(root)], check=True, cwd=ROOT)
     subprocess.run([sys.executable, str(ROOT / "tools" / "apply_rb240_beta3_flam.py"), str(root)], check=True, cwd=ROOT)
     subprocess.run([sys.executable, str(ROOT / "tools" / "apply_rb240_focus_indicator.py"), str(root)], check=True, cwd=ROOT)
+    subprocess.run([sys.executable, str(ROOT / "tools" / "apply_rb240_physical_cleanup.py"), str(root)], check=True, cwd=ROOT)
     subprocess.run([sys.executable, str(ROOT / "tools" / "fix_beta_input_safety.py"), str(root)], check=True, cwd=ROOT)
     subprocess.run([sys.executable, str(ROOT / "tools" / "fix_target_beta_rom.py"), str(root)], check=True, cwd=ROOT)
     subprocess.run([sys.executable, str(ROOT / "tools" / "enable_rom_ref_diagnostics.py"), str(root)], check=True, cwd=ROOT)
@@ -50,9 +51,9 @@ def main() -> int:
     ):
         h.update(path.read_bytes())
     (root / ".refm-ui-overlay").write_text(
-        f"style=compact-rebirth-inspired+refm-hardware-beta+rb240-beta3-approved+909-flam+keyboard-performance+focus-indicator+no-legacy-graph-strip+refm-boot-splash\nsha256={h.hexdigest()}\n"
+        f"style=compact-rebirth-inspired+refm-hardware-beta+rb240-beta3-approved+909-flam+keyboard-performance+focus-indicator+physical-lcd-cleanup+no-legacy-graph-strip+refm-boot-splash\nsha256={h.hexdigest()}\n"
     )
-    print("FM-1 dedicated ReFm hardware UI + RB-240 + keyboard performance/focus + clean graph ownership + boot splash + runtime diagnostics applied")
+    print("FM-1 dedicated ReFm hardware UI + RB-240 + clean LCD redraw + boot splash + runtime diagnostics applied")
     return 0
 
 
