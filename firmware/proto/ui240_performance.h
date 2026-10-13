@@ -54,10 +54,7 @@ static inline uint8_t ui240_key_to_drum_lane(uint8_t machine, uint8_t key)
 
 static inline void ui240_select_pattern_direct(groovebox_t *g, uint8_t pattern)
 {
-    pattern &= 7u;
-    if (pattern == g->current_pattern) return;
-    groovebox_pattern_store(&g->patterns, g, g->current_pattern);
-    groovebox_pattern_load(&g->patterns, g, pattern);
+    groovebox_request_pattern(g, (uint8_t)(pattern & 7u));
 }
 
 static inline void ui240_apply_focus(ui240_state_t *ui, uint8_t focus)
