@@ -4,138 +4,159 @@ Experimental replacement firmware project for the M-VAVE FM-1: a compact four-ma
 
 ## Target
 
-- ACID 1 — original 303-inspired mono synth
-- ACID 2 — second independent acid synth
-- DRUM A — original 808-inspired synthesized drum machine
-- DRUM B — original 909-inspired synthesized drum machine
+- ACID A — original 303-inspired mono synth
+- ACID B — second independent acid synth
+- 808 — original synthesized drum machine
+- 909 — second synthesized drum machine with real sequencer flam state
 - A–H patterns + song chaining
-- mixer + performance FX
+- four-track mixer + performance FX
 - USB/TRS MIDI and USB audio
-- browser/WASM emulator
-- guarded FM-1 installer based on the proven Felucca update path
+- browser installer/editor + Virtual FM-1/WASM
+- guarded FM-1 installer based on the pinned Felucca update path
 
-See [`plan.md`](plan.md) and [`docs/MILESTONES.md`](docs/MILESTONES.md).
+See [`plan.md`](plan.md), [`docs/MILESTONES.md`](docs/MILESTONES.md), [`docs/FLASH_SAFETY.md`](docs/FLASH_SAFETY.md) and [`docs/M6_HARDWARE_BETA.md`](docs/M6_HARDWARE_BETA.md).
 
 ## Current status
 
-**M5 groovebox functionality, the Felucca integration overlay, the RB-240 ReBirth-inspired 240×240 hardware/virtual UI and the keyboard-first performance interaction layer are implemented software-side. A real experimental FM-1 `.fwsc` builds in GitHub Actions. `v0.1.0-beta.2` remains the published hardware beta and is intentionally not overwritten by the current interaction work.**
+**`v0.1.0-beta.3` is the current published hardware-test baseline. Current `main` contains unreleased post-beta.3 usability work and must not be treated as hardware-stable yet.**
+
+The engine/runtime foundation is implemented software-side and real FM-1 `.fwsc` packages build in GitHub Actions. Physical validation has also exposed important blockers: the earlier hardware build booted and rendered the LCD, but practical sequence editing, live play/audio and several dense pages were not yet usable. The current work therefore prioritizes basic groovebox usability over adding more advanced features.
 
 Implemented foundations include:
 
-- two acid engines and two synthesized 11-lane drum engines in one four-machine runtime;
-- 16-step sequencing with accent/slide/tie/probability primitives;
-- complete A–H pattern persistence, quantized live pattern switching and song-chain pattern changes;
-- level/pan/mute/solo mixer, delay/reverb sends, drive, compressor, delay, performance low-pass and bounded master output;
-- separate RB-240 PCF / Delay / Dist / Comp FX panels over the shared master FX rack;
+- two acid engines and two synthesized 11-lane drum engines in one runtime;
+- 16-step sequencing with accent/slide/tie/probability;
+- A–H pattern persistence, quantized live pattern switching and song-chain changes;
+- level/pan/mute/solo mixer, delay/reverb sends, drive, compressor and performance low-pass;
 - internal clock plus MIDI START/CONTINUE/STOP/CLOCK;
-- MIDI note/CC/program routing for acid and drum machines;
+- MIDI note/CC/program routing;
 - versioned CRC-protected project serialization and Felucca A/B atomic flash integration;
-- shared target/WASM runtime and shared `ui240` interaction model;
+- shared target/WASM runtime and shared `ui240` state model;
 - Felucca Q15 audio callback integration plus shared USB/TRS MIDI ingress;
-- release manifests, SHA/product/device checks and a double-confirmed experimental installer wrapper that delegates to the pinned Felucca loader-mediated installer;
-- CI tests for DSP, sequencer, runtime, pattern/MIDI, projects, keyboard interaction and hardware-gate logic.
+- release manifests, SHA/product/device checks and guarded release publishing;
+- CI tests for DSP, sequencer, runtime, pattern/MIDI, projects and hardware-gate logic.
 
-## Keyboard-first live workflow
+## Virtual FM-1: simple sequencing first
 
-The physical FM-1 and the built Virtual FM-1 use the same `ui240_performance` interaction layer. The 27-key keyboard is contextual instead of being only an ACID note keyboard. A normal key press on ACID still plays the selected synth; the held layers below temporarily reinterpret the keyboard for editing and performance.
+The Virtual FM-1 no longer requires modifier chords for normal sequence programming.
 
-Modifier-capable panel buttons use the same **tap vs hold** contract on hardware and Virtual FM-1: the normal button action is deferred until release. If a keyboard key or encoder is used while the button is held, the gesture is consumed as a modifier and the normal tap action is suppressed. This prevents `FX + key`, `SAVE + key`, FOCUS navigation, and other performance gestures from also causing an unwanted page jump.
+### ACID A / ACID B
 
-| Hold | Keyboard layer |
+Use the **SEQ** page as a direct 303-style step editor:
+
+1. select one of the 16 steps;
+2. choose the note, REST or TIE;
+3. toggle ACCENT and SLIDE directly;
+4. audition/play through the same groovebox runtime used by the target build.
+
+The LCD now receives all 16 real ACID steps from WASM. REST/NOTE/TIE, accent and slide are rendered from actual sequencer state instead of being inferred from the selected step.
+
+### 808 / 909
+
+Select a drum lane and click the 16-step grid. Each cell cycles:
+
+**OFF → HIT → ACCENT → OFF**
+
+The selected lane's actual hit/accent state is displayed. 909 flam is kept as real persisted sequencer state rather than a cosmetic browser flag.
+
+### 2× display
+
+The logical display remains **240×240**, matching the physical FM-1. The Virtual tab also provides a true pixel-perfect **480×480 DISPLAY 2×** view, including direct screen editing.
+
+## New TheReFmB1rth startup sequence
+
+Current `main` adds an original startup/loading sequence for both Virtual FM-1 and the physical target concept:
+
+- **THE ReFM B1RTH / RB-240** identity;
+- ACID A → ACID B → 808 → 909 machine activation;
+- animated 16-step bus;
+- final READY state;
+- industrial metal/LED visual language inspired by classic groovebox software without copying protected logos or artwork.
+
+The physical implementation uses existing 240×240 LCD/text primitives and incremental phase updates. Audio, input, USB and timer initialization occur before the animated main-loop phases, and the previous additional blocking Felucca splash delay is removed from the generated target path.
+
+## Physical UI cleanup in progress
+
+A legacy Felucca compatibility graph was still being injected underneath the dedicated RB-240 display and could appear as an unwanted horizontal/pattern strip across unrelated pages. Current `main` removes that injection: the dedicated ReFm renderer now owns normal LCD content.
+
+This does **not** mean the physical UI is finished. The next hardware pass must verify:
+
+- no remaining graph/renderer bleed-through;
+- live keyboard notes are audible;
+- PLAY starts the seeded Pattern A audibly;
+- ACID step editing is fast and predictable;
+- 808/909 lane + step editing is fast and predictable;
+- parameter changes do not cause distracting full-screen redraws;
+- labels correspond to the controls actually used;
+- unnecessary persistent bottom help bands are removed.
+
+The host integration tests already prove that direct MIDI and the seeded Pattern A can generate non-zero ReFm audio through the Felucca bridge. If the next hardware test still has silence, investigation should therefore isolate the physical event/audio/DAC chain rather than blindly changing working DSP.
+
+## Advanced keyboard/performance interaction
+
+The shared `ui240_performance` layer still supports performance shortcuts on physical and Virtual FM-1, but these are considered advanced controls rather than the primary sequencing workflow.
+
+| Hold | Temporary behavior |
 | --- | --- |
-| `SEQ` | write the played note directly into the selected ACID step |
-| `ARP/DRUM` | 808/909 drum entry and immediate audition |
-| `GLO/MIXER` | track mute/solo and machine selection |
-| `FX` | direct PCF / Delay / Dist / Comp selection plus performance throws |
+| `SEQ` | selected-step ACID note entry |
+| `ARP/DRUM` | 808/909 drum-entry bank |
+| `GLO/MIXER` | mute / solo / machine selection |
+| `FX` | PCF / Delay / Dist / Comp selection and performance throws |
 | `SAVE` | direct Pattern A–H selection |
-| `EDIT` | Accent / Slide / Tie / Rest / probability shortcuts; high/accent drum entry |
-| `REC` | live capture into the currently running sequencer step |
-| `SCL/SEL` | enter the quick FOCUS navigation layer |
+| `EDIT` | contextual accent/slide/tie/rest/probability shortcuts |
+| `REC` | live capture into the running step |
+| `SCL/SEL` | FOCUS navigation |
 
-`HOME` remains the deterministic escape/panic action. Page and machine changes keep the existing stuck-note safety behavior.
+`HOME` remains the deterministic escape/panic action. These mappings may still be simplified on hardware if they interfere with basic step programming.
 
-### Pattern switching during playback
+## Pattern switching during playback
 
-Direct Pattern A–H selection is immediate while transport is stopped. During playback, a requested pattern is queued and applied on the next 16-step boundary. The current edited pattern is stored at the actual switch point, so a live pattern request does not truncate the current bar or lose last-moment edits. A pending request is also resolved when transport is stopped.
-
-### 808 vs 909 keyboard workflow
-
-The two drum machines deliberately do not share one anonymous pad order.
-
-- **808:** the first 11-key bank maps `BD, SD, RS, CP, CH, OH, LT, MT, HT, CR, RD`; the second 11-key bank writes the same lanes as high/accent hits. The ordering keeps the characteristic rim/clap percussion close to kick/snare.
-- **909:** the first 11-key bank maps `BD, SD, LT, MT, HT, RS, CP, CH, OH, CR, RD`; the second 11-key bank is the HIGH/accent bank. The trailing performance keys expose the selected-lane flam toggle and flam-width down/up controls.
-- Drum key presses also audition the selected voice immediately, so programming does not require starting transport first.
-- With the `REC` layer while transport runs, drum hits are written at the current running step.
-
-The 909 flam state is the real `drum_909_flams` sequencer state, not a cosmetic UI flag.
-
-### FOCUS mode for the 240×240 display
-
-`SCL/SEL` enters a full-panel FOCUS mode for dense RB-240 pages. It is a navigation zoom, not bitmap magnification: the selected logical panel occupies the normal 240×240 editing surface and therefore keeps the hardware and Virtual FM-1 layout identical.
-
-- Keyboard selectors 1–8 jump directly to **ACID**, **STEP**, **DRUM**, **MIXER**, **PCF**, **DELAY**, **DIST**, or **COMP**.
-- PRESET / ALGORITHM move through the focus regions while FOCUS is active.
-- K1–K4 continue to edit the current focused page using the same page-specific parameter contract.
-- `HOME` exits FOCUS immediately and provides the normal panic-safe escape.
-- An eight-position cyan map in the RB-240 header shows which focus region is active; hardware and Virtual FM-1 use the same focus-state values.
-
-The focus state and modifier state are exposed by both the Felucca bridge and the WASM panel ABI, so browser tests exercise the same state machine as the hardware overlay.
+Direct Pattern A–H selection is immediate while transport is stopped. During playback, a requested pattern is queued and applied on the next 16-step boundary. The current pattern is stored at the switch point so live edits are not lost.
 
 ## FX and mixer routing
 
-The mixer remains intentionally small enough for the FM-1 target budget. Each of the four machines has level, pan, mute, solo, delay send and reverb send. The summed dry/return signal then passes through the master performance rack: **Dist → Comp → PCF**, while the delay and reverb are send/return effects mixed before those master inserts. The 240×240 FX page exposes separate **PCF**, **Delay**, **Dist** and **Comp** sections; holding `FX` gives keyboard access to those four sections and to fast cutoff/delay/drive/compressor throws.
-
-The WASM build uses larger delay/reverb buffers where browser memory permits, while the FM-1 keeps conservative buffers until physical profiling proves more target pool can safely be spent.
-
-## Virtual/hardware interaction parity
-
-The official Virtual FM-1 artifact is produced by `web/emu/build_wasm.sh`. The build exports the same keyboard-performance ABI used by the hardware bridge and applies the virtual panel mapping after copying the app into `build/wasm/app/`. Physical key index, note value and press/release state are all passed into the shared interaction model, so 808/909 mapping, quantized Pattern A–H switching, mutes/solos, FX actions and FOCUS navigation can be rehearsed before a physical flash.
-
-The **VIRTUAL FM-1** browser tab also includes an expandable **VIRTUAL FM-1 HELP / README** directly below the virtual hardware. It documents panel controls, tap/hold gestures, modifier layers, FOCUS navigation, 808/909 key maps, PC-keyboard shortcuts and the project/testing workflow from the current `main` implementation.
+Each machine has level, pan, mute, solo, delay send and reverb send. Dry/return signal then passes through the compact master performance rack: **Dist → Comp → PCF**. Browser builds may use larger effect buffers; the FM-1 target keeps conservative buffers until physical profiling proves more memory/CPU headroom.
 
 ## Build everything in GitHub
 
-`.github/workflows/build-all.yml` builds the project on every push to `main` and can also be started manually with **Actions → Build all artifacts → Run workflow**.
+`.github/workflows/build-all.yml` builds on every push to `main` and can also be started manually from GitHub Actions.
 
-It produces two downloadable Actions artifacts:
+It produces:
 
 1. **`refm-wasm-<commit>`**
    - `refm.js`
    - `refm.wasm`
-   - browser app including Virtual FM-1
+   - combined browser app including Virtual FM-1
    - `SHA256SUMS`
 
 2. **`refm-fm1-experimental-<commit>`**
    - `TheReFmB1rth-experimental.fwsc`
-   - `TheReFmB1rth-app.bin`
+   - application binary
    - Felucca `ota.bin`
    - `manifest.json`
-   - overlay provenance stamp
+   - overlay provenance/memory data
    - `SHA256SUMS`
 
-The FM-1 job reproducibly prepares the exact pinned Felucca 1.0.5 checkout, applies the deterministic ReFmB1rth overlay, downloads the official JieLi pi32v2 toolchain, fetches the required AC79 SDK, performs the actual target compile/link/package build, verifies the generated firmware manifest, and only then uploads the artifact. **The workflow never connects to or flashes a physical FM-1.**
+The FM-1 job prepares the exact pinned Felucca 1.0.5 checkout, applies the deterministic TheReFmB1rth overlay, downloads the JieLi pi32v2 toolchain, fetches the pinned AC79 SDK, performs the real target compile/link/package build, enforces memory gates and only then uploads artifacts. The workflow never connects to or flashes a physical FM-1.
 
-Useful local/CI-equivalent checks are:
+Useful checks:
 
 ```sh
 tests/run_host_tests.sh
 sh web/emu/build_wasm.sh
-# target package: run the Build all artifacts workflow, which bootstraps the pinned
-# Felucca/JieLi/AC79 environment and performs the real FM-1 package build.
+# Real target package: use Build all artifacts in GitHub Actions.
 ```
 
 ## Release policy
 
-`v0.1.0-beta.2` is immutable. The keyboard/interaction/UI work on `main` is an unreleased next-beta candidate. Do not repoint the beta.2 firmware channel or publish a replacement package until the interaction layer, WASM artifact and real FM-1 package build are green and the new workflow has been exercised on hardware.
-
-Read [`docs/FLASH_SAFETY.md`](docs/FLASH_SAFETY.md) and [`docs/M6_HARDWARE_BETA.md`](docs/M6_HARDWARE_BETA.md) before any future hardware experiment.
+Published beta releases are immutable. **Do not repoint or overwrite `v0.1.0-beta.3`.** Current `main` remains unreleased until host, WASM and real target package gates are green on one exact commit and the new physical startup/UI/audio/basic sequencing workflow has been tested on hardware. A new release is created only by an explicit release request.
 
 ## Sample policy
 
-Only auditable redistributable content may be shipped. The preferred implementation synthesizes most 808/909-style voices and uses CC0/Public Domain samples only where useful, especially cymbals/ride/crash. See [`docs/SAMPLE_SOURCES.md`](docs/SAMPLE_SOURCES.md).
+Only auditable redistributable content may be shipped. The preferred implementation synthesizes most 808/909-style voices and uses CC0/Public Domain samples only where useful. See [`docs/SAMPLE_SOURCES.md`](docs/SAMPLE_SOURCES.md).
 
 ## Legal / identity
 
-This is an independent open-source project. It is not affiliated with or endorsed by Roland, Propellerhead/Reason Studios, M-VAVE, or the Felucca authors. Product names mentioned in documentation are references to historical instruments/software and desired workflow/sound characteristics.
+This is an independent open-source project. It is not affiliated with or endorsed by Roland, Propellerhead/Reason Studios, M-VAVE, or the Felucca authors. Product names mentioned in documentation are historical references to instruments/software and desired workflow/sound characteristics.
 
-The firmware implementation must preserve licenses and notices from any Felucca-derived source and from all included third-party components.
+The firmware implementation must preserve licenses and notices from Felucca-derived source and all included third-party components.
