@@ -96,6 +96,7 @@ REFM_EXPORT const int16_t *refm_wasm_graph(uint8_t track, uint8_t kind) { acid30
 
 static int8_t panel_sign(int16_t delta) { return delta < 0 ? -1 : delta > 0 ? 1 : 0; }
 static void panel_pattern_delta(int8_t d) { uint8_t next; if (!d) return; groovebox_pattern_store(&vm.groovebox.patterns, &vm.groovebox, vm.groovebox.current_pattern); next=(uint8_t)((vm.groovebox.current_pattern + (d > 0 ? 1u : 7u)) & 7u); groovebox_pattern_load(&vm.groovebox.patterns, &vm.groovebox, next); }
+
 REFM_EXPORT void refm_wasm_panel_encoder(uint8_t encoder, int16_t delta) {
     int8_t d = panel_sign(delta);
     unsigned n;
@@ -103,9 +104,24 @@ REFM_EXPORT void refm_wasm_panel_encoder(uint8_t encoder, int16_t delta) {
     n = (unsigned)(delta < 0 ? -delta : delta);
     if (n > 8u) n = 8u;
     while (n--) {
-        if (encoder == 4u) { if (panel_ui.page == UI240_ACID_STEP || panel_ui.page == UI240_DRUM) ui240_select_step(&panel_ui, d); else if (panel_ui.page == UI240_PROJECT) ui240_select_project(&panel_ui, d); else panel_pattern_delta(d); continue; }
-        if (encoder == 5u) { ui240_cycle_machine(&panel_ui, d); continue; }
-        if (encoder == 6u) { int32_t bpm = (int32_t)vm.groovebox.transport.bpm + d; if (bpm < 30) bpm = 30; if (bpm > 300) bpm = 300; midi_transport_set_bpm(&vm.groovebox.transport, (uint16_t)bpm); continue; }
+        if (encoder == 4u) {
+            if (panel_ui.page == UI240_ACID_STEP || panel_ui.page == UI240_DRUM) ui240_select_step(&panel_ui, d);
+            else if (panel_ui.page == UI240_PROJECT) ui240_select_project(&panel_ui, d);
+            else panel_pattern_delta(d);
+            continue;
+        }
+        if (encoder == 5u) {
+            if (panel_ui.page == UI240_FX) ui240_cycle_fx_section(&panel_ui, d);
+            else ui240_cycle_machine(&panel_ui, d);
+            continue;
+        }
+        if (encoder == 6u) {
+            int32_t bpm = (int32_t)vm.groovebox.transport.bpm + d;
+            if (bpm < 30) bpm = 30;
+            if (bpm > 300) bpm = 300;
+            midi_transport_set_bpm(&vm.groovebox.transport, (uint16_t)bpm);
+            continue;
+        }
         if (encoder > 3u) continue;
         if (panel_ui.page == UI240_ACID_MAIN) ui240_edit_acid_main(&panel_ui, &vm.groovebox, encoder, d);
         else if (panel_ui.page == UI240_ACID_STEP) ui240_edit_acid_step(&panel_ui, &vm.groovebox, encoder, d);
@@ -115,6 +131,7 @@ REFM_EXPORT void refm_wasm_panel_encoder(uint8_t encoder, int16_t delta) {
         else if (panel_ui.page == UI240_PROJECT && encoder == 0u) ui240_select_project(&panel_ui, d);
     }
 }
+
 REFM_EXPORT void refm_wasm_panel_action(uint8_t action) {
     groovebox_t *g = &vm.groovebox;
     switch (action) {
@@ -124,20 +141,68 @@ REFM_EXPORT void refm_wasm_panel_action(uint8_t action) {
     case 3u: ui240_set_page(&panel_ui, panel_ui.machine >= UI240_MACHINE_808 ? UI240_DRUM : UI240_ACID_STEP); break;
     case 4u: if (panel_ui.machine < UI240_MACHINE_808) ui240_set_machine(&panel_ui, UI240_MACHINE_808); else ui240_cycle_machine(&panel_ui, 1); ui240_set_page(&panel_ui, UI240_DRUM); break;
     case 5u: ui240_set_page(&panel_ui, UI240_MIXER); break;
-    case 6u: ui240_set_page(&panel_ui, UI240_FX); break;
+    case 6u: if (panel_ui.page == UI240_FX) ui240_cycle_fx_section(&panel_ui, 1); else ui240_set_page(&panel_ui, UI240_FX); break;
     case 7u: ui240_set_page(&panel_ui, UI240_SONG); break;
     case 8u: ui240_set_page(&panel_ui, UI240_PROJECT); break;
     case 9u: refm_target_set_external_clock(&vm, 0u); refm_target_midi_byte(&vm, g->transport.playing ? 0xFCu : 0xFAu); break;
-    case 10u: if (panel_ui.page == UI240_ACID_MAIN && panel_ui.machine < UI240_MACHINE_808) g->acid[panel_ui.machine].square ^= 1u; else if (panel_ui.page == UI240_ACID_STEP && panel_ui.machine < UI240_MACHINE_808) ui240_toggle_acid_flag(&panel_ui, g, SEQ16_ACCENT); else if (panel_ui.page == UI240_DRUM) ui240_edit_drum(&panel_ui, g, 1u, 1); else if (panel_ui.page == UI240_MIXER) g->mixer.track[panel_ui.machine & 3u].mute ^= 1u; else if (panel_ui.page == UI240_SONG) g->song.loop ^= 1u; break;
-    case 11u: if (panel_ui.page == UI240_ACID_STEP && panel_ui.machine < UI240_MACHINE_808) ui240_toggle_acid_flag(&panel_ui, g, SEQ16_SLIDE); else if (panel_ui.page == UI240_MIXER) g->mixer.track[panel_ui.machine & 3u].solo ^= 1u; break;
+    case 10u:
+        if (panel_ui.page == UI240_ACID_MAIN && panel_ui.machine < UI240_MACHINE_808) g->acid[panel_ui.machine].square ^= 1u;
+        else if (panel_ui.page == UI240_ACID_STEP && panel_ui.machine < UI240_MACHINE_808) ui240_toggle_acid_flag(&panel_ui, g, SEQ16_ACCENT);
+        else if (panel_ui.page == UI240_DRUM) ui240_edit_drum(&panel_ui, g, 1u, 1);
+        else if (panel_ui.page == UI240_MIXER) g->mixer.track[panel_ui.machine & 3u].mute ^= 1u;
+        else if (panel_ui.page == UI240_FX) ui240_cycle_fx_section(&panel_ui, 1);
+        else if (panel_ui.page == UI240_SONG) g->song.loop ^= 1u;
+        break;
+    case 11u:
+        if (panel_ui.page == UI240_ACID_STEP && panel_ui.machine < UI240_MACHINE_808) ui240_toggle_acid_flag(&panel_ui, g, SEQ16_SLIDE);
+        else if (panel_ui.page == UI240_MIXER) g->mixer.track[panel_ui.machine & 3u].solo ^= 1u;
+        else if (panel_ui.page == UI240_FX) ui240_cycle_fx_section(&panel_ui, -1);
+        break;
     case 14u: refm_target_panic(&vm); break;
     default: break;
     }
 }
-REFM_EXPORT void refm_wasm_panel_key(uint8_t note, uint8_t on) { uint8_t status; if (panel_ui.machine >= UI240_MACHINE_808 || panel_ui.page == UI240_ACID_STEP || panel_ui.page == UI240_DRUM || panel_ui.page == UI240_SONG || panel_ui.page == UI240_PROJECT || panel_ui.page == UI240_EXT) return; status=(uint8_t)((on ? 0x90u : 0x80u) | panel_ui.machine); refm_target_midi_byte(&vm, status); refm_target_midi_byte(&vm, note); refm_target_midi_byte(&vm, on ? 108u : 0u); }
+
+REFM_EXPORT void refm_wasm_panel_key(uint8_t note, uint8_t on) {
+    uint8_t status;
+    if (panel_ui.machine >= UI240_MACHINE_808 || panel_ui.page == UI240_ACID_STEP || panel_ui.page == UI240_DRUM || panel_ui.page == UI240_SONG || panel_ui.page == UI240_PROJECT || panel_ui.page == UI240_EXT) return;
+    status=(uint8_t)((on ? 0x90u : 0x80u) | panel_ui.machine);
+    refm_target_midi_byte(&vm, status);
+    refm_target_midi_byte(&vm, note);
+    refm_target_midi_byte(&vm, on ? 108u : 0u);
+}
+
 REFM_EXPORT uint32_t refm_wasm_panel_value(uint8_t field) {
     ui240_snapshot(&panel_ui, &vm.groovebox, &panel_view);
     switch (field) {
-    case 0u: return panel_view.page; case 1u: return panel_view.machine; case 2u: return panel_view.pattern; case 3u: return panel_view.playing; case 4u: return panel_view.playing_step; case 5u: return panel_view.selected_step; case 6u: return panel_view.selected_lane; case 7u: return panel_view.project_slot; case 8u: return panel_view.bpm; case 9u: return panel_view.p0; case 10u: return panel_view.p1; case 11u: return panel_view.p2; case 12u: return panel_view.p3; case 13u: return panel_view.wave_square; case 14u: return panel_view.step_type; case 15u: return panel_view.accent; case 16u: return panel_view.slide; case 17u: return panel_view.step_probability; case 18u: return panel_view.drum_state; case 19u: return panel_view.mute; case 20u: return panel_view.solo; default: return 0u;
+    case 0u: return panel_view.page;
+    case 1u: return panel_view.machine;
+    case 2u: return panel_view.pattern;
+    case 3u: return panel_view.playing;
+    case 4u: return panel_view.playing_step;
+    case 5u: return panel_view.selected_step;
+    case 6u: return panel_view.selected_lane;
+    case 7u: return panel_view.project_slot;
+    case 8u: return panel_view.bpm;
+    case 9u: return panel_view.p0;
+    case 10u: return panel_view.p1;
+    case 11u: return panel_view.p2;
+    case 12u: return panel_view.p3;
+    case 13u: return panel_view.wave_square;
+    case 14u: return panel_view.step_type;
+    case 15u: return panel_view.accent;
+    case 16u: return panel_view.slide;
+    case 17u: return panel_view.step_probability;
+    case 18u: return panel_view.drum_state;
+    case 19u: return panel_view.mute;
+    case 20u: return panel_view.solo;
+    case 22u: return panel_view.fx_section;
+    case 23u: return panel_view.drum_hits;
+    case 24u: return panel_view.drum_accents;
+    case 25u: return (uint32_t)((int16_t)panel_view.acid_tune + 64);
+    case 26u: return panel_view.acid_accent;
+    case 27u: return panel_view.song_loop;
+    case 28u: return panel_view.song_length;
+    default: return 0u;
     }
 }
