@@ -34,9 +34,21 @@ int main(void)
     (void)ui240_performance_key(&ui, &g, UI240_MOD_DRUM, 22u, 58u, 1u);
     assert(g.drum_909_flams[3] & (1u << DRUM_BD));
 
-    /* Direct pattern keyboard switching preserves the edited source pattern. */
+    /* Pattern keyboard selection is immediate while stopped, but quantized
+       to the next 16-step boundary while transport is running. */
     ui240_select_pattern_direct(&g, 3u);
     assert(g.current_pattern == 3u);
+    assert(g.pending_pattern == GROOVEBOX_NO_PENDING_PATTERN);
+    g.transport.playing = 1u;
+    ui240_select_pattern_direct(&g, 5u);
+    assert(g.current_pattern == 3u);
+    assert(g.pending_pattern == 5u);
+    g.step = 15u;
+    groovebox_advance_step(&g);
+    assert(g.current_pattern == 5u);
+    assert(g.pending_pattern == GROOVEBOX_NO_PENDING_PATTERN);
+    assert(g.step == 0u);
+    g.transport.playing = 0u;
 
     /* Mixer performance bank: four mutes, then four solos. */
     (void)ui240_performance_key(&ui, &g, UI240_MOD_MIXER, 0u, 36u, 1u);
