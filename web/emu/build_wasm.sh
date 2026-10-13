@@ -47,6 +47,7 @@ cp "$ROOT/web/emu/refm_audio_worklet.js" "$OUT/refm_audio_worklet.js"
 rm -rf "$OUT/app"
 mkdir -p "$OUT/app"
 cp "$ROOT/web/app/"*.html "$ROOT/web/app/"*.js "$ROOT/web/app/"*.css "$OUT/app/"
+python3 "$ROOT/tools/patch_virtual_fm1_performance.py" "$OUT/app/virtual_fm1.js"
 
 # The combined app is deployed under /app while refm.js/refm.wasm live one level up.
 # Inject the current-runtime download helper into the built copy without forcing the
@@ -81,6 +82,8 @@ grep -q 'latest_wasm.js' "$OUT/app/index.html"
 grep -q '_refm_wasm_panel_value' "$OUT/refm.js"
 grep -q '_refm_wasm_panel_key_event' "$OUT/refm.js"
 grep -q '_refm_wasm_panel_modifier' "$OUT/refm.js"
+grep -q 'BUTTON_MOD' "$OUT/app/virtual_fm1.js"
+grep -q '_refm_wasm_panel_key_event' "$OUT/app/virtual_fm1.js"
 test -s "$OUT/wasm-channel.json"
 
 echo "WASM groovebox built with full-mipmap Open303-HQ acid core + keyboard-performance virtual FM-1 app: $OUT/app/index.html"
