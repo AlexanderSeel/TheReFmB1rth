@@ -68,6 +68,20 @@ class VirtualFm1Tests(unittest.TestCase):
         self.assertIn("if(value(0)===7)restoreLocal();else encoder(ENC.ALGORITHM,-1)", js)
         self.assertIn("if(value(0)===7)saveLocal();else encoder(ENC.ALGORITHM,1)", js)
 
+    def test_rb240_skin_is_shared_between_hardware_and_virtual(self):
+        js = (ROOT / 'web/app/virtual_fm1.js').read_text()
+        css = (ROOT / 'web/app/virtual_fm1.css').read_text()
+        skin = (ROOT / 'tools/apply_rb240_skin.py').read_text()
+        overlay = (ROOT / 'tools/patch_fm1_rebirth_ui.py').read_text()
+        for marker in ("led:'#250708'", "red:'#ff4a3f'", "amber:'#ffb326'", 'function bevel(', 'function ledBox('):
+            self.assertIn(marker, js)
+        for marker in ('--rb240-metal', '--rb240-red', '--rb240-amber', '--rb240-cyan'):
+            self.assertIn(marker, css)
+        for marker in ('RB240_PANEL', 'RB240_LED_BG', 'RB240_RED', 'RB240_AMBER', 'refm_bevel'):
+            self.assertIn(marker, skin)
+        self.assertIn('apply_rb240_skin.py', overlay)
+        self.assertIn('rb240-metal-panel-v1', overlay)
+
     def test_virtual_audio_uses_buffered_worklet_not_deprecated_script_processor(self):
         js = (ROOT / 'web/app/virtual_fm1.js').read_text()
         client = (ROOT / 'web/emu/worklet_client.js').read_text()
