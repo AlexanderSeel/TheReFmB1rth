@@ -1,8 +1,13 @@
 #!/usr/bin/env python3
 import pathlib
+import re
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
+
+
+def compact(text: str) -> str:
+    return re.sub(r'\s+', '', text)
 
 
 class VirtualFm1Tests(unittest.TestCase):
@@ -18,11 +23,12 @@ class VirtualFm1Tests(unittest.TestCase):
 
     def test_wasm_uses_physical_ui240_model(self):
         src = (ROOT / 'web/emu/refm_wasm.c').read_text()
-        self.assertIn('#include "../../firmware/proto/ui240.h"', src)
+        packed = compact(src)
+        self.assertIn('#include"../../firmware/proto/ui240.h"', packed)
         self.assertIn('refm_wasm_panel_encoder', src)
         self.assertIn('refm_wasm_panel_action', src)
         self.assertIn('refm_wasm_panel_key', src)
-        self.assertIn('ui240_snapshot(&panel_ui, &vm.groovebox, &panel_view)', src)
+        self.assertIn('ui240_snapshot(&panel_ui,&vm.groovebox,&panel_view)', packed)
         self.assertIn('seed_beta_pattern()', src)
 
     def test_wasm_build_bundles_combined_app_and_panel_exports(self):
@@ -76,14 +82,17 @@ class VirtualFm1Tests(unittest.TestCase):
         ui_c = (ROOT / 'firmware/proto/ui240.c').read_text()
         target = (ROOT / 'firmware/integration/refm_felucca_bridge.c').read_text()
         wasm = (ROOT / 'web/emu/refm_wasm.c').read_text()
+        wasm_packed = compact(wasm)
         for marker in ('UI240_FX_PCF','UI240_FX_DELAY','UI240_FX_DIST','UI240_FX_COMP','fx_section'):
             self.assertIn(marker, ui_h)
         for marker in ('UI240_FX_PCF','UI240_FX_DELAY','UI240_FX_DIST','UI240_FX_SECTION_COUNT','fx_section'):
             self.assertIn(marker, ui_c)
         self.assertIn('ui240_cycle_fx_section(&g_ui, d)', target)
-        self.assertIn('ui240_cycle_fx_section(&panel_ui, d)', wasm)
+        self.assertIn('ui240_cycle_fx_section(&panel_ui,d)', wasm_packed)
         for marker in ('case 29:', 'case 30:', 'case 31:', 'case 32:'):
             self.assertIn(marker, target)
+        for marker in ('case29u:returnpanel_view.acid_cutoff_pct;', 'case30u:returnpanel_view.acid_resonance_pct;', 'case31u:returnpanel_view.acid_env_pct;', 'case32u:returnpanel_view.acid_decay_pct;'):
+            self.assertIn(marker, wasm_packed)
         for marker in ('acid_cutoff_pct','acid_resonance_pct','acid_env_pct','acid_decay_pct'):
             self.assertIn(marker, ui_h)
             self.assertIn(marker, ui_c)
