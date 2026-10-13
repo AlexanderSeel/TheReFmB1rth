@@ -62,20 +62,23 @@ class VirtualFm1Tests(unittest.TestCase):
         self.assertIn('width:20%', css)
         self.assertIn('height:31.25%', css)
 
-    def test_beta3_virtual_renderer_matches_approved_screen_language(self):
+    def test_virtual_renderer_v2_matches_pattern_first_screen_language(self):
         shell = (ROOT / 'web/app/virtual_fm1.js').read_text()
-        renderer = (ROOT / 'web/app/rb240_renderer.js').read_text()
+        entry = (ROOT / 'web/app/rb240_renderer.js').read_text()
+        renderer = (ROOT / 'web/app/rb240_renderer_v2.js').read_text()
         self.assertIn("import {drawRB240} from './rb240_renderer.js'", shell)
+        self.assertIn("rb240_renderer_v2.js", entry)
         for marker in (
-            "'SEQ EDIT'", "'PITCH'", "'MODE'", "'TR-808 RHYTHM'", "'TR-909 RHYTHM'",
-            "'PCF'", "'DELAY'", "'DIST'", "'COMP'", "'FLAM'", "'CHANNEL / LEVELS'",
-            "'PATTERN / SONG'", 'function screw(', 'function knob(', 'function meter('
+            "'SEQ EDIT'", "'TB-303 STYLE STEP EDIT'", "'TR-808 STEP PROGRAMMER'", "'TR-909 STEP PROGRAMMER'",
+            "'PCF'", "'DELAY'", "'DIST'", "'COMP'", "'FLAM'", "'MIXER'",
+            "'PATTERN / SONG'", 'function knob(', 'function meter(', 'function acidStrip(', 'function drumGrid('
         ):
             self.assertIn(marker, renderer)
-        for field in ('get(29)', 'get(30)', 'get(31)', 'get(32)'):
-            self.assertIn(field, renderer)
-        self.assertIn('drumFlam:page===3?!!p2:false', renderer)
-        self.assertIn('flamWidth:page===3?p3:0', renderer)
+        self.assertIn('Array.from({length:16}', renderer)
+        self.assertIn('drumSteps=packed.map', renderer)
+        self.assertIn('window.refmRB240State=s', renderer)
+        self.assertIn('focus=!!v(34)', renderer)
+        self.assertIn('focusRegion=v(35)&7', renderer)
 
     def test_beta3_panel_state_is_shared_by_target_and_wasm(self):
         ui_h = (ROOT / 'firmware/proto/ui240.h').read_text()
@@ -113,7 +116,7 @@ class VirtualFm1Tests(unittest.TestCase):
         self.assertIn('rb240-beta3-approved', overlay)
 
     def test_909_flam_is_real_persisted_engine_state(self):
-        renderer = (ROOT / 'web/app/rb240_renderer.js').read_text()
+        renderer = (ROOT / 'web/app/rb240_renderer_v2.js').read_text()
         groove = (ROOT / 'firmware/proto/groovebox.c').read_text()
         bank = (ROOT / 'firmware/proto/pattern_bank.h').read_text()
         self.assertIn("'FLAM'", renderer)
