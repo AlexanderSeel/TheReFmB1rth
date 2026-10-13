@@ -33,12 +33,11 @@ class VirtualInteractionContractTests(unittest.TestCase):
         self.assertIn("if(tap)fire()", self.source)
 
     def test_multiple_modifier_buttons_are_tracked_and_prioritized(self):
-        self.assertIn("const heldModifierButtons=new Map()", self.source)
+        self.assertIn("heldModifierButtons=new Map()", self.source)
         self.assertIn("const MOD_PRIORITY=['SEQ','ARP','GLO','FX','SAVE','EDIT','REC','SEL']", self.source)
         self.assertIn("function activeModifierButton()", self.source)
         self.assertIn("function syncModifier()", self.source)
         self.assertIn("heldModifierButtons.delete(name)", self.source)
-        # Releasing one button recomputes the layer from buttons still held.
         self.assertGreaterEqual(self.source.count("syncModifier()"), 3)
 
     def test_second_button_consumes_primary_tap(self):
@@ -52,6 +51,14 @@ class VirtualInteractionContractTests(unittest.TestCase):
         self.assertIn("VIRTUAL HOLD · ${name} LATCHED", self.source)
         self.assertIn("existing?.latched", self.source)
         self.assertIn("VIRTUAL HOLD RELEASED", self.source)
+
+    def test_pc_keyboard_can_hold_panel_modifiers(self):
+        self.assertIn("const PC_MOD_KEYS={KeyC:'SEQ',KeyV:'ARP',KeyB:'GLO',KeyN:'FX',KeyM:'SAVE',Comma:'EDIT',Period:'REC',Slash:'SEL'}", self.source)
+        self.assertIn("function beginKeyboardModifier(name,code)", self.source)
+        self.assertIn("function endKeyboardModifier(name,cancel=false)", self.source)
+        self.assertIn("beginKeyboardModifier(modName,e.code)", self.source)
+        self.assertIn("endKeyboardModifier(h.modifier,false)", self.source)
+        self.assertIn("panelButtons.set(name,g)", self.source)
 
     def test_sel_tap_clears_temporary_focus_but_consumed_hold_keeps_it(self):
         self.assertIn("function focusExit()", self.source)
