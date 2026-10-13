@@ -3,8 +3,8 @@
 """Apply the compact ReFm visual layer and physical-hardware beta integration.
 
 The original compatibility layer is still identified as compact-rebirth-inspired
-for provenance/tests, but the hardware-beta patch now takes over the normal
-240x240 page and panel workflow with dedicated ReFm screens and controls.
+for provenance/tests, but the hardware beta renderer now applies the approved
+RB-240 beta3 screen contract after the base hardware integration.
 """
 from __future__ import annotations
 import argparse, hashlib, subprocess, sys
@@ -32,36 +32,13 @@ def main() -> int:
     new = """    /* Compact dual-bassline visual language: 16 grouped step lamps.\n       This graph strip remains as a compatibility/provenance marker; the\n       dedicated ReFm beta renderer replaces normal Felucca pages afterwards. */\n    {\n        extern uint8_t refm_felucca_step(void);\n        uint32_t st = refm_felucca_step() & 15u;\n        for (i = 0; i < 16; ++i) {\n            int32_t sx = 11 + i * 13 + (i / 4) * 4;\n            uint16_t sc = ((uint32_t)i == st) ? T_ACCENT : T_RAISE;\n            cv_rect(sx, graph_ht - 7, 9, 4, sc);\n        }\n    }\n    return 1;\n}\n\nstatic void draw_graph(void)\n"""
     replace_once(graph, old, new)
 
-    subprocess.run(
-        [sys.executable, str(ROOT / "tools" / "apply_hardware_beta_fixes.py"), str(root)],
-        check=True,
-        cwd=ROOT,
-    )
-    subprocess.run(
-        [sys.executable, str(ROOT / "tools" / "apply_rb240_skin.py"), str(root)],
-        check=True,
-        cwd=ROOT,
-    )
-    subprocess.run(
-        [sys.executable, str(ROOT / "tools" / "fix_beta_input_safety.py"), str(root)],
-        check=True,
-        cwd=ROOT,
-    )
-    subprocess.run(
-        [sys.executable, str(ROOT / "tools" / "fix_target_beta_rom.py"), str(root)],
-        check=True,
-        cwd=ROOT,
-    )
-    subprocess.run(
-        [sys.executable, str(ROOT / "tools" / "enable_rom_ref_diagnostics.py"), str(root)],
-        check=True,
-        cwd=ROOT,
-    )
-    subprocess.run(
-        [sys.executable, str(ROOT / "tools" / "apply_runtime_diagnostics.py"), str(root)],
-        check=True,
-        cwd=ROOT,
-    )
+    subprocess.run([sys.executable, str(ROOT / "tools" / "apply_hardware_beta_fixes.py"), str(root)], check=True, cwd=ROOT)
+    subprocess.run([sys.executable, str(ROOT / "tools" / "apply_rb240_skin.py"), str(root)], check=True, cwd=ROOT)
+    subprocess.run([sys.executable, str(ROOT / "tools" / "apply_rb240_beta3_layout.py"), str(root)], check=True, cwd=ROOT)
+    subprocess.run([sys.executable, str(ROOT / "tools" / "fix_beta_input_safety.py"), str(root)], check=True, cwd=ROOT)
+    subprocess.run([sys.executable, str(ROOT / "tools" / "fix_target_beta_rom.py"), str(root)], check=True, cwd=ROOT)
+    subprocess.run([sys.executable, str(ROOT / "tools" / "enable_rom_ref_diagnostics.py"), str(root)], check=True, cwd=ROOT)
+    subprocess.run([sys.executable, str(ROOT / "tools" / "apply_runtime_diagnostics.py"), str(root)], check=True, cwd=ROOT)
 
     h = hashlib.sha256()
     for path in (
@@ -75,9 +52,9 @@ def main() -> int:
     ):
         h.update(path.read_bytes())
     (root / ".refm-ui-overlay").write_text(
-        f"style=compact-rebirth-inspired+refm-hardware-beta+rb240-metal-panel-v2\nsha256={h.hexdigest()}\n"
+        f"style=compact-rebirth-inspired+refm-hardware-beta+rb240-beta3-approved\nsha256={h.hexdigest()}\n"
     )
-    print("FM-1 dedicated ReFm hardware beta UI + RB-240 v2 skin + runtime diagnostics applied")
+    print("FM-1 dedicated ReFm hardware beta UI + approved RB-240 beta3 layout + runtime diagnostics applied")
     return 0
 
 
