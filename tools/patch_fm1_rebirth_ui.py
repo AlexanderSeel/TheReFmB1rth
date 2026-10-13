@@ -75,9 +75,9 @@ def main() -> int:
     ):
         h.update(path.read_bytes())
     (root / ".refm-ui-overlay").write_text(
-        f"style=compact-rebirth-inspired+refm-hardware-beta+rb240-metal-panel-v1\nsha256={h.hexdigest()}\n"
+        f"style=compact-rebirth-inspired+refm-hardware-beta+rb240-metal-panel-v2\nsha256={h.hexdigest()}\n"
     )
-    print("FM-1 dedicated ReFm hardware beta UI + RB-240 skin + runtime diagnostics applied")
+    print("FM-1 dedicated ReFm hardware beta UI + RB-240 v2 skin + runtime diagnostics applied")
     return 0
 
 
