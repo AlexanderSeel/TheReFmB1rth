@@ -3,8 +3,9 @@
 """Compatibility patch for older Virtual FM-1 source snapshots.
 
 The canonical web/app/virtual_fm1.js now contains the shared performance ABI,
-tap/hold arbitration and SEL/FOCUS cleanup directly. Keep this tool idempotent
-because older retained build inputs may still need the previous transformation.
+tap/hold arbitration, multi-button chord handling and SEL/FOCUS cleanup directly.
+Keep this tool idempotent because older retained build inputs may still need the
+previous transformation.
 """
 from __future__ import annotations
 import sys
@@ -21,7 +22,14 @@ def main() -> int:
     path = Path(sys.argv[1])
     s = path.read_text()
     # Current source already owns the interaction behavior. Do not rewrite it.
-    if "const BUTTON_MOD=" in s and "function focusExit()" in s and "name==='SEL'&&!used" in s:
+    if (
+        "const BUTTON_MOD=" in s
+        and "function focusExit()" in s
+        and (
+            "const heldModifierButtons=new Map()" in s
+            or "name==='SEL'&&!used" in s
+        )
+    ):
         print("virtual FM-1 performance behavior already canonical; compatibility patch skipped")
         return 0
 
