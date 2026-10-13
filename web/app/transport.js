@@ -16,46 +16,31 @@ function candidates(midi) {
 }
 
 async function ensureOutput() {
-  if (!navigator.requestMIDIAccess) {
-    throw new Error('Web MIDI is unavailable. Use current Chrome or Edge on HTTPS/localhost.');
-  }
+  if (!navigator.requestMIDIAccess) throw new Error('Web MIDI is unavailable. Use current Chrome or Edge on HTTPS/localhost.');
   if (!access) {
     access = await navigator.requestMIDIAccess({ sysex: true });
-    access.onstatechange = () => {
-      if (output?.state === 'disconnected') {
-        output = null;
-        setStatus('TRANSPORT DISCONNECTED');
-      }
-    };
+    access.onstatechange = () => { if (output?.state === 'disconnected') { output = null; setStatus('TRANSPORT DISCONNECTED'); } };
   }
   if (output && output.state !== 'disconnected') return output;
   const ports = candidates(access);
-  if (ports.length !== 1) {
-    throw new Error(ports.length
-      ? `Found ${ports.length} possible FM-1 MIDI outputs. Disconnect all but one.`
-      : 'No FM-1 MIDI output found.');
-  }
-  output = ports[0];
-  await output.open();
-  return output;
+  if (ports.length !== 1) throw new Error(ports.length ? `Found ${ports.length} possible FM-1 MIDI outputs. Disconnect all but one.` : 'No FM-1 MIDI output found.');
+  output = ports[0]; await output.open(); return output;
 }
 
 async function sendRealtime(status, label) {
   try {
-    const port = await ensureOutput();
-    port.send([status]);
-    setStatus(`${label} · ${port.name}`, status !== 0xFC);
-  } catch (error) {
-    setStatus('TRANSPORT OFFLINE');
-    alert(error.message);
-  }
+    if (window.refmVirtual?.routeActive) {
+      window.refmVirtual.sendMidi([status]);
+      setStatus(`${label} · VIRTUAL FM-1`, status !== 0xFC);
+      return;
+    }
+    const port = await ensureOutput(); port.send([status]); setStatus(`${label} · ${port.name}`, status !== 0xFC);
+  } catch (error) { setStatus('TRANSPORT OFFLINE'); alert(error.message); }
 }
 
-for (const button of BUTTONS) {
-  button.addEventListener('click', () => {
-    const command = button.dataset.transport;
-    if (command === 'start') sendRealtime(0xFA, 'PLAYING');
-    else if (command === 'continue') sendRealtime(0xFB, 'PLAYING');
-    else if (command === 'stop') sendRealtime(0xFC, 'STOPPED');
-  });
-}
+for (const button of BUTTONS) button.addEventListener('click', () => {
+  const command = button.dataset.transport;
+  if (command === 'start') sendRealtime(0xFA, 'PLAYING');
+  else if (command === 'continue') sendRealtime(0xFB, 'PLAYING');
+  else if (command === 'stop') sendRealtime(0xFC, 'STOPPED');
+});
