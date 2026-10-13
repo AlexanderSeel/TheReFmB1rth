@@ -239,7 +239,8 @@ void refm_felucca_ui_encoder(uint8_t encoder, int16_t delta) {
             continue;
         }
         if (encoder == REFM_ENC_ALGO) {
-            ui240_cycle_machine(&g_ui, d);
+            if (g_ui.page == UI240_FX) ui240_cycle_fx_section(&g_ui, d);
+            else ui240_cycle_machine(&g_ui, d);
             continue;
         }
         if (encoder == REFM_ENC_SELECT) {
@@ -289,7 +290,8 @@ void refm_felucca_ui_action(uint8_t action) {
         ui240_set_page(&g_ui, UI240_MIXER);
         break;
     case REFM_ACT_FX:
-        ui240_set_page(&g_ui, UI240_FX);
+        if (g_ui.page == UI240_FX) ui240_cycle_fx_section(&g_ui, 1);
+        else ui240_set_page(&g_ui, UI240_FX);
         break;
     case REFM_ACT_SONG:
         ui240_set_page(&g_ui, UI240_SONG);
@@ -309,6 +311,8 @@ void refm_felucca_ui_action(uint8_t action) {
             cycle_step_context(1);
         else if (g_ui.page == UI240_MIXER)
             g->mixer.track[g_ui.machine & 3u].mute ^= 1u;
+        else if (g_ui.page == UI240_FX)
+            ui240_cycle_fx_section(&g_ui, 1);
         else if (g_ui.page == UI240_SONG)
             g->song.loop ^= 1u;
         break;
@@ -317,6 +321,8 @@ void refm_felucca_ui_action(uint8_t action) {
             ui240_toggle_acid_flag(&g_ui, g, SEQ16_SLIDE);
         else if (g_ui.page == UI240_MIXER)
             g->mixer.track[g_ui.machine & 3u].solo ^= 1u;
+        else if (g_ui.page == UI240_FX)
+            ui240_cycle_fx_section(&g_ui, -1);
         break;
     case REFM_ACT_PROJECT_LOAD:
 #ifdef REFM_FELUCCA_PLATFORM
@@ -367,6 +373,13 @@ uint16_t refm_felucca_ui_value(uint8_t id) {
     case 19: return v.mute;
     case 20: return v.solo;
     case 21: return (uint16_t)(uint8_t)g_project_result;
+    case 22: return v.fx_section;
+    case 23: return v.drum_hits;
+    case 24: return v.drum_accents;
+    case 25: return (uint16_t)((int16_t)v.acid_tune + 64);
+    case 26: return v.acid_accent;
+    case 27: return v.song_loop;
+    case 28: return v.song_length;
     default: return 0u;
     }
 }
@@ -420,6 +433,7 @@ int refm_felucca_load(const uint8_t *blob, size_t blob_len) {
     if (rc == PROJECT_OK) {
         g_panel_playing = g_refm.groovebox.transport.playing ? 1u : 0u;
         if (g_ui.machine >= 4u) g_ui.machine = 0u;
+        if (g_ui.fx_section >= UI240_FX_SECTION_COUNT) g_ui.fx_section = UI240_FX_PCF;
     }
     return rc;
 }
