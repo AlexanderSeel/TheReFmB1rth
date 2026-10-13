@@ -51,6 +51,26 @@ static void refm_bevel(int32_t w, int32_t h)
     cv_rect(0, h - 2, w, 2, RB240_DARK);
     cv_rect(w - 2, 0, 2, h, RB240_DARK);
 }
+
+static void refm_band(int32_t y, const char *label, uint16_t color)
+{
+    cv_begin(232, 9, color);
+    cv_rect(0, 0, 232, 1, RB240_LIGHT);
+    cv_rect(0, 8, 232, 1, RB240_DARK);
+    cv_text(5, 1, &AF_S, label, RB240_TEXT);
+    cv_blit(4, y);
+}
+
+static void refm_meter(int32_t x, int32_t y, int32_t h, uint32_t pct, uint16_t color)
+{
+    int32_t inner = h - 4;
+    int32_t fill;
+    if (pct > 100u) pct = 100u;
+    fill = (int32_t)((pct * (uint32_t)inner) / 100u);
+    lcd_fill(x, y, 12, h, RB240_PANEL);
+    lcd_fill(x + 2, y + 2, 8, inner, RB240_DARK);
+    if (fill > 0) lcd_fill(x + 3, y + h - 2 - fill, 6, fill, color);
+}
 ''',
     )
 
@@ -84,9 +104,30 @@ static void refm_bevel(int32_t w, int32_t h)
         '''    lcd_fill(0, 0, 240, 240, RB240_BG);\n    cv_begin(240, 24, RB240_PANEL2);\n    cv_rect(0, 0, 240, 2, RB240_LIGHT);\n    cv_rect(0, 22, 240, 2, RB240_DARK);\n    cv_text(5, HEAD_MY, &AF_M, pn, RB240_AMBER);\n    cv_text(76, HEAD_MY, &AF_M, mn, RB240_TEXT);\n    cv_rect(171, 4, 36, 16, RB240_LED_BG);\n    fmt_int(b, bpm);\n    cv_text(177, HEAD_MY, &AF_M, b, RB240_RED);\n    cv_text(213, HEAD_SY, &AF_S, playing ? "PLAY" : "STOP", playing ? RB240_GREEN : RB240_DIM);\n    cv_blit(0, 0);\n\n    cv_begin(240, 22, RB240_PANEL);\n    cv_rect(0, 0, 240, 2, RB240_LIGHT);\n    cv_rect(0, 20, 240, 2, RB240_DARK);\n    cv_text(5, 5, &AF_S, "PATTERN", RB240_TEXT);\n    b[0] = (char)('A' + (pattern & 7u)); b[1] = 0;\n    cv_rect(47, 3, 17, 15, RB240_LED_BG);\n    cv_text(52, 5, &AF_S, b, RB240_RED);\n    cv_text(72, 5, &AF_S, "PRESET  ALGO  SELECT", RB240_DIM);\n    cv_blit(0, 27);\n''',
     )
 
+    # Page bands: same semantic accent map is mirrored by virtual_fm1.js.
+    replace_once(draw, "    if (page == 0u) {\n", "    if (page == 0u) {\n        refm_band(51, \"PERFORMANCE\", RB240_AMBER);\n")
+    replace_once(draw, "    } else if (page == 1u) {\n", "    } else if (page == 1u) {\n        refm_band(51, \"ACID CONTROL\", RB240_AMBER);\n")
+    replace_once(draw, "    } else if (page == 2u) {\n", "    } else if (page == 2u) {\n        refm_band(51, \"STEP PROGRAMMER\", RB240_AMBER);\n")
+    replace_once(draw, "    } else if (page == 3u) {\n", "    } else if (page == 3u) {\n        refm_band(51, \"DRUM MACHINE\", RB240_AMBER);\n")
+    replace_once(draw, "    } else if (page == 4u) {\n", "    } else if (page == 4u) {\n        refm_band(51, \"MIXER / SENDS\", RB240_CYAN);\n")
+    replace_once(draw, "    } else if (page == 5u) {\n", "    } else if (page == 5u) {\n        refm_band(51, \"MASTER FX\", RB240_CYAN);\n")
+    replace_once(draw, "    } else if (page == 6u) {\n", "    } else if (page == 6u) {\n        refm_band(51, \"PATTERN / SONG\", RB240_AMBER);\n")
+    replace_once(draw, "    } else if (page == 7u) {\n", "    } else if (page == 7u) {\n        refm_band(51, \"PROJECT MEMORY\", RB240_AMBER);\n")
+
+    replace_once(
+        draw,
+        '''        refm_card_text(180, 112, "REC", "SOLO");\n        refm_footer("ALGO TRACK | K1 LVL K2 PAN K3 DLY K4 REV");\n''',
+        '''        refm_card_text(180, 112, "REC", "SOLO");\n        refm_meter(24, 164, 38, refm_pct(p0), RB240_GREEN);\n        refm_meter(83, 164, 38, ((uint32_t)p1 * 100u) / 65534u, RB240_AMBER);\n        refm_meter(142, 164, 38, ((uint32_t)p2 * 100u) / 127u, RB240_CYAN);\n        refm_meter(201, 164, 38, ((uint32_t)p3 * 100u) / 127u, RB240_CYAN);\n        refm_footer("ALGO TRACK | K1 LVL K2 PAN K3 DLY K4 REV");\n''',
+    )
+    replace_once(
+        draw,
+        '''        refm_card_val(180, 61, "FILTER", (int32_t)refm_pct(p3));\n        refm_footer("K1 DRIVE K2 DELAY K3 REVERB K4 FILTER");\n''',
+        '''        refm_card_val(180, 61, "FILTER", (int32_t)refm_pct(p3));\n        refm_meter(24, 124, 70, refm_pct(p0), RB240_RED);\n        refm_meter(83, 124, 70, ((uint32_t)p1 * 100u) / 31000u, RB240_CYAN);\n        refm_meter(142, 124, 70, refm_pct(p2), RB240_CYAN);\n        refm_meter(201, 124, 70, refm_pct(p3), RB240_GREEN);\n        refm_footer("K1 DRIVE K2 DELAY K3 REVERB K4 FILTER");\n''',
+    )
+
     marker = root / ".refm-rb240-skin"
-    marker.write_text("style=rb240-metal-panel-v1\nvirtual-contract=web/app/virtual_fm1.js\n")
-    print("RB-240 metallic hardware LCD skin applied")
+    marker.write_text("style=rb240-metal-panel-v2\nvirtual-contract=web/app/virtual_fm1.js\n")
+    print("RB-240 metallic hardware LCD skin v2 applied")
     return 0
 
 
