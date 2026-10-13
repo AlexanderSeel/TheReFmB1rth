@@ -17,7 +17,7 @@ No Roland/Propellerhead/ReBirth artwork, logos, proprietary source, ROMs, or non
 
 ---
 
-# Current checkpoint — v0.1.0-beta.2 published, 2026-10-12
+# Current checkpoint — v0.1.0-beta.2 published, virtual FM-1 pre-flash workflow added, 2026-10-13
 
 ## First physical install — completed
 
@@ -58,6 +58,11 @@ Root cause confirmed: Felucca still owned the physical panel/keyboard/transport 
 - [x] browser VALIDATION page records the complete physical pass and binds it to the exact firmware-channel tag/commit/SHA;
 - [x] validation evidence embeds assigned factory-pattern and stress runtime snapshots and exports JSON + Markdown;
 - [x] offline `physical_validation_report.py` independently enforces the complete physical/runtime gate and exact target identity;
+- [x] combined browser app now includes INSTALLER / LIVE EDITOR / VIRTUAL FM-1 / VALIDATION in one workflow;
+- [x] virtual FM-1 uses the ReFm WASM engine plus the same `ui240` state/edit model as the physical beta bridge;
+- [x] full virtual panel uses the FM-1 1000×640 geometry, exact 240×240 display placement and 27-key physical index ordering studied from GPL-3.0 `fm1-x0x`;
+- [x] virtual LCD follows the dedicated physical beta renderer's card, step-grid, footer and PROJECT load/save semantics;
+- [x] LIVE EDITOR can route ACID/drum/pattern/mixer/transport edits to the virtual WASM device for pre-flash rehearsal;
 - [x] exact readback checkpoint `8e6daf2f0345e297c21c5b3270de2498f981e8ba` passed host, WASM, FM-1 target package, target-memory, manifest/SHA and sample-link experiment gates;
 - [x] exact full-transfer checkpoint `993eeb40255d75bbe3b344fa9c6c400816b05820` passed CI, WASM, real JieLi FM-1 app/loader/FWSC build, target-memory budgets, release manifest/SHA verification and sample-link experiment;
 - [x] exact beta.2 release commit `2b4c537cc1a1f8c42c43ee953e14e27d7740837b` passed host, WASM, real JieLi target, target-memory, package/manifest/SHA and sample-link gates before publication;
@@ -65,7 +70,7 @@ Root cause confirmed: Felucca still owned the physical panel/keyboard/transport 
 - [x] browser firmware channel points to beta.2 with FWSC SHA-256 `f2d2e13089a52cf279cee0bc43d9d4791ae913f0b3b889ec5b3de02b70c667b2`;
 - [x] deterministic second-pass hardware runbook added at `docs/PHYSICAL_BETA2_VALIDATION.md`.
 
-Beta.2 is a **software-gated beta** until the second physical validation pass succeeds.
+Beta.2 is a **software-gated beta** until the second physical validation pass succeeds. The virtual FM-1 is a pre-flash behavioral/UI rehearsal and does not replace physical CPU/stack/I/O/recovery evidence.
 
 ---
 
@@ -158,7 +163,7 @@ Implemented software-side:
 - [x] LFO button = ACID B (label reused as shortcut, no LFO feature);
 - [x] ARP button = DRUM / 808↔909;
 - [x] SEQ button = STEP;
-- [x] GLO = MIXER, FX = FX, SCL = SONG, SAVE = PROJECT, HOME = HOME;
+- [x] GLO = MIXER, FX = FX, SCL/SEL = SONG, SAVE = PROJECT, HOME = HOME;
 - [x] PLAY owns ReFm transport;
 - [x] EDIT/REC act as contextual secondary actions;
 - [x] host tests for compact UI state/editing and hardware bridge workflow.
@@ -176,7 +181,7 @@ Physical beta.2 validation still required:
 
 ---
 
-# M6.1 — Browser installer + editor
+# M6.1 — Browser installer + editor + virtual FM-1
 
 - [x] local `.fwsc` selection/drop;
 - [x] GitHub Release discovery;
@@ -206,7 +211,16 @@ Physical beta.2 validation still required:
 - [x] factory-pattern and stress runtime captures can be assigned directly from the diagnostic event stream;
 - [x] JSON and Markdown physical-validation evidence export;
 - [x] browser and Python mandatory-check contracts are locked together by CI tests;
-- [ ] consolidated polished editor/WASM application after physical beta is stable.
+- [x] combined INSTALLER / LIVE EDITOR / VIRTUAL FM-1 / VALIDATION application emitted inside the WASM artifact;
+- [x] VIRTUAL FM-1 front panel follows the full FM-1 hardware geometry with the real 240×240 screen position;
+- [x] virtual keybed uses the 16-white/11-black FM-1 physical key index map rather than a generic chromatic keyboard layout;
+- [x] virtual encoders/actions reuse the same ids and `ui240` editing functions as the physical Felucca bridge;
+- [x] virtual HOME / ACID / STEP / DRUM / MIXER / FX / SONG / PROJECT display follows the target beta renderer's coordinates/content;
+- [x] virtual PROJECT uses OCT− LOAD / OCT+ SAVE semantics with browser-local versioned project storage;
+- [x] LIVE EDITOR **USE VIRTUAL** route mirrors editor CC/program/note traffic into the WASM device;
+- [x] virtual START / CONTINUE / STOP has one realtime-message owner so transport events are not doubled;
+- [x] virtual workflow documented in `docs/VIRTUAL_FM1.md` with `fm1-x0x` GPL-3.0 layout attribution;
+- [ ] further cosmetic/pixel-font/LED polish only after comparing screenshots against the physical FM-1.
 
 ---
 
@@ -281,18 +295,21 @@ These are the main blockers between **software-gated beta.2** and **hardware-pro
 
 # Immediate beta tasks
 
-1. Install `v0.1.0-beta.2` through the browser app and verify the displayed tag/commit/SHA before flashing.
-2. Open the browser **VALIDATION** tab and follow `docs/PHYSICAL_BETA2_VALIDATION.md` rather than ad-hoc testing.
-3. Validate HOME / ACID / STEP / DRUM / MIXER / FX / SONG / PROJECT on the actual LCD and record every result in the validation report.
-4. Validate live keys, PLAY/STOP, factory Pattern A and editing without lag/stuck notes.
-5. Capture factory-pattern runtime JSON with **CAPTURE RUNTIME**, retain the raw JSON and assign the latest capture to **Factory Pattern A** in VALIDATION.
-6. Run the four-machine stress scenario for several minutes, capture the second runtime JSON and assign it to **Worst-case stress**.
-7. Verify browser state sync plus complete project backup/restore, including the rule that restore stays RAM-only until explicit PROJECT SAVE.
-8. Verify USB MIDI, TRS MIDI and USB audio under playback/edit load.
-9. Verify physical project slot save/load, corruption fallback and power-cycle behavior.
-10. Prove rollback to official/Felucca firmware and repeat the update/rollback cycle.
-11. Export the VALIDATION JSON + Markdown evidence bundle.
-12. Run `tools/physical_validation_report.py` against the JSON with beta.2 expected tag/commit/SHA and require exit code 0 before calling beta.2 hardware-proven.
+1. Build/serve `build/wasm` and open `/app/`; exercise the complete **VIRTUAL FM-1** workflow before the next physical flash.
+2. In **LIVE EDITOR**, use **USE VIRTUAL** and verify editor changes are reflected by the virtual 240×240 display and audible WASM engine.
+3. Rehearse HOME / ACID / STEP / DRUM / MIXER / FX / SONG / PROJECT, PLAY/STOP, Pattern A and project LOAD/SAVE virtually.
+4. Install `v0.1.0-beta.2` through the browser app and verify the displayed tag/commit/SHA before flashing.
+5. Open the browser **VALIDATION** tab and follow `docs/PHYSICAL_BETA2_VALIDATION.md` rather than ad-hoc testing.
+6. Validate HOME / ACID / STEP / DRUM / MIXER / FX / SONG / PROJECT on the actual LCD and record every result in the validation report.
+7. Validate live keys, PLAY/STOP, factory Pattern A and editing without lag/stuck notes.
+8. Capture factory-pattern runtime JSON with **CAPTURE RUNTIME**, retain the raw JSON and assign the latest capture to **Factory Pattern A** in VALIDATION.
+9. Run the four-machine stress scenario for several minutes, capture the second runtime JSON and assign it to **Worst-case stress**.
+10. Verify browser state sync plus complete project backup/restore, including the rule that restore stays RAM-only until explicit PROJECT SAVE.
+11. Verify USB MIDI, TRS MIDI and USB audio under playback/edit load.
+12. Verify physical project slot save/load, corruption fallback and power-cycle behavior.
+13. Prove rollback to official/Felucca firmware and repeat the update/rollback cycle.
+14. Export the VALIDATION JSON + Markdown evidence bundle.
+15. Run `tools/physical_validation_report.py` against the JSON with beta.2 expected tag/commit/SHA and require exit code 0 before calling beta.2 hardware-proven.
 
 ---
 
@@ -303,7 +320,8 @@ These are the main blockers between **software-gated beta.2** and **hardware-pro
 - [x] patterns/song baseline;
 - [x] accent/slide/probability;
 - [x] mixer + essential FX;
-- [x] browser emulator/reference + installer/editor;
+- [x] combined browser installer/editor/virtual FM-1/WASM reference workflow;
+- [x] virtual FM-1 uses physical `ui240` state/edit semantics and target beta LCD layout;
 - [x] release hashes/provenance;
 - [x] loader-mediated installer foundation;
 - [x] dedicated physical ReFm beta UI implemented software-side;
