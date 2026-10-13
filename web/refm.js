@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Local-development bridge used when web/app is served directly from the repo.
-// Production Pages ships the generated build/wasm/refm.js at /refm.js instead.
-import './app/latest_wasm.js';
-const BASE='https://alexanderseel.github.io/TheReFmB1rth/';
+// The generated WASM runtime is published to the wasm-channel branch and served
+// through jsDelivr with CORS-safe module/WASM MIME handling.
+const CDN='https://cdn.jsdelivr.net/gh/AlexanderSeel/TheReFmB1rth@wasm-channel/';
 export default async function createRefm(options={}){
-  const remote=await import(`${BASE}refm.js?v=latest`);
+  const bust=Date.now();
+  const remote=await import(`${CDN}refm.js?v=${bust}`);
   const callerLocate=options.locateFile;
-  return remote.default({...options,locateFile:p=>p.endsWith('.wasm')?`${BASE}refm.wasm`:callerLocate?callerLocate(p):`${BASE}${p}`});
+  return remote.default({...options,locateFile:p=>p.endsWith('.wasm')?`${CDN}refm.wasm?v=${bust}`:callerLocate?callerLocate(p):`${CDN}${p}?v=${bust}`});
 }
