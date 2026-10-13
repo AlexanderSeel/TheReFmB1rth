@@ -73,8 +73,8 @@ jobs:
           cp build/wasm/worklet_client.js "$RUNNER_TEMP/wasm-channel/"
           cp build/wasm/refm_audio_worklet.js "$RUNNER_TEMP/wasm-channel/"
           cp build/wasm/wasm-channel.json "$RUNNER_TEMP/wasm-channel/"
-          cp build/wasm/SHA256SUMS "$RUNNER_TEMP/wasm-channel/"
           cd "$RUNNER_TEMP/wasm-channel"
+          sha256sum refm.js refm.wasm worklet_client.js refm_audio_worklet.js wasm-channel.json > SHA256SUMS
           git init
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
