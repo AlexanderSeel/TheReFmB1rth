@@ -63,6 +63,28 @@ The selected lane's actual hit/accent state is displayed. 909 flam is kept as re
 
 The logical display remains **240×240**, matching the physical FM-1. The Virtual tab also provides a true pixel-perfect **480×480 DISPLAY 2×** view, including direct screen editing.
 
+## Physical FM-1: page-first controls
+
+Current `main` deliberately removes the deferred tap-vs-hold modifier scheme from the physical FM-1. Primary hardware buttons now act immediately as ordinary page/action controls instead of waiting for release to determine whether the press was a tap or a hidden layer.
+
+The intended basic workflow is now:
+
+- `ENV` → ACID A;
+- `LFO` → ACID B;
+- `SEQ` → selected ACID's step editor;
+- `ARP` → 808/909 drum programmer;
+- `GLO` → mixer;
+- `FX` → effects;
+- `SCL` → song/pattern page;
+- `SAVE` → project page;
+- `PLAY` → transport immediately.
+
+On **SEQ**, `PRESET` selects one of 16 steps and pressing a musical key writes that note directly into the selected step. `K1` adjusts note, `K2` cycles REST/NOTE/TIE, `K3` cycles Accent/Slide combinations and `K4` changes probability. `EDIT` toggles Accent and `REC` toggles Slide for the selected ACID step.
+
+On **DRUM**, `PRESET` selects the step, `K1` selects the lane and `K2` cycles OFF/HIT/ACCENT. Pressing a physical musical key directly selects/programs/auditions the mapped drum voice at the selected step. On 909, the additional edit action retains real flam state.
+
+Machine/page transitions are panic-guarded so held live notes cannot survive a context switch.
+
 ## New TheReFmB1rth startup sequence
 
 Current `main` adds an original startup/loading sequence for both Virtual FM-1 and the physical target concept:
@@ -79,35 +101,31 @@ The physical implementation uses existing 240×240 LCD/text primitives and incre
 
 A legacy Felucca compatibility graph was still being injected underneath the dedicated RB-240 display and could appear as an unwanted horizontal/pattern strip across unrelated pages. Current `main` removes that injection: the dedicated ReFm renderer now owns normal LCD content.
 
-This does **not** mean the physical UI is finished. The next hardware pass must verify:
+Two additional real-LCD issues from the first hardware test are also addressed software-side:
+
+- the persistent 28-pixel bottom help band is removed on the physical renderer;
+- a full 240×240 clear is now performed only when page/machine changes, not for every same-page knob/step update.
+
+Same-page controls repaint their own backed regions, which should eliminate the visible whole-screen flash during parameter changes. These changes still require physical confirmation.
+
+The next hardware pass must verify:
 
 - no remaining graph/renderer bleed-through;
+- no persistent footer taking up the bottom of every page;
+- routine knob/step changes no longer cause a full-screen flash;
 - live keyboard notes are audible;
 - PLAY starts the seeded Pattern A audibly;
 - ACID step editing is fast and predictable;
 - 808/909 lane + step editing is fast and predictable;
-- parameter changes do not cause distracting full-screen redraws;
-- labels correspond to the controls actually used;
-- unnecessary persistent bottom help bands are removed.
+- labels correspond to the controls actually used.
 
-The host integration tests already prove that direct MIDI and the seeded Pattern A can generate non-zero ReFm audio through the Felucca bridge. If the next hardware test still has silence, investigation should therefore isolate the physical event/audio/DAC chain rather than blindly changing working DSP.
+The host integration tests already prove that direct MIDI and the seeded Pattern A can generate non-zero ReFm audio through the Felucca bridge. Current target diagnostics protocol v2 additionally counts ReFm render blocks, non-zero render blocks, panel key edges, live-note edges and transport events. If the next hardware test still has silence, these counters can separate an input/engine problem from a later DAC/USB output-path problem instead of changing working DSP blindly.
 
-## Advanced keyboard/performance interaction
+## Advanced Virtual performance interaction
 
-The shared `ui240_performance` layer still supports performance shortcuts on physical and Virtual FM-1, but these are considered advanced controls rather than the primary sequencing workflow.
+The shared `ui240_performance` layer still contains modifier/FOCUS performance functions and Virtual FM-1 exposes them as optional advanced shortcuts. The physical FM-1 no longer uses those hidden hold layers for its primary page buttons.
 
-| Hold | Temporary behavior |
-| --- | --- |
-| `SEQ` | selected-step ACID note entry |
-| `ARP/DRUM` | 808/909 drum-entry bank |
-| `GLO/MIXER` | mute / solo / machine selection |
-| `FX` | PCF / Delay / Dist / Comp selection and performance throws |
-| `SAVE` | direct Pattern A–H selection |
-| `EDIT` | contextual accent/slide/tie/rest/probability shortcuts |
-| `REC` | live capture into the running step |
-| `SCL/SEL` | FOCUS navigation |
-
-`HOME` remains the deterministic escape/panic action. These mappings may still be simplified on hardware if they interfere with basic step programming.
+Virtual advanced layers include SEQ, DRUM, MIXER, FX, Pattern, Edit, Live and Focus shortcuts. They are secondary to direct sequence editing and should not be required to build a normal ACID or drum pattern.
 
 ## Pattern switching during playback
 
