@@ -45,10 +45,13 @@ class WebSkinContractTests(unittest.TestCase):
         self.assertIn("rebirth_skin.css", build)
         self.assertIn("rebirth_skin.js", build)
 
-    def test_fm1_compact_skin_patch_exists(self):
+    def test_fm1_compact_skin_owns_lcd_without_legacy_graph_strip(self):
         patch = (ROOT / "tools" / "patch_fm1_rebirth_ui.py").read_text(encoding="utf-8")
-        self.assertIn("16 grouped step lamps", patch)
         self.assertIn("compact-rebirth-inspired", patch)
+        self.assertIn("no-legacy-graph-strip", patch)
+        self.assertIn("dedicated RB-240", patch)
+        self.assertNotIn("refm_felucca_step", patch)
+        self.assertNotIn("graph_ht - 7", patch)
 
 
 if __name__ == "__main__":
