@@ -48,9 +48,12 @@ rm -rf "$OUT/app"
 mkdir -p "$OUT/app"
 cp "$ROOT/web/app/"*.html "$ROOT/web/app/"*.js "$ROOT/web/app/"*.css "$OUT/app/"
 python3 "$ROOT/tools/patch_virtual_fm1_performance.py" "$OUT/app/virtual_fm1.js"
-python3 "$ROOT/tools/patch_rb240_virtual_focus.py" "$OUT/app/rb240_renderer.js"
+# FOCUS is now canonical in rb240_renderer_v2.js; do not patch the compatibility
+# entry point because it intentionally routes through rb240_boot_renderer.js.
 if command -v node >/dev/null 2>&1; then
   node --check "$OUT/app/virtual_fm1.js"
+  node --check "$OUT/app/rb240_renderer.js"
+  node --check "$OUT/app/rb240_boot_renderer.js"
   node --check "$OUT/app/rb240_renderer_v2.js"
   node --check "$OUT/app/virtual_usability.js"
 fi
@@ -98,7 +101,10 @@ grep -q 'syncModifier' "$OUT/app/virtual_fm1.js"
 grep -q '_refm_wasm_panel_key_event' "$OUT/app/virtual_fm1.js"
 grep -q 'focusExit' "$OUT/app/virtual_fm1.js"
 grep -q "name==='SEL'&&tap" "$OUT/app/virtual_fm1.js"
-grep -q 'rb240_renderer_v2.js' "$OUT/app/rb240_renderer.js"
+grep -q 'rb240_boot_renderer.js' "$OUT/app/rb240_renderer.js"
+grep -q 'rb240_renderer_v2.js' "$OUT/app/rb240_boot_renderer.js"
+grep -q '16-STEP BUS' "$OUT/app/rb240_boot_renderer.js"
+grep -q 'elapsed<1560' "$OUT/app/rb240_boot_renderer.js"
 grep -q 'focus=!!v(34)' "$OUT/app/rb240_renderer_v2.js"
 grep -q 'Array.from({length:16}' "$OUT/app/rb240_renderer_v2.js"
 grep -q 'window.refmRB240State=s' "$OUT/app/rb240_renderer_v2.js"
@@ -107,6 +113,6 @@ grep -q 'SEQ/DRUM LCD is directly clickable' "$OUT/app/virtual_usability.js"
 grep -q 'field >= 36u && field < 52u' "$ROOT/web/emu/refm_wasm_performance.inc"
 test -s "$OUT/wasm-channel.json"
 
-echo "WASM groovebox built with full-mipmap Open303-HQ acid core + pattern-first Virtual FM-1 app: $OUT/app/index.html"
+echo "WASM groovebox built with full-mipmap Open303-HQ acid core + ReFm boot + pattern-first Virtual FM-1 app: $OUT/app/index.html"
 echo "WASM channel: commit=$COMMIT sha256=$WASM_SHA"
 if [ -n "$SAMPLE_SRC" ]; then echo "Bundled audition samples: enabled"; else echo "Bundled audition samples: not present (synth fallback)"; fi
