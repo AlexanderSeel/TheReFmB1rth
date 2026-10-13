@@ -18,82 +18,71 @@ See [`plan.md`](plan.md) and [`docs/MILESTONES.md`](docs/MILESTONES.md).
 
 ## Current status
 
-**M5 groovebox functionality, the Felucca integration overlay and the reproducible GitHub build pipeline are implemented. A real experimental FM-1 `.fwsc` now builds successfully in GitHub Actions. This is still not a hardware release: do not flash the artifact until the linker-budget, CPU/underrun, emulator and recovery gates are completed.**
+**M5 groovebox functionality, the Felucca integration overlay, the RB-240 ReBirth-inspired 240×240 hardware/virtual UI and the keyboard-first performance interaction layer are implemented software-side. A real experimental FM-1 `.fwsc` builds in GitHub Actions. `v0.1.0-beta.2` remains the published hardware beta and is intentionally not overwritten by the current interaction work.**
 
 Implemented foundations include:
 
 - two acid engines and two synthesized 11-lane drum engines in one four-machine runtime;
 - 16-step sequencing with accent/slide/tie/probability primitives;
 - complete A–H pattern persistence and quantized song-chain pattern changes;
-- level/pan/mute/solo mixer, delay sends, drive, compressor, delay, performance low-pass and bounded master output;
+- level/pan/mute/solo mixer, delay/reverb sends, drive, compressor, delay, performance low-pass and bounded master output;
+- separate RB-240 PCF / Delay / Dist / Comp FX panels over the shared master FX rack;
 - internal clock plus MIDI START/CONTINUE/STOP/CLOCK;
 - MIDI note/CC/program routing for acid and drum machines;
 - versioned CRC-protected project serialization and Felucca A/B atomic flash integration;
-- LFO/filter/ADSR graph models;
-- shared target/WASM runtime;
+- shared target/WASM runtime and shared `ui240` interaction model;
 - Felucca Q15 audio callback integration plus shared USB/TRS MIDI ingress;
 - release manifests, SHA/product/device checks and a double-confirmed experimental installer wrapper that delegates to the pinned Felucca loader-mediated installer;
-- CI tests for DSP, sequencer, runtime, pattern/MIDI, projects and hardware-gate logic.
+- CI tests for DSP, sequencer, runtime, pattern/MIDI, projects, keyboard interaction and hardware-gate logic.
 
-## Next interaction milestone — keyboard-first live workflow
+## Keyboard-first live workflow
 
-The next UI pass should make much stronger use of the FM-1 keyboard and treat the keys as a contextual performance/edit surface rather than only as note keys. The physical hardware and virtual FM-1 must expose the same mappings so virtual rehearsal matches the real unit.
+The physical FM-1 and the built Virtual FM-1 now use the same `ui240_performance` interaction layer. The 27-key keyboard is contextual instead of being only an ACID note keyboard. A normal key press on ACID still plays the selected synth; the held layers below temporarily reinterpret the keyboard for editing and performance.
 
-### Keyboard-assisted note and drum entry
+| Hold | Keyboard layer |
+| --- | --- |
+| `SEQ` | write the played note directly into the selected ACID step |
+| `ARP/DRUM` | 808/909 drum entry and immediate audition |
+| `GLO/MIXER` | track mute/solo and machine selection |
+| `FX` | direct PCF / Delay / Dist / Comp selection plus performance throws |
+| `SAVE` | direct Pattern A–H selection |
+| `EDIT` | Accent / Slide / Tie / Rest / probability shortcuts; high/accent drum entry |
+| `REC` | live capture into the currently running sequencer step |
+| `SCL/SEL` | enter the quick FOCUS navigation layer |
 
-- On ACID pages, the keyboard should enter notes directly into the selected sequencer step.
-- In step-edit mode, pressing a key writes the pitch immediately; holding a modifier button while pressing a key may assign accent, slide, tie or probability-related variants without navigating through extra pages.
-- A dedicated live-record mode should allow notes played on the keyboard to be captured into the running pattern with sensible quantization.
-- On DRUM pages, the keyboard should become a drum-pad bank. Individual keys should map to BD, SD, clap, hats, toms, cymbals and the remaining 808/909 voices.
-- Drum live-record should write hits directly into the running step position. Accent/high-level and 909 flam states should be accessible through modifiers rather than requiring deep menu navigation.
-- The 808 and 909 mappings should remain visibly different where the machines differ: 909 flam/high-low behavior versus the broader 808 percussion voice set.
+`HOME` remains the deterministic escape/panic action. Page and machine changes keep the existing stuck-note safety behavior.
 
-### Live performance mode
+### 808 vs 909 keyboard workflow
 
-A dedicated live-performance mode should keep the most useful performance actions one gesture away while the sequencer is running.
+The two drum machines deliberately do not share one anonymous pad order.
 
-- Keyboard notes remain immediately playable for ACID A/B.
-- Selected keyboard keys may temporarily become performance controls when a modifier is held.
-- Quick access should exist for filter cutoff/resonance, delay, PCF, distortion and compressor/performance effects.
-- Mute/solo for ACID A, ACID B, 808 and 909 should be available without entering the mixer page.
-- Pattern A–H switching should be possible from the keyboard and should respect the configured quantized-change behavior.
-- One-shot/special-effect actions should be possible from spare keys, for example delay throw, filter sweep, temporary distortion, repeat/stutter, mute cut or similar performance-safe effects.
-- Entering live play should be fast, and leaving it should restore the normal keyboard mapping immediately.
+- **808:** the first 11-key bank maps `BD, SD, RS, CP, CH, OH, LT, MT, HT, CR, RD`; the second 11-key bank writes the same lanes as high/accent hits. The ordering keeps the characteristic rim/clap percussion close to kick/snare.
+- **909:** the first 11-key bank maps `BD, SD, LT, MT, HT, RS, CP, CH, OH, CR, RD`; the second 11-key bank is the HIGH/accent bank. The trailing performance keys expose the selected-lane flam toggle and flam-width down/up controls.
+- Drum key presses also audition the selected voice immediately, so programming does not require starting transport first.
+- With the `REC` layer while transport runs, drum hits are written at the current running step.
 
-### Hold/modifier behavior
+The 909 flam state is the real `drum_909_flams` sequencer state, not a cosmetic UI flag.
 
-Physical buttons should gain a consistent short-press/hold language. A short press keeps the existing primary action. Holding a button temporarily exposes a second layer on the keyboard or encoders.
+### FOCUS mode for the 240×240 display
 
-Examples:
+`SCL/SEL` enters a full-panel FOCUS mode for dense RB-240 pages. It is a navigation zoom, not bitmap magnification: the selected logical panel occupies the normal 240×240 editing surface and therefore keeps the hardware and Virtual FM-1 layout identical.
 
-- hold `SEQ` + keyboard: select/write sequencer steps or notes;
-- hold `ARP/DRUM` + keyboard: choose or trigger drum voices;
-- hold `GLO/MIXER` + keyboard: mute/solo tracks and select mixer channels;
-- hold `FX` + keyboard: select PCF/Delay/Dist/Comp and trigger performance FX;
-- hold `PRESET` or a dedicated pattern modifier + keyboard: choose patterns A–H;
-- hold `EDIT` + keyboard: accent/slide/tie/flam or other context-specific edit layer;
-- hold `HOME` should always provide a predictable escape/back behavior and must never leave stuck notes.
+- Keyboard selectors 1–8 jump directly to **ACID**, **STEP**, **DRUM**, **MIXER**, **PCF**, **DELAY**, **DIST**, or **COMP**.
+- PRESET / ALGORITHM move through the focus regions while FOCUS is active.
+- K1–K4 continue to edit the current focused page using the same page-specific parameter contract.
+- `HOME` exits FOCUS immediately and provides the normal panic-safe escape.
 
-Modifier mappings must be contextual, visible on the 240×240 screen, and designed so accidental mode changes are difficult during live use.
+The focus state and modifier state are exposed by both the Felucca bridge and the WASM panel ABI, so browser tests exercise the same state machine as the hardware overlay.
 
-### Quick panel zoom/navigation mode
+## FX and mixer routing
 
-The 240×240 display should support a quick zoom/focus mode for dense ReBirth-inspired panels. This is not a graphical magnification effect only; it is a navigation mode for temporarily focusing on one logical panel.
+The mixer remains intentionally small enough for the FM-1 target budget. Each of the four machines has level, pan, mute, solo, delay send and reverb send. The summed dry/return signal then passes through the master performance rack: **Dist → Comp → PCF**, while the delay and reverb are send/return effects mixed before those master inserts. The 240×240 FX page exposes separate **PCF**, **Delay**, **Dist** and **Comp** sections; holding `FX` gives keyboard access to those four sections and to fast cutoff/delay/drive/compressor throws.
 
-- A short dedicated gesture should enter `ZOOM`/`FOCUS` mode from HOME, ACID, STEP, DRUM, MIXER or FX.
-- The keyboard can act as direct panel selectors while zoom mode is active.
-- Keys may select regions such as oscillator/filter, sequencer, drum voices, mixer, PCF, delay, distortion and compressor.
-- Once zoomed, the four K encoders should control the most important parameters of that focused panel.
-- PRESET/ALGORITHM/SELECT or spare keyboard keys can move left/right/up/down between adjacent logical panels.
-- The display should show a small overview/location indicator so the user always knows which part of the larger virtual panel is currently focused.
-- HOME or the same zoom gesture exits immediately.
-- Virtual mode must mirror the same focus state and navigation so it is useful for hardware training and testing.
+The WASM build uses larger delay/reverb buffers where browser memory permits, while the FM-1 keeps conservative buffers until physical profiling proves more target pool can safely be spent.
 
-### Interaction design rules
+## Virtual/hardware interaction parity
 
-The goal is speed and muscle memory, not adding hidden complexity. Every secondary mapping must be shown on-screen when its modifier is held. Common live actions should require at most one held modifier plus one key. Note-off/panic behavior must remain safe across page, machine, pattern and mode changes. The keyboard mapping should be consistent between physical FM-1, virtual FM-1 and Live Editor wherever possible.
-
-The implementation should be validated against realistic tasks: enter a bassline without leaving STEP mode, record a drum beat live, switch A–H patterns during playback, mute one machine, perform a filter/delay gesture, jump into a zoomed FX panel, edit it with K1–K4, and return to live notes without stopping playback.
+The official Virtual FM-1 artifact is produced by `web/emu/build_wasm.sh`. The build exports the same keyboard-performance ABI used by the hardware bridge and applies the virtual panel mapping after copying the app into `build/wasm/app/`. Physical key index, note value and press/release state are all passed into the shared interaction model, so 808/909 mapping, Pattern A–H switching, mutes/solos, FX actions and FOCUS navigation can be rehearsed before a physical flash.
 
 ## Build everything in GitHub
 
@@ -104,6 +93,7 @@ It produces two downloadable Actions artifacts:
 1. **`refm-wasm-<commit>`**
    - `refm.js`
    - `refm.wasm`
+   - browser app including Virtual FM-1
    - `SHA256SUMS`
 
 2. **`refm-fm1-experimental-<commit>`**
@@ -116,11 +106,18 @@ It produces two downloadable Actions artifacts:
 
 The FM-1 job reproducibly prepares the exact pinned Felucca 1.0.5 checkout, applies the deterministic ReFmB1rth overlay, downloads the official JieLi pi32v2 toolchain, fetches the required AC79 SDK, performs the actual target compile/link/package build, verifies the generated firmware manifest, and only then uploads the artifact. **The workflow never connects to or flashes a physical FM-1.**
 
-The first fully successful all-GitHub target/WASM build was produced from commit `ba6070b26af7b313929a3e4778c21496631d75f0`.
+Useful local/CI-equivalent checks are:
 
-## Remaining release gates
+```sh
+tests/run_host_tests.sh
+sh web/emu/build_wasm.sh
+# target package: run the Build all artifacts workflow, which bootstraps the pinned
+# Felucca/JieLi/AC79 environment and performs the real FM-1 package build.
+```
 
-Before a controlled hardware beta, the repository still needs explicit XIP/RAM/pool/stack budget enforcement, worst-case CPU/audio-underrun profiling, the complete physical FM-1 UI, browser UI/audio-worklet integration, integrated emulator regression coverage and confirmed return-to-stock/FM-1-transporter recovery preparation.
+## Release policy
+
+`v0.1.0-beta.2` is immutable. The keyboard/interaction/UI work on `main` is an unreleased next-beta candidate. Do not repoint the beta.2 firmware channel or publish a replacement package until the interaction layer, WASM artifact and real FM-1 package build are green and the new workflow has been exercised on hardware.
 
 Read [`docs/FLASH_SAFETY.md`](docs/FLASH_SAFETY.md) and [`docs/M6_HARDWARE_BETA.md`](docs/M6_HARDWARE_BETA.md) before any future hardware experiment.
 
