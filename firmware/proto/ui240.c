@@ -30,6 +30,7 @@ void ui240_init(ui240_state_t *ui)
 {
     memset(ui, 0, sizeof(*ui));
     ui->machine = UI240_MACHINE_ACID1;
+    ui->fx_section = UI240_FX_PCF;
 }
 
 void ui240_set_page(ui240_state_t *ui, ui240_page_t page)
@@ -73,6 +74,11 @@ void ui240_select_project(ui240_state_t *ui, int8_t delta)
     ui->project_slot = wrap_u8(ui->project_slot, delta, 4u);
 }
 
+void ui240_cycle_fx_section(ui240_state_t *ui, int8_t delta)
+{
+    ui->fx_section = wrap_u8(ui->fx_section, delta, UI240_FX_SECTION_COUNT);
+}
+
 void ui240_snapshot(const ui240_state_t *ui, const groovebox_t *g, ui240_view_t *out)
 {
     unsigned m = ui->machine;
@@ -85,12 +91,17 @@ void ui240_snapshot(const ui240_state_t *ui, const groovebox_t *g, ui240_view_t 
     out->selected_step = ui->selected_step & 15u;
     out->selected_lane = ui->selected_lane < DRUM_VOICES ? ui->selected_lane : 0u;
     out->project_slot = ui->project_slot & 3u;
+    out->fx_section = ui->fx_section % UI240_FX_SECTION_COUNT;
     out->bpm = g->transport.bpm;
+    out->song_loop = g->song.loop ? 1u : 0u;
+    out->song_length = g->song.length;
 
     if (m < UI240_MACHINE_808) {
         const acid303_t *s = &g->acid[m];
         const seq16_step_t *st = &g->acid_seq[m].step[out->selected_step];
         out->wave_square = s->square;
+        out->acid_tune = s->tune;
+        out->acid_accent = (uint8_t)(((uint32_t)s->accent * 100u) / 32767u);
         out->accent = (st->flags & SEQ16_ACCENT) != 0;
         out->slide = (st->flags & SEQ16_SLIDE) != 0;
         out->step_probability = st->probability;
@@ -126,10 +137,34 @@ void ui240_snapshot(const ui240_state_t *ui, const groovebox_t *g, ui240_view_t 
         out->mute = t->mute;
         out->solo = t->solo;
     } else if (ui->page == UI240_FX) {
-        out->p0 = (uint16_t)g->mixer.drive;
-        out->p1 = (uint16_t)g->mixer.delay_feedback;
-        out->p2 = (uint16_t)g->mixer.reverb_mix;
-        out->p3 = (uint16_t)g->mixer.filter_cutoff;
+        switch (out->fx_section) {
+        case UI240_FX_PCF:
+            out->p0 = (uint16_t)g->mixer.filter_cutoff;
+            out->p1 = 0u;       /* LP mode in the current embedded DSP */
+            out->p2 = 100u;     /* full pattern-filter amount */
+            out->p3 = 50u;      /* visual envelope decay */
+            break;
+        case UI240_FX_DELAY:
+            out->p0 = (uint16_t)(((uint32_t)g->mixer.delay_len * 16u + MIX_DELAY_MAX - 1u) / MIX_DELAY_MAX);
+            if (out->p0 < 1u) out->p0 = 1u;
+            if (out->p0 > 16u) out->p0 = 16u;
+            out->p1 = 50u;      /* centered delay pan */
+            out->p2 = (uint16_t)(((uint32_t)g->mixer.delay_feedback * 100u) / 31000u);
+            out->p3 = (uint16_t)(((uint32_t)g->mixer.delay_mix * 100u) / 32767u);
+            break;
+        case UI240_FX_DIST:
+            out->p0 = (uint16_t)(((uint32_t)g->mixer.drive * 100u) / 32767u);
+            out->p1 = 50u;      /* current soft-clip shape */
+            out->p2 = 0u;
+            out->p3 = 0u;
+            break;
+        default:
+            out->p0 = (uint16_t)(100u - ((uint32_t)g->mixer.compressor_threshold * 100u) / 32767u);
+            out->p1 = 4u;       /* current DSP is 4:1 above threshold */
+            out->p2 = 0u;
+            out->p3 = 0u;
+            break;
+        }
     }
 }
 
@@ -238,9 +273,23 @@ void ui240_edit_mixer(ui240_state_t *ui, groovebox_t *g, uint8_t slot, int8_t de
 
 void ui240_edit_fx(ui240_state_t *ui, groovebox_t *g, uint8_t slot, int8_t delta)
 {
-    (void)ui;
-    if (slot == 0u) g->mixer.drive = add_s16(g->mixer.drive, delta, 768, 0, 32767);
-    else if (slot == 1u) g->mixer.delay_feedback = add_s16(g->mixer.delay_feedback, delta, 768, 0, 31000);
-    else if (slot == 2u) g->mixer.reverb_mix = add_s16(g->mixer.reverb_mix, delta, 768, 0, 32767);
-    else if (slot == 3u) g->mixer.filter_cutoff = add_s16(g->mixer.filter_cutoff, delta, 768, 256, 32767);
+    mixer_fx_t *m = &g->mixer;
+    if (ui->fx_section == UI240_FX_PCF) {
+        if (slot == 0u) m->filter_cutoff = add_s16(m->filter_cutoff, delta, 768, 256, 32767);
+    } else if (ui->fx_section == UI240_FX_DELAY) {
+        if (slot == 0u) {
+            uint16_t step = (uint16_t)(MIX_DELAY_MAX / 32u);
+            if (!step) step = 1u;
+            m->delay_len = add_u16(m->delay_len, delta, step, MIX_DELAY_MAX);
+            if (!m->delay_len) m->delay_len = 1u;
+        } else if (slot == 2u) {
+            m->delay_feedback = add_s16(m->delay_feedback, delta, 768, 0, 31000);
+        } else if (slot == 3u) {
+            m->delay_mix = add_s16(m->delay_mix, delta, 768, 0, 32767);
+        }
+    } else if (ui->fx_section == UI240_FX_DIST) {
+        if (slot == 0u) m->drive = add_s16(m->drive, delta, 768, 0, 32767);
+    } else {
+        if (slot == 0u) m->compressor_threshold = add_s16(m->compressor_threshold, -delta, 768, 512, 32767);
+    }
 }
