@@ -31,12 +31,21 @@ typedef enum {
     UI240_STEP_TIE
 } ui240_step_type_t;
 
+typedef enum {
+    UI240_FX_PCF = 0,
+    UI240_FX_DELAY,
+    UI240_FX_DIST,
+    UI240_FX_COMP,
+    UI240_FX_SECTION_COUNT
+} ui240_fx_section_t;
+
 typedef struct {
     uint8_t page;
     uint8_t machine;
     uint8_t selected_step;
     uint8_t selected_lane;
     uint8_t project_slot;
+    uint8_t fx_section;
 } ui240_state_t;
 
 typedef struct {
@@ -48,6 +57,7 @@ typedef struct {
     uint8_t selected_step;
     uint8_t selected_lane;
     uint8_t project_slot;
+    uint8_t fx_section;
     uint16_t bpm;
     uint16_t p0;
     uint16_t p1;
@@ -63,6 +73,10 @@ typedef struct {
     uint8_t solo;
     uint16_t drum_hits;
     uint16_t drum_accents;
+    int8_t acid_tune;
+    uint8_t acid_accent;
+    uint8_t song_loop;
+    uint8_t song_length;
 } ui240_view_t;
 
 void ui240_init(ui240_state_t *ui);
@@ -73,6 +87,7 @@ void ui240_cycle_machine(ui240_state_t *ui, int8_t delta);
 void ui240_select_step(ui240_state_t *ui, int8_t delta);
 void ui240_select_lane(ui240_state_t *ui, int8_t delta);
 void ui240_select_project(ui240_state_t *ui, int8_t delta);
+void ui240_cycle_fx_section(ui240_state_t *ui, int8_t delta);
 void ui240_snapshot(const ui240_state_t *ui, const groovebox_t *g, ui240_view_t *out);
 void ui240_edit_acid_main(ui240_state_t *ui, groovebox_t *g, uint8_t slot, int8_t delta);
 void ui240_edit_acid_step(ui240_state_t *ui, groovebox_t *g, uint8_t slot, int8_t delta);
