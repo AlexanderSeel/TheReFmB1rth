@@ -20,7 +20,8 @@ def main() -> int:
         "const ACTION={HOME:0,ENV:1,LFO:2,SEQ:3,ARP:4,GLO:5,FX:6,SEL:7,SAVE:8,PLAY:9,EDIT:10,REC:11};\n",
         "const ACTION={HOME:0,ENV:1,LFO:2,SEQ:3,ARP:4,GLO:5,FX:6,SEL:7,SAVE:8,PLAY:9,EDIT:10,REC:11};\n"
         "const MOD={NONE:0,SEQ:1,DRUM:2,MIXER:3,FX:4,PATTERN:5,EDIT:6,LIVE:7,FOCUS:8};\n"
-        "const BUTTON_MOD={SEQ:1,ARP:2,GLO:3,FX:4,SAVE:5,EDIT:6,REC:7,SEL:8};\n",
+        "const BUTTON_MOD={SEQ:1,ARP:2,GLO:3,FX:4,SAVE:5,EDIT:6,REC:7,SEL:8};\n"
+        "let heldModifierButton=null,modifierUsed=false,modifierStarted=0;\n",
     )
     s = rep(
         s,
@@ -31,19 +32,19 @@ def main() -> int:
         "function value(i){if(!ready)return 0;const f=mod._refm_wasm_panel_performance_value||mod._refm_wasm_panel_value;return f(i)>>>0;}\n"
         "function modifier(id){if(ready&&mod._refm_wasm_panel_modifier)mod._refm_wasm_panel_modifier(id);}\n"
         "function action(id){if(ready){const f=mod._refm_wasm_panel_performance_action||mod._refm_wasm_panel_action;f(id);drawScreen();}}\n"
-        "function encoder(id,d){if(ready&&d){const f=mod._refm_wasm_panel_performance_encoder||mod._refm_wasm_panel_encoder;f(id,d);drawScreen();}}\n"
-        "function key(panelIndex,on){if(ready){if(mod._refm_wasm_panel_key_event)mod._refm_wasm_panel_key_event(panelIndex,MIDI_BASE+panelIndex,on?1:0);else mod._refm_wasm_panel_key(MIDI_BASE+panelIndex,on?1:0);drawScreen();}}\n",
+        "function encoder(id,d){if(ready&&d){if(heldModifierButton)modifierUsed=true;const f=mod._refm_wasm_panel_performance_encoder||mod._refm_wasm_panel_encoder;f(id,d);drawScreen();}}\n"
+        "function key(panelIndex,on){if(ready){if(on&&heldModifierButton)modifierUsed=true;if(mod._refm_wasm_panel_key_event)mod._refm_wasm_panel_key_event(panelIndex,MIDI_BASE+panelIndex,on?1:0);else mod._refm_wasm_panel_key(MIDI_BASE+panelIndex,on?1:0);drawScreen();}}\n",
     )
     old = "const fire=()=>{if(name==='OCT-'){if(value(0)===7)restoreLocal();else encoder(ENC.ALGORITHM,-1);}else if(name==='OCT+'){if(value(0)===7)saveLocal();else encoder(ENC.ALGORITHM,1);}else action(ACTION[name]);};g.addEventListener('pointerdown',()=>{g.classList.add('held');fire();});g.addEventListener('pointerup',()=>g.classList.remove('held'));g.addEventListener('pointercancel',()=>g.classList.remove('held'));return g;}"
-    new = "const fire=()=>{if(name==='OCT-'){if(value(0)===7)restoreLocal();else encoder(ENC.ALGORITHM,-1);}else if(name==='OCT+'){if(value(0)===7)saveLocal();else encoder(ENC.ALGORITHM,1);}else action(ACTION[name]);};const down=()=>{g.classList.add('held');if(BUTTON_MOD[name]!==undefined)modifier(BUTTON_MOD[name]);fire();};const up=()=>{g.classList.remove('held');if(BUTTON_MOD[name]!==undefined)modifier(MOD.NONE);drawScreen();};g.addEventListener('pointerdown',down);g.addEventListener('pointerup',up);g.addEventListener('pointercancel',up);return g;}"
+    new = "const fire=()=>{if(name==='OCT-'){if(value(0)===7)restoreLocal();else encoder(ENC.ALGORITHM,-1);}else if(name==='OCT+'){if(value(0)===7)saveLocal();else encoder(ENC.ALGORITHM,1);}else action(ACTION[name]);};const down=e=>{g.classList.add('held');if(BUTTON_MOD[name]!==undefined){heldModifierButton=name;modifierUsed=false;modifierStarted=performance.now();modifier(BUTTON_MOD[name]);if(g.setPointerCapture)g.setPointerCapture(e.pointerId);return;}fire();};const finish=(e,cancel=false)=>{g.classList.remove('held');if(BUTTON_MOD[name]!==undefined&&heldModifierButton===name){const tap=!cancel&&!modifierUsed&&(performance.now()-modifierStarted)<350;modifier(MOD.NONE);heldModifierButton=null;modifierUsed=false;if(tap)fire();drawScreen();}if(e&&g.hasPointerCapture&&g.hasPointerCapture(e.pointerId))g.releasePointerCapture(e.pointerId);};g.addEventListener('pointerdown',down);g.addEventListener('pointerup',e=>finish(e,false));g.addEventListener('pointercancel',e=>finish(e,true));return g;}"
     s = rep(s, old, new)
     s = rep(
         s,
         "window.addEventListener('blur',()=>{for(const k of held.values())key(k,0);held.clear();});",
-        "window.addEventListener('blur',()=>{for(const k of held.values())key(k,0);held.clear();modifier(MOD.NONE);});",
+        "window.addEventListener('blur',()=>{for(const k of held.values())key(k,0);held.clear();modifier(MOD.NONE);heldModifierButton=null;modifierUsed=false;});",
     )
     path.write_text(s)
-    print("virtual FM-1 keyboard/modifier/focus parity patch applied")
+    print("virtual FM-1 tap/hold keyboard-modifier/focus parity patch applied")
     return 0
 
 
