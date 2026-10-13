@@ -22,6 +22,11 @@ class PhysicalPatternReadbackTests(unittest.TestCase):
         self.assertIn('flags & 8u', patch)
         self.assertIn('flags & 2u', patch)
         self.assertIn('flags & 4u', patch)
+        self.assertIn('static void refm_note_name(uint8_t note, char out[5])', patch)
+        self.assertIn('int32_t sx = 8 + (int32_t)(i & 7u) * 29', patch)
+        self.assertIn('int32_t sy = 174 + (int32_t)(i >> 3) * 31', patch)
+        self.assertIn("else if (tie_step) { nl[0] = 'T';", patch)
+        self.assertIn('acid-layout=8x2-visible-note-grid', patch)
         self.assertIn('apply_rb240_pattern_readback.py', overlay)
         self.assertIn('exact-pattern-readback', overlay)
 
