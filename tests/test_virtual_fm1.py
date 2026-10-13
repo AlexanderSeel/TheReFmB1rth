@@ -68,6 +68,16 @@ class VirtualFm1Tests(unittest.TestCase):
         self.assertIn("if(value(0)===7)restoreLocal();else encoder(ENC.ALGORITHM,-1)", js)
         self.assertIn("if(value(0)===7)saveLocal();else encoder(ENC.ALGORITHM,1)", js)
 
+    def test_virtual_audio_uses_buffered_worklet_not_deprecated_script_processor(self):
+        js = (ROOT / 'web/app/virtual_fm1.js').read_text()
+        client = (ROOT / 'web/emu/worklet_client.js').read_text()
+        self.assertIn('ReFmWorkletClient', js)
+        self.assertIn('refm-worklet-stats', js)
+        self.assertNotIn('createScriptProcessor', js)
+        self.assertIn("new URL('./refm_audio_worklet.js', import.meta.url)", client)
+        self.assertIn("new AudioWorkletNode(this.ctx, 'refm-audio'", client)
+        self.assertIn('underflows', client)
+
 
 if __name__ == '__main__':
     unittest.main()
