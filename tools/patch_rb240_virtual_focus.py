@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
-"""Add the same small FOCUS indicator to the built Virtual FM-1 renderer."""
+"""Mirror the eight-position FOCUS location indicator in the built Virtual FM-1 renderer."""
 from __future__ import annotations
 import sys
 from pathlib import Path
@@ -18,12 +18,12 @@ def main() -> int:
     text = replace_once(
         text,
         "lamp(g,124,40,true);lamp(g,164,40,false);lamp(g,211,40,false);}",
-        "lamp(g,124,40,true);lamp(g,164,40,false);lamp(g,211,40,false);if(s.focus)lamp(g,55,7,true,C.cyan);}",
+        "lamp(g,124,40,true);lamp(g,164,40,false);lamp(g,211,40,false);if(s.focus){for(let i=0;i<8;i++)lamp(g,48+i*6,7,i===s.focusRegion,C.cyan);}}",
     )
     text = replace_once(
         text,
         "songLoop=v(27),songLength=v(28);",
-        "songLoop=v(27),songLength=v(28),focus=!!v(34),focusRegion=v(35);",
+        "songLoop=v(27),songLength=v(28),focus=!!v(34),focusRegion=v(35)&7;",
     )
     text = replace_once(
         text,
@@ -31,7 +31,7 @@ def main() -> int:
         "songLoop,songLength,focus,focusRegion,projectResult,cutoff:",
     )
     path.write_text(text)
-    print("Virtual RB-240 FOCUS indicator applied")
+    print("Virtual RB-240 FOCUS location indicator applied")
     return 0
 
 
