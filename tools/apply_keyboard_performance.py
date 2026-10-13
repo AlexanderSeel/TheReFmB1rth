@@ -5,9 +5,14 @@
 The first hardware validation showed that deferred tap-vs-hold page buttons were
 far too confusing for basic sequencing. Physical controls are therefore kept
 page-first and immediate: SEQ opens the ACID step editor, ARP opens drums, GLO
-opens mixer, FX opens effects, etc. The musical keyboard still carries both its
-physical key index and MIDI note into ui240_performance.h, so the active STEP or
-DRUM page can program the selected step directly without a modifier gesture.
+opens mixer, FX opens effects, etc.
+
+The ReFm keyboard mapping is deliberately independent from Felucca's selected
+track/engine. Using ``kb_map(TSEL, k)`` here was a hardware bug: ReFm can show
+ACID A while Felucca's hidden selected track still owns a drum/quantized keymap,
+which can turn a physical key into a GM drum note or even KB_SILENT. ReFm uses a
+stable chromatic 27-key map instead, with Felucca's physical octave state only
+providing the octave offset.
 
 Advanced modifier/chord behavior remains available in Virtual FM-1; it is no
 longer imposed on the hardware's primary page buttons.
@@ -42,10 +47,14 @@ def main() -> int:
     )
     replace_once(
         seq,
+        "                uint32_t note = kb_map(TSEL, k);\n"
+        "                uint8_t on = (cur & bit) ? 1u : 0u;\n"
         "                if (note <= 127u && (!on || (song.grid == 0u && !refm_felucca_keys_are_editor())))\n"
         "                    refm_felucca_key_note((uint8_t)song.sel, (uint8_t)note, on);\n",
-        "                if (note <= 127u)\n"
-        "                    refm_felucca_key_event((uint8_t)k, (uint8_t)note, on);\n",
+        "                int32_t refm_note = 53 + (int32_t)k + 12 * (int32_t)song.octave;\n"
+        "                uint32_t note = (uint32_t)clamp(refm_note, 0, 127);\n"
+        "                uint8_t on = (cur & bit) ? 1u : 0u;\n"
+        "                refm_felucca_key_event((uint8_t)k, (uint8_t)note, on);\n",
     )
 
     # apply_hardware_beta_fixes.py already installs immediate page/button actions
@@ -53,7 +62,9 @@ def main() -> int:
     # contract intact rather than replacing it with deferred modifier ownership.
     marker = root / ".refm-keyboard-performance"
     marker.write_text(
-        "keyboard=physical-index+note\n"
+        "keyboard=physical-index+dedicated-chromatic-note\n"
+        "keyboard-base-midi=53\n"
+        "keyboard-octave=physical-song.octave\n"
         "hardware-controls=immediate-page-first\n"
         "acid-step=page-direct-key-entry\n"
         "drum-step=page-direct-key-entry\n"
