@@ -15,7 +15,7 @@ const HELP_HTML=`
           <h3>Learn the instrument here before using the physical FM-1</h3>
           <p>The virtual unit uses the same <code>ui240</code> state, keyboard-performance mappings and contextual actions as the hardware target. The goal is that muscle memory learned here transfers directly to the FM-1.</p>
         </div>
-        <div class="virtualHelpCallout"><strong>Quick start</strong><br>1. SWITCH ON.<br>2. Press PLAY.<br>3. Use ENV/LFO for ACID A/B or tap ARP for drums.<br>4. Tap SEQ for step editing.<br>5. Hold a modifier and use the FM-1 keyboard for fast actions. A used hold does not also trigger the button's normal tap action.</div>
+        <div class="virtualHelpCallout"><strong>Quick start</strong><br>1. SWITCH ON.<br>2. Press PLAY.<br>3. Use ENV/LFO for ACID A/B or tap ARP for drums.<br>4. Tap SEQ for step editing.<br>5. Hold a modifier and use the FM-1 keyboard for fast actions. A used hold does not also trigger the button's normal tap action.<br>6. Virtual desktop: hold a modifier for ~0.36 s to latch it, then press another button/key/encoder. Click the latched button again to release.</div>
       </div>
 
       <div class="virtualHelpGrid">
@@ -49,7 +49,8 @@ const HELP_HTML=`
 
         <section class="virtualHelpBlock">
           <h4>HOLD / MODIFIER LAYERS</h4>
-          <p><strong>Tap vs hold:</strong> modifier-capable buttons defer their normal action until release. If you use a keyboard key or encoder during the hold, the gesture is consumed as a modifier and the normal tap action is suppressed.</p>
+          <p><strong>Tap vs hold:</strong> modifier-capable buttons defer their normal action until release. If you use another panel button, keyboard key or encoder during the hold, the gesture is consumed as a modifier and the normal tap action is suppressed.</p>
+          <p><strong>Multiple buttons:</strong> the virtual panel tracks all held modifier buttons. The active layer follows the same priority as hardware: <code>SEL &gt; REC &gt; EDIT &gt; SAVE &gt; FX &gt; GLO &gt; ARP &gt; SEQ</code>. Releasing the higher-priority button restores the still-held lower layer. Touch/pen can hold buttons simultaneously. With a desktop mouse, long-press a modifier for about 360 ms to latch it, use the second control, then click the latched button again to release it.</p>
           <table class="virtualHelpTable"><tbody>
             <tr><td>hold SEQ + keys</td><td>Write ACID notes directly into the selected step.</td></tr>
             <tr><td>hold ARP + keys</td><td>Use the keyboard as 808/909 drum pads.</td></tr>
