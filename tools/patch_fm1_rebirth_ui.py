@@ -41,6 +41,7 @@ def main() -> int:
     subprocess.run([sys.executable, str(ROOT / "tools" / "fix_target_beta_rom.py"), str(root)], check=True, cwd=ROOT)
     subprocess.run([sys.executable, str(ROOT / "tools" / "enable_rom_ref_diagnostics.py"), str(root)], check=True, cwd=ROOT)
     subprocess.run([sys.executable, str(ROOT / "tools" / "apply_runtime_diagnostics.py"), str(root)], check=True, cwd=ROOT)
+    subprocess.run([sys.executable, str(ROOT / "tools" / "apply_refm_boot_splash.py"), str(root)], check=True, cwd=ROOT)
 
     h = hashlib.sha256()
     for path in (
@@ -54,9 +55,9 @@ def main() -> int:
     ):
         h.update(path.read_bytes())
     (root / ".refm-ui-overlay").write_text(
-        f"style=compact-rebirth-inspired+refm-hardware-beta+rb240-beta3-approved+909-flam+keyboard-performance+focus-indicator\nsha256={h.hexdigest()}\n"
+        f"style=compact-rebirth-inspired+refm-hardware-beta+rb240-beta3-approved+909-flam+keyboard-performance+focus-indicator+refm-boot-splash\nsha256={h.hexdigest()}\n"
     )
-    print("FM-1 dedicated ReFm hardware beta UI + RB-240 beta3 + keyboard performance/focus + focus indicator + runtime diagnostics applied")
+    print("FM-1 dedicated ReFm hardware beta UI + RB-240 beta3 + keyboard performance/focus + boot splash + runtime diagnostics applied")
     return 0
 
 
