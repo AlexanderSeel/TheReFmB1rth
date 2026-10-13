@@ -130,6 +130,11 @@ void ui240_snapshot(const ui240_state_t *ui, const groovebox_t *g, ui240_view_t 
         out->drum_hits = g->drum_hits[d][out->selected_step];
         out->drum_accents = g->drum_accents[d][out->selected_step];
         out->drum_state = (out->drum_accents & bit) ? 2u : (out->drum_hits & bit) ? 1u : 0u;
+        if (m == UI240_MACHINE_909) {
+            uint32_t span = GROOVEBOX_909_FLAM_MAX_SAMPLES - GROOVEBOX_909_FLAM_MIN_SAMPLES;
+            out->drum_flam = (g->drum_909_flams[out->selected_step] & bit) ? 1u : 0u;
+            out->flam_width_pct = span ? (uint8_t)(((uint32_t)(g->flam_width_samples - GROOVEBOX_909_FLAM_MIN_SAMPLES) * 100u) / span) : 0u;
+        }
     }
 
     if (ui->page == UI240_MIXER) {
@@ -235,6 +240,15 @@ void ui240_toggle_acid_flag(ui240_state_t *ui, groovebox_t *g, uint8_t flag)
     st->flags ^= flag;
 }
 
+void ui240_toggle_909_flam(ui240_state_t *ui, groovebox_t *g)
+{
+    uint16_t bit;
+    if (ui->machine != UI240_MACHINE_909) return;
+    bit = (uint16_t)(1u << ui->selected_lane);
+    if (!(g->drum_hits[1][ui->selected_step] & bit)) return;
+    g->drum_909_flams[ui->selected_step] ^= bit;
+}
+
 void ui240_edit_drum(ui240_state_t *ui, groovebox_t *g, uint8_t slot, int8_t delta)
 {
     unsigned d;
@@ -246,6 +260,15 @@ void ui240_edit_drum(ui240_state_t *ui, groovebox_t *g, uint8_t slot, int8_t del
         ui240_select_lane(ui, delta > 0 ? 1 : -1);
         return;
     }
+    if (slot == 2u && ui->machine == UI240_MACHINE_909) {
+        ui240_toggle_909_flam(ui, g);
+        return;
+    }
+    if (slot == 3u && ui->machine == UI240_MACHINE_909) {
+        int32_t width = (int32_t)g->flam_width_samples + (delta > 0 ? 24 : -24);
+        groovebox_set_909_flam_width(g, (uint16_t)(width < 0 ? 0 : width));
+        return;
+    }
     if (slot != 1u) return;
     bit = (uint16_t)(1u << ui->selected_lane);
     state = (g->drum_accents[d][ui->selected_step] & bit) ? 2u :
@@ -255,6 +278,7 @@ void ui240_edit_drum(ui240_state_t *ui, groovebox_t *g, uint8_t slot, int8_t del
     g->drum_accents[d][ui->selected_step] &= (uint16_t)~bit;
     if (state) g->drum_hits[d][ui->selected_step] |= bit;
     if (state == 2u) g->drum_accents[d][ui->selected_step] |= bit;
+    if (ui->machine == UI240_MACHINE_909 && !state) g->drum_909_flams[ui->selected_step] &= (uint16_t)~bit;
 }
 
 void ui240_edit_mixer(ui240_state_t *ui, groovebox_t *g, uint8_t slot, int8_t delta)
