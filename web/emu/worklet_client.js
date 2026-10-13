@@ -3,15 +3,21 @@ export class ReFmWorkletClient {
     this.ctx = ctx; this.mod = mod; this.frames = frames;
     this.ptr = mod._malloc(frames * 8);
     this.node = null; this.rendering = false; this.underflows = 0;
+    this.renderMs = 0; this.renderedFrames = 0;
   }
   async init() {
-    await this.ctx.audioWorklet.addModule('./refm_audio_worklet.js');
-    this.node = new AudioWorkletNode(this.ctx, 'refm-audio', { outputChannelCount: [2] });
+    const workletUrl = new URL('./refm_audio_worklet.js', import.meta.url);
+    await this.ctx.audioWorklet.addModule(workletUrl);
+    this.node = new AudioWorkletNode(this.ctx, 'refm-audio', { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2] });
     this.node.port.onmessage = (e) => {
       if (e.data?.type === 'need') {
         this.underflows = e.data.underflows || 0;
         this.fill(4);
-        window.dispatchEvent(new CustomEvent('refm-worklet-stats', { detail: e.data }));
+        window.dispatchEvent(new CustomEvent('refm-worklet-stats', { detail: {
+          ...e.data,
+          render_ms: this.renderMs,
+          rendered_frames: this.renderedFrames,
+        }}));
       }
     };
     this.node.connect(this.ctx.destination);
@@ -21,6 +27,7 @@ export class ReFmWorkletClient {
   fill(count) {
     if (this.rendering || !this.node) return;
     this.rendering = true;
+    const started = performance.now();
     try {
       for (let n = 0; n < count; n++) {
         this.mod._refm_wasm_render(this.ptr, this.frames);
@@ -31,8 +38,12 @@ export class ReFmWorkletClient {
           right[i] = heap[base + i * 2 + 1] / 32768;
         }
         this.node.port.postMessage({ type: 'block', left, right }, [left.buffer, right.buffer]);
+        this.renderedFrames += this.frames;
       }
-    } finally { this.rendering = false; }
+    } finally {
+      this.renderMs += performance.now() - started;
+      this.rendering = false;
+    }
   }
   destroy() {
     if (this.node) this.node.disconnect();
