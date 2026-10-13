@@ -45,9 +45,9 @@ class VirtualFm1Tests(unittest.TestCase):
     def test_panel_uses_reference_fm1_geometry_and_27_key_index_map(self):
         js = (ROOT / 'web/app/virtual_fm1.js').read_text()
         css = (ROOT / 'web/app/virtual_fm1.css').read_text()
-        self.assertIn('const WHITE_K=[0,2,4,6,7,9,11,12,14,16,18,19,21,23,24,26]', js)
-        self.assertIn('const BLACK_K=[1,3,5,8,10,13,15,17,20,22,25]', js)
-        self.assertIn('const BLACK_AFTER=[0,1,2,4,5,7,8,9,11,12,14]', js)
+        self.assertIn('const WHITE_K = [0,2,4,6,7,9,11,12,14,16,18,19,21,23,24,26]', js)
+        self.assertIn('const BLACK_K = [1,3,5,8,10,13,15,17,20,22,25]', js)
+        self.assertIn('const BLACK_AFTER = [0,1,2,4,5,7,8,9,11,12,14]', js)
         self.assertIn("knob(105,100,24,'MASTER'", js)
         self.assertIn("knob(215,100,24,'SELECT'", js)
         self.assertIn('x:568,y:160,width:400,height:140', js)
@@ -60,27 +60,34 @@ class VirtualFm1Tests(unittest.TestCase):
         js = (ROOT / 'web/app/virtual_fm1.js').read_text()
         for marker in (
             "card(3,61,'TRACK'", "card(62,61,'PATTERN'", "card(121,61,'STEP'",
-            "card(3,61,'CUTOFF'", "steps(selStep,playing?playStep:-1)",
+            "card(3,61,'CUTOFF'", "steps(selStep, playing ? playStep : -1)",
             "card(3,139,'LANE'", "card(3,61,'LEVEL'", "card(3,61,'DRIVE'",
             "footer('OCT- LOAD   OCT+ SAVE   HOME EXIT')",
         ):
             self.assertIn(marker, js)
-        self.assertIn("if(value(0)===7)restoreLocal();else encoder(ENC.ALGORITHM,-1)", js)
-        self.assertIn("if(value(0)===7)saveLocal();else encoder(ENC.ALGORITHM,1)", js)
+        self.assertIn("if(value(0)===7)restoreLocal();else encoder(ENC.ALGORITHM,-1);", js)
+        self.assertIn("if(value(0)===7)saveLocal();else encoder(ENC.ALGORITHM,1);", js)
 
     def test_rb240_skin_is_shared_between_hardware_and_virtual(self):
         js = (ROOT / 'web/app/virtual_fm1.js').read_text()
         css = (ROOT / 'web/app/virtual_fm1.css').read_text()
         skin = (ROOT / 'tools/apply_rb240_skin.py').read_text()
         overlay = (ROOT / 'tools/patch_fm1_rebirth_ui.py').read_text()
-        for marker in ("led:'#250708'", "red:'#ff4a3f'", "amber:'#ffb326'", 'function bevel(', 'function ledBox('):
+        for marker in ("led:'#250708'", "red:'#ff4a3f'", "amber:'#ffb326'", 'function bevel(', 'function ledBox(', 'function band(', 'function meter('):
             self.assertIn(marker, js)
         for marker in ('--rb240-metal', '--rb240-red', '--rb240-amber', '--rb240-cyan'):
             self.assertIn(marker, css)
-        for marker in ('RB240_PANEL', 'RB240_LED_BG', 'RB240_RED', 'RB240_AMBER', 'refm_bevel'):
+        for marker in ('RB240_PANEL', 'RB240_LED_BG', 'RB240_RED', 'RB240_AMBER', 'RB240_CYAN', 'refm_bevel', 'refm_band', 'refm_meter'):
             self.assertIn(marker, skin)
+        for label in ('PERFORMANCE', 'ACID CONTROL', 'STEP PROGRAMMER', 'DRUM MACHINE', 'MIXER / SENDS', 'MASTER FX', 'PATTERN / SONG', 'PROJECT MEMORY'):
+            self.assertIn(label, js)
+            self.assertIn(label, skin)
+        self.assertIn('meter(24,164,38,pct(p0),C.green)', js)
+        self.assertIn('refm_meter(24, 164, 38, refm_pct(p0), RB240_GREEN)', skin)
+        self.assertIn('meter(24,124,70,pct(p0),C.red)', js)
+        self.assertIn('refm_meter(24, 124, 70, refm_pct(p0), RB240_RED)', skin)
         self.assertIn('apply_rb240_skin.py', overlay)
-        self.assertIn('rb240-metal-panel-v1', overlay)
+        self.assertIn('rb240-metal-panel-v2', overlay)
 
     def test_virtual_audio_uses_buffered_worklet_not_deprecated_script_processor(self):
         js = (ROOT / 'web/app/virtual_fm1.js').read_text()
