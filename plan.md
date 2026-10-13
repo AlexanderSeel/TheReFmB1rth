@@ -5,91 +5,95 @@
 Build a GPL-compatible, original replacement firmware for the M-VAVE FM-1 on the pinned Felucca hardware foundation:
 
 - **ACID A / ACID B** — two independent 303-inspired mono bass synths
-- **808 / 909** — two drum machines
+- **808 / 909** — two distinct drum-machine workflows
 - A–H patterns + song/chain sequencing
-- four-channel mixer + distortion/delay/reverb/filtering
+- four-channel mixer + performance FX
 - USB/TRS MIDI + USB audio
-- physical 240×240 groovebox UI
+- ReBirth-inspired but original 240×240 physical UI
 - project persistence
-- browser installer/editor + WASM reference
+- browser installer/editor + Virtual FM-1/WASM reference
 
 No Roland/Propellerhead/ReBirth artwork, logos, proprietary source, ROMs, or non-redistributable samples are shipped.
 
 ---
 
-# Current checkpoint — v0.1.0-beta.2 published, virtual FM-1 + RB-240 hardware/virtual UI parity added, 2026-10-13
+# Current checkpoint — next-beta interaction work on `main`, 2026-10-13
 
-## First physical install — completed
+`v0.1.0-beta.2` is already published from exact verified commit `2b4c537cc1a1f8c42c43ee953e14e27d7740837b`. **Do not overwrite or repoint beta.2.** All work below is an unreleased next-beta candidate until the new interaction/UI workflow is stable and physically validated.
 
-The first custom firmware install succeeded, but the build was **not usable as an instrument**. Hardware findings:
+## Completed in the current interaction batch
 
-- [x] loader-mediated installation completed successfully;
-- [x] device rebooted into custom firmware;
-- [x] findings captured and converted into beta acceptance criteria;
-- [ ] old build had the previewed ReFm screens — **failed**; it still showed Felucca-derived UI;
-- [ ] old build had responsive continuous audio — **failed**; it was laggy and often silent;
-- [ ] old build had sensible physical control mapping — **failed**;
-- [ ] old build had live keyboard play — **failed**;
-- [ ] old build had working physical PLAY/sequencing — **failed**;
-- [ ] old build had simple editing — **failed**.
+- [x] keep the approved RB-240 240×240 visual layout as the common hardware/virtual design;
+- [x] introduce shared `ui240_performance.h` behavior instead of separate hardware/WASM musical mappings;
+- [x] physical key events now carry both FM-1 physical key index and MIDI note into the ReFm interaction layer;
+- [x] Virtual FM-1 build exports the same keyboard-performance ABI and passes the same physical key index ordering;
+- [x] ACID keyboard note entry writes directly into the selected sequencer step;
+- [x] live-record layer writes ACID notes into the current running step;
+- [x] drum keyboard entry auditions the voice immediately and writes the selected/current step;
+- [x] 808 and 909 use deliberately different keyboard mappings;
+- [x] 909 has LOW/HIGH keyboard banks plus real sequencer flam toggle and flam-width actions;
+- [x] 808 keeps rim/clap/percussion voices earlier in the physical keyboard mapping;
+- [x] Pattern A–H can be selected directly from the keyboard through a held modifier;
+- [x] mixer modifier exposes direct track mute/solo and machine selection;
+- [x] FX modifier exposes direct PCF / Delay / Dist / Comp selection plus safe performance throws;
+- [x] EDIT modifier exposes ACID Accent / Slide / Tie / Rest / probability shortcuts;
+- [x] button-hold modifier model added for SEQ / ARP / GLO / FX / SAVE / EDIT / REC / SCL;
+- [x] FOCUS navigation mode added with direct keyboard selectors for ACID / STEP / DRUM / MIXER / PCF / Delay / Dist / Comp;
+- [x] PRESET/ALGORITHM navigate focus regions while FOCUS is active;
+- [x] HOME remains the panic-safe escape and exits FOCUS;
+- [x] hardware ALT behavior now matches virtual 909 flam behavior;
+- [x] host tests added for distinct drum mapping, high/low entry, flam, direct patterns, mute/solo, FX selection, focus navigation and ACID step note entry;
+- [x] WASM build now includes the shared performance layer and patches the built Virtual FM-1 panel to use it;
+- [x] deterministic Felucca target overlay now adds the keyboard-performance mapping before the RB-240 visual patches.
 
-Root cause confirmed: Felucca still owned the physical panel/keyboard/transport while TheReFmB1rth replaced the audible engine. The two state/control paths were therefore disconnected.
+## Current validation status
 
-## Beta corrective architecture — implemented and released in beta.2
+At checkpoint `6a784ce1e8345baee635ae4aabd4029806b3f903`:
 
-- [x] physical FM-1 panel now drives the ReFm engine directly;
-- [x] physical keyboard routes to selected ACID A/B;
-- [x] physical PLAY starts/stops the ReFm internal sequencer;
-- [x] Felucca's old audible sequencer/play/record state is held stopped while ReFm owns the beta workflow;
-- [x] stale ReFm ADSR/LFO physical mappings removed;
-- [x] dedicated ReFm 240×240 renderer replaces normal Felucca pages during beta operation;
-- [x] renderer only repaints when compact ReFm state changes;
-- [x] target-only silent ACID fast path avoids running the expensive ladder for completely idle voices;
-- [x] held-note panic before switching into editor pages or changing machine;
-- [x] fresh Pattern A contains an audible factory demo so PLAY is testable immediately;
-- [x] host bridge test covers fresh boot → sound → PLAY → step advance → STOP → page changes;
-- [x] exact JieLi target build passes Felucca ROM/register checks, memory budgets, manifest and SHA verification;
-- [x] verified one-shot beta publisher workflow added;
-- [x] target runtime stack-watermark instrumentation added for user + supervisor/ISR stacks;
-- [x] combined physical runtime report now gates CPU, DMA lateness and minimum stack headroom;
-- [x] browser can request a device-state snapshot and synchronize the live editor from the FM-1;
-- [x] browser can back up and restore the complete versioned ReFm project blob, including the A–H pattern bank;
-- [x] browser can capture the physical CPU/late/stack diagnostic snapshot and evaluate the beta gates without manual memory reads;
-- [x] browser VALIDATION page records the complete physical pass and binds it to the exact firmware-channel tag/commit/SHA;
-- [x] validation evidence embeds assigned factory-pattern and stress runtime snapshots and exports JSON + Markdown;
-- [x] offline `physical_validation_report.py` independently enforces the complete physical/runtime gate and exact target identity;
-- [x] combined browser app now includes INSTALLER / LIVE EDITOR / VIRTUAL FM-1 / VALIDATION in one workflow;
-- [x] virtual FM-1 uses the ReFm WASM engine plus the same `ui240` state/edit model as the physical beta bridge;
-- [x] full virtual panel uses the FM-1 1000×640 geometry, exact 240×240 display placement and 27-key physical index ordering studied from GPL-3.0 `fm1-x0x`;
-- [x] virtual LCD follows the dedicated physical beta renderer's card, step-grid, footer and PROJECT load/save semantics;
-- [x] LIVE EDITOR can route ACID/drum/pattern/mixer/transport edits to the virtual WASM device for pre-flash rehearsal;
-- [x] exact readback checkpoint `8e6daf2f0345e297c21c5b3270de2498f981e8ba` passed host, WASM, FM-1 target package, target-memory, manifest/SHA and sample-link experiment gates;
-- [x] exact full-transfer checkpoint `993eeb40255d75bbe3b344fa9c6c400816b05820` passed CI, WASM, real JieLi FM-1 app/loader/FWSC build, target-memory budgets, release manifest/SHA verification and sample-link experiment;
-- [x] exact beta.2 release commit `2b4c537cc1a1f8c42c43ee953e14e27d7740837b` passed host, WASM, real JieLi target, target-memory, package/manifest/SHA and sample-link gates before publication;
-- [x] `v0.1.0-beta.2` published as a prerelease from that exact verified commit;
-- [x] browser firmware channel points to beta.2 with FWSC SHA-256 `f2d2e13089a52cf279cee0bc43d9d4791ae913f0b3b889ec5b3de02b70c667b2`;
-- [x] deterministic second-pass hardware runbook added at `docs/PHYSICAL_BETA2_VALIDATION.md`.
+- [x] normal CI/host tests green;
+- [x] Build-all host tests green;
+- [x] WASM engine/build green;
+- [ ] real FM-1 target package job still needs a completed green result for the final interaction checkpoint;
+- [ ] interaction workflow still needs physical rehearsal before preparing a new beta.
 
-Beta.2 is a **software-gated beta** until the second physical validation pass succeeds. The virtual FM-1 is a pre-flash behavioral/UI rehearsal and does not replace physical CPU/stack/I/O/recovery evidence.
+Documentation-only commits after that checkpoint do not constitute a new release candidate by themselves. The final candidate must again pass host, WASM and real FM-1 target package builds from one exact head commit.
 
 ---
 
-# Safety / recovery
+# Interaction contract
 
-- [x] pinned Felucca 1.0.5 foundation `3dd2b0852bc310a2c1bf00c2d443ac19202c2140`;
-- [x] reproducible JieLi target build;
-- [x] real `.fwsc` generation;
-- [x] package identity + SHA-256 validation;
-- [x] XIP/RAM/pool static gates;
-- [x] loader-mediated browser installer + resume;
-- [x] official V15 SHA pinned for return-to-stock verification;
-- [x] FM-1-transporter documented as last-resort recovery;
-- [x] first controlled custom firmware installation performed;
-- [ ] verify OCT-/boot/update recovery path on the physical test device with beta.2;
-- [ ] prove return to official/Felucca firmware after beta.2 test;
-- [ ] repeat update/rollback cycle several times.
+## Normal keyboard behavior
 
-No custom firmware has a zero-brick guarantee.
+- On ACID A/B, unmodified keys remain live note input.
+- Note-off must always reach the selected synth unless the corresponding note-on was consumed by an editor/performance layer.
+- Machine/page changes retain panic/stuck-note protection.
+
+## Held layers
+
+| Held button | Temporary keyboard behavior |
+| --- | --- |
+| `SEQ` | ACID note entry into selected step |
+| `ARP/DRUM` | drum-entry bank |
+| `GLO/MIXER` | mute / solo / machine select |
+| `FX` | PCF / Delay / Dist / Comp select and FX throws |
+| `SAVE` | Pattern A–H direct select |
+| `EDIT` | contextual edit shortcuts / drum high-accent entry |
+| `REC` | live capture into running step |
+| `SCL/SEL` | enter FOCUS navigation |
+
+Short-press primary actions remain available. If the physical hold UX proves too eager during testing, add explicit hold-time/consumed-button arbitration before the next beta rather than changing the musical mappings independently between hardware and virtual.
+
+## FOCUS / quick zoom
+
+FOCUS is a logical-panel zoom, not bitmap scaling.
+
+- [x] first eight physical keys select ACID, STEP, DRUM, MIXER, PCF, DELAY, DIST, COMP;
+- [x] PRESET/ALGORITHM move through logical focus regions;
+- [x] K1–K4 keep the focused page's native editing contract;
+- [x] focus state is exposed through both target and WASM panel APIs;
+- [x] HOME exits focus and performs the normal panic-safe escape;
+- [ ] add a small explicit focus/location badge to both physical and virtual RB-240 renderers if hardware legibility requires it;
+- [ ] validate that entry/exit can be performed reliably during playback without accidental SONG/PAGE actions.
 
 ---
 
@@ -104,7 +108,10 @@ No custom firmware has a zero-brick guarantee.
 - [x] source-note slide semantics;
 - [x] fixed-point target engine + WASM HQ reference;
 - [x] deterministic audio regression tests;
-- [ ] matched A/B against real TB-303 reference recordings;
+- [x] keyboard-first selected-step note entry;
+- [x] live current-step note capture layer;
+- [x] keyboard edit shortcuts for accent/slide/tie/rest/probability;
+- [ ] match A/B against real TB-303 reference recordings;
 - [ ] physical FM-1 cutoff/resonance/env-mod calibration;
 - [ ] physical square/distortion listening approval.
 
@@ -120,7 +127,14 @@ Do not reintroduce non-stock LFO/ADSR UI into the ACID workflow.
 - [x] open-hat choke behavior;
 - [x] optional sample voice path + auditable sample tooling;
 - [x] conservative FM-1 sample link-size experiment;
+- [x] real 909 flam sequencer state and width;
+- [x] 909 LOW/HIGH keyboard entry;
+- [x] 909 keyboard flam toggle/width performance actions;
+- [x] distinct 808 physical-key percussion ordering;
+- [x] immediate drum audition on keyboard entry;
+- [x] live current-step drum capture through REC layer;
 - [ ] physical listening approval of synthesized voices;
+- [ ] confirm the final 808/909 physical key legends/muscle-memory order on hardware;
 - [ ] choose final firmware sample subset only after physical CPU/XIP measurements.
 
 ---
@@ -133,189 +147,134 @@ Do not reintroduce non-stock LFO/ADSR UI into the ACID workflow.
 - [x] MIDI clock integration;
 - [x] song mode baseline;
 - [x] mixer level/pan/mute/solo;
-- [x] delay/reverb sends;
-- [x] master distortion/delay/reverb/filter/compression baseline;
+- [x] per-track delay/reverb sends;
+- [x] master distortion, compression and PCF/low-pass processing;
+- [x] delay and reverb send/return processing;
+- [x] separate RB-240 **PCF / Delay / Dist / Comp** sections;
+- [x] keyboard FX section selection and performance throws;
+- [x] direct mixer mute/solo keyboard layer;
 - [x] versioned project save/load;
+- [ ] consider additional PCF/Dist/Comp parameters only after target profiling; do not add decorative non-audible controls;
 - [ ] 32/48/64-step UX after beta stability;
-- [ ] ratchet/flam;
+- [ ] ratchet beyond the implemented 909 flam workflow;
 - [ ] parameter locks/automation;
 - [ ] larger target FX only if physical profiling permits.
 
+### Current mixer/FX signal contract
+
+1. four machine inputs → per-track level/pan/mute/solo;
+2. per-track delay/reverb sends feed their return paths;
+3. dry + delay + reverb returns are summed;
+4. summed signal → Dist → Comp → PCF/master low-pass → output.
+
+The UI must describe this truthfully. Do not show unsupported PCF resonance, compressor attack/release, distortion tone, or delay-pan controls as if they were active DSP parameters.
+
 ---
 
-# M6 — FM-1 physical beta UI
+# M6 — FM-1 physical RB-240 UI
 
 Implemented software-side:
 
-- [x] dedicated **HOME** page with machine/pattern/BPM/transport status;
-- [x] dedicated **ACID** page with Cutoff / Resonance / Env Mod / Decay + wave toggle;
-- [x] dedicated **STEP** page with 16-step selection + NOTE/REST/TIE + Accent/Slide + probability;
-- [x] dedicated **DRUM** page with 808/909 machine, lane, step and OFF/HIT/ACCENT state;
-- [x] dedicated **MIXER** page with Level / Pan / Delay / Reverb + Mute/Solo;
-- [x] dedicated **FX** page with Drive / Delay feedback / Reverb mix / Filter;
-- [x] **SONG** beta page focused on pattern playback/loop;
-- [x] **PROJECT** page with four project slots and physical load/save controls;
-- [x] LCD footer tells the user the actual physical knob/button mapping;
-- [x] PRESET knob = pattern normally, selected step in step/drum editors, project slot on project page;
-- [x] ALGO knob = machine selection;
-- [x] SELECT knob = BPM;
-- [x] ENV button = ACID A;
-- [x] LFO button = ACID B (label reused as shortcut, no LFO feature);
-- [x] ARP button = DRUM / 808↔909;
-- [x] SEQ button = STEP;
-- [x] GLO = MIXER, FX = FX, SCL/SEL = SONG, SAVE = PROJECT, HOME = HOME;
-- [x] PLAY owns ReFm transport;
-- [x] EDIT/REC act as contextual secondary actions;
-- [x] host tests for compact UI state/editing and hardware bridge workflow;
-- [x] RB-240 v2 renderer-only skin adds an original ReBirth-inspired metallic/LED visual language without changing control, transport, audio or persistence semantics;
-- [x] physical LCD uses beveled parameter modules, red LED value wells, amber state text, green playing state and amber/cyan page-section bands;
-- [x] MIXER and FX pages add compact hardware-style level/send/effect meters while retaining the existing encoder contract.
+- [x] HOME page with machine/pattern/BPM/transport status;
+- [x] ACID page with Cutoff / Resonance / Env Mod / Decay + waveform;
+- [x] STEP page with 16-step selection, pitch, NOTE/REST/TIE, Accent/Slide, probability;
+- [x] distinct 808 and 909 DRUM views;
+- [x] MIXER page with Level / Pan / Delay / Reverb + Mute/Solo;
+- [x] separate PCF / Delay / Dist / Comp FX panels;
+- [x] SONG and PROJECT beta pages;
+- [x] original metallic/LED ReBirth-inspired visual language without copied artwork;
+- [x] hardware and virtual layout use the same 240×240 semantic design;
+- [x] physical encoders/actions route into ReFm rather than Felucca's old audible state;
+- [x] keyboard modifier/focus state added to the target bridge;
+- [x] hardware keyboard-performance overlay is deterministic and applied to pinned Felucca during target build.
 
-Physical beta.2 validation still required:
+Physical validation required before next beta:
 
-- [ ] confirm all dedicated pages actually render correctly on the 240×240 LCD;
-- [ ] confirm K1–K4/PRESET/ALGO/SELECT physical encoders match the LCD labels;
-- [ ] confirm keyboard play and release on ACID A/B with no stuck notes;
-- [ ] confirm PLAY/STOP and audible factory Pattern A;
-- [ ] confirm STEP and DRUM editing is comfortable on hardware;
-- [ ] confirm mixer/FX editing while playing remains responsive;
+- [ ] confirm all pages render correctly on the real 240×240 LCD;
+- [ ] confirm K1–K4/PRESET/ALGO/SELECT match the displayed labels;
+- [ ] confirm live ACID press/release with no stuck notes;
+- [ ] enter a bassline entirely from STEP + keyboard;
+- [ ] program an 808 beat from the keyboard;
+- [ ] program a 909 beat with LOW/HIGH and flam;
+- [ ] change Patterns A–H while playback runs;
+- [ ] mute/solo each of the four machines from the keyboard layer;
+- [ ] perform PCF/delay/dist/comp shortcuts during playback;
+- [ ] enter FOCUS, move between panels, edit with K1–K4 and return to notes without stopping playback;
 - [ ] confirm project save/load on device;
-- [ ] align panel LED behavior with ReFm page ownership after core beta behavior is proven.
+- [ ] align physical panel LED behavior after the interaction contract is proven.
 
 ---
 
-# M6.1 — Browser installer + editor + virtual FM-1
+# M6.1 — Browser / Virtual FM-1 parity
 
-- [x] local `.fwsc` selection/drop;
-- [x] GitHub Release discovery;
-- [x] browser-safe `firmware-channel` mirror because GitHub Release binary redirects are CORS-blocked;
-- [x] mirror tag + SHA verification before package acceptance;
-- [x] Web MIDI + SysEx identity handshake;
-- [x] explicit `FLASH THE FM-1` safety unlock;
-- [x] OTA loader handoff + resume + post-install verification;
-- [x] live ACID/mixer controls;
-- [x] 16-step Acid/808/909 editing protocol;
-- [x] note/drum audition;
-- [x] browser START / CONTINUE / STOP using the firmware MIDI realtime transport path;
-- [x] device-to-editor current-state readback over a reserved channel-16 CC envelope;
-- [x] readback response is deferred to the audio context so Felucca's MIDI OUT ring keeps its single-producer assumption;
-- [x] browser sync updates machine/pattern/step plus ACID, drum and mixer editor state without echoing writes back to the FM-1;
-- [x] full A–H pattern/project backup + restore over Felucca's existing editor SysEx framing;
-- [x] project transfer reuses the normal ReFm versioned project blob instead of introducing a second serialization format;
-- [x] project transfer uses 256-byte 7-bit-packed chunks, an outer CRC32, staging-generation protection and the inner ReFm project CRC/version checks;
-- [x] project backup/restore is refused while ReFm transport is playing;
-- [x] browser restore changes the live project only; normal physical PROJECT SAVE remains the explicit persistence step;
-- [x] one-click read-only runtime diagnostic capture through editor command 91;
-- [x] browser runtime gate matches the CLI gate: zero late buffers, <=75% sustained CPU, <=82% peak, >=4096 B user stack free, >=1024 B supervisor stack free;
-- [x] runtime snapshot can be downloaded as JSON for `target_runtime_report.py`;
-- [x] dedicated **VALIDATION** tab for the complete physical beta pass;
-- [x] validation state auto-saves locally and is tied to exact firmware tag/commit/SHA;
-- [x] changing the target firmware commit invalidates prior physical results instead of carrying them forward;
-- [x] factory-pattern and stress runtime captures can be assigned directly from the diagnostic event stream;
-- [x] JSON and Markdown physical-validation evidence export;
-- [x] browser and Python mandatory-check contracts are locked together by CI tests;
-- [x] combined INSTALLER / LIVE EDITOR / VIRTUAL FM-1 / VALIDATION application emitted inside the WASM artifact;
-- [x] VIRTUAL FM-1 front panel follows the full FM-1 hardware geometry with the real 240×240 screen position;
-- [x] virtual keybed uses the 16-white/11-black FM-1 physical key index map rather than a generic chromatic keyboard layout;
-- [x] virtual encoders/actions reuse the same ids and `ui240` editing functions as the physical Felucca bridge;
-- [x] virtual HOME / ACID / STEP / DRUM / MIXER / FX / SONG / PROJECT display follows the target beta renderer's coordinates/content;
-- [x] virtual PROJECT uses OCT− LOAD / OCT+ SAVE semantics with browser-local versioned project storage;
-- [x] LIVE EDITOR **USE VIRTUAL** route mirrors editor CC/program/note traffic into the WASM device;
-- [x] virtual START / CONTINUE / STOP has one realtime-message owner so transport events are not doubled;
-- [x] virtual workflow documented in `docs/VIRTUAL_FM1.md` with `fm1-x0x` GPL-3.0 layout attribution;
-- [x] virtual 240×240 LCD mirrors RB-240 v2 palette, bevels, LED wells, section bands and MIXER/FX meter geometry used by the physical renderer;
-- [x] virtual outer chassis remains close to the dark physical FM-1 geometry so screen/control rehearsal is not confused with the LCD skin;
-- [x] `tests/test_virtual_fm1.py` locks hardware/virtual RB-240 semantic labels, palette primitives and meter coordinates together;
-- [ ] final pixel-font/LED polish after comparing virtual screenshots with the physical FM-1 LCD.
+- [x] combined INSTALLER / LIVE EDITOR / VIRTUAL FM-1 / VALIDATION app;
+- [x] Virtual FM-1 follows the physical 1000×640 chassis geometry and 27-key ordering;
+- [x] virtual display mirrors RB-240 page semantics and geometry;
+- [x] virtual encoders/actions use the same `ui240` model;
+- [x] built virtual panel now sends physical key index + note + edge into the shared keyboard interaction layer;
+- [x] virtual button holds use the same modifier ids as the physical overlay;
+- [x] virtual FOCUS uses the same state/page selection logic as hardware;
+- [x] WASM exports modifier/focus/performance key/encoder/action accessors;
+- [x] WASM build asserts those exports and the patched virtual mapping are present;
+- [ ] final pixel-font/LED/focus-indicator polish after physical screen comparison;
+- [ ] add higher-level browser interaction tests for modifier press→key→release sequences.
 
 ---
 
-# M6.2 — Physical beta performance gates
+# Safety / recovery and performance gates
 
-Software-side instrumentation/tooling:
+Already implemented:
 
-- [x] target-only user-stack watermark with conservative active-frame safety band;
-- [x] target-only supervisor/ISR-stack watermark before interrupts are enabled;
-- [x] stack high-water fields exposed through `felucca_dbg`;
-- [x] `target_runtime_report.py` combines CPU, DMA deadline and stack-headroom gates;
-- [x] host regression tests cover healthy, missing-field, low-stack and late-DMA reports;
-- [x] target stack-symbol declarations/casts aligned with Felucca's linker/guard declarations;
-- [x] browser read-only diagnostic command exposes the gate fields;
-- [x] browser evaluates the same thresholds and downloads the raw JSON capture;
-- [x] beta.2 physical test sequence documented in `docs/PHYSICAL_BETA2_VALIDATION.md`;
-- [x] `physical_validation_report.py` independently validates the exported full hardware evidence bundle;
-- [x] offline gate rejects incomplete reports, N/A/pending checks, missing runtime captures and target tag/commit/SHA mismatches;
-- [x] validation report usage documented in `docs/PHYSICAL_VALIDATION_REPORT.md`.
+- [x] pinned Felucca 1.0.5 foundation `3dd2b0852bc310a2c1bf00c2d443ac19202c2140`;
+- [x] reproducible JieLi target build and real `.fwsc` generation;
+- [x] package identity/SHA validation and XIP/RAM/pool gates;
+- [x] loader-mediated installer and official V15 return-to-stock identity;
+- [x] runtime CPU/DMA/user-stack/supervisor-stack instrumentation;
+- [x] browser diagnostic capture and offline physical validation report;
+- [x] beta.2 runbook at `docs/PHYSICAL_BETA2_VALIDATION.md`.
 
-These are the main blockers between **software-gated beta.2** and **hardware-proven beta**:
+Still required on hardware:
 
-- [ ] capture physical runtime JSON while factory Pattern A plays;
-- [ ] capture worst-case four-machine stress JSON;
+- [ ] factory-pattern runtime capture;
+- [ ] worst-case four-machine stress capture;
 - [ ] `late == 0`;
 - [ ] sustained audio CPU <= 75%;
-- [ ] peak audio render <= 82% of DMA-half deadline;
-- [ ] physical user-stack free headroom >= 4096 bytes;
-- [ ] physical supervisor/ISR-stack free headroom >= 1024 bytes;
-- [ ] guard bands intact;
-- [ ] several-minute UI + keyboard + MIDI + transport stress test;
-- [ ] USB MIDI verified;
-- [ ] TRS MIDI verified;
-- [ ] USB audio verified;
-- [ ] physical save/load verified;
-- [ ] rollback/recovery verified.
+- [ ] peak render <= 82% of DMA-half deadline;
+- [ ] user-stack free >= 4096 bytes;
+- [ ] supervisor/ISR-stack free >= 1024 bytes;
+- [ ] USB MIDI, TRS MIDI and USB audio under playback/edit load;
+- [ ] save/load and power-cycle behavior;
+- [ ] return-to-official/Felucca recovery;
+- [ ] repeat update/rollback cycle several times.
 
-`tests/bench_groovebox.c` is an x86 regression benchmark only; it is not an FM-1 CPU percentage.
+No custom firmware has a zero-brick guarantee.
 
 ---
 
-# Persistence
+# Release / GitHub policy
 
-- [x] versioned project payload;
-- [x] CRC/checksum path;
-- [x] Felucca A/B atomic storage;
-- [x] A–H pattern persistence;
-- [x] song/mixer/FX persistence baseline;
-- [x] four physical beta project slots;
-- [x] complete project blob can be exported/restored through the browser without bypassing the project codec;
-- [ ] physical corrupted-project recovery test;
-- [ ] explicit migration tests once project format changes after beta.
-
----
-
-# Release / GitHub
-
-- [x] main builds publish temporary Actions artifacts;
-- [x] tag builds publish `.fwsc` GitHub Releases;
-- [x] release includes firmware, app/OTA binaries, manifest, checksums, memory report and overlay provenance;
-- [x] prerelease classification for hardware-test/alpha/beta/rc;
-- [x] CORS-safe browser firmware channel;
-- [x] one-shot `Publish verified beta` workflow only consumes a successful exact-head `Build all artifacts` result;
-- [x] `v0.1.0-beta.1` published as the initial prerelease from commit `3b881e3f845a71f7fdf280b2f0b5016d84b3a254`;
-- [x] explicitly treat `beta.1` as older than the runtime-stack/readback/project-transfer/diagnostic corrections;
-- [x] `v0.1.0-beta.2` published from exact-green commit `2b4c537cc1a1f8c42c43ee953e14e27d7740837b`;
-- [x] beta.2 firmware-channel metadata verified against the published commit and FWSC SHA-256;
-- [ ] second physical hardware validation;
-- [ ] only later consider public FM-1 Firmware Hub registration.
+- [x] main builds temporary host/WASM/FM-1 artifacts;
+- [x] tagged builds can publish `.fwsc` releases;
+- [x] verified one-shot beta publisher exists;
+- [x] `v0.1.0-beta.2` published and its browser firmware channel pinned to its exact commit/SHA;
+- [x] current interaction work leaves beta.2 unchanged;
+- [ ] require one exact-green next-beta candidate commit with host + WASM + real FM-1 package success;
+- [ ] exercise the new keyboard/hold/focus workflow on Virtual FM-1;
+- [ ] exercise the same workflow on physical FM-1 and capture validation evidence;
+- [ ] only then prepare the next beta tag/channel.
 
 ---
 
-# Immediate beta tasks
+# Immediate next tasks
 
-1. Build/serve `build/wasm` and open `/app/`; exercise the complete **VIRTUAL FM-1** workflow before the next physical flash.
-2. In **LIVE EDITOR**, use **USE VIRTUAL** and verify editor changes are reflected by the virtual 240×240 display and audible WASM engine.
-3. Rehearse HOME / ACID / STEP / DRUM / MIXER / FX / SONG / PROJECT, PLAY/STOP, Pattern A and project LOAD/SAVE virtually.
-4. Install `v0.1.0-beta.2` through the browser app and verify the displayed tag/commit/SHA before flashing.
-5. Open the browser **VALIDATION** tab and follow `docs/PHYSICAL_BETA2_VALIDATION.md` rather than ad-hoc testing.
-6. Validate HOME / ACID / STEP / DRUM / MIXER / FX / SONG / PROJECT on the actual LCD and record every result in the validation report.
-7. Validate live keys, PLAY/STOP, factory Pattern A and editing without lag/stuck notes.
-8. Capture factory-pattern runtime JSON with **CAPTURE RUNTIME**, retain the raw JSON and assign the latest capture to **Factory Pattern A** in VALIDATION.
-9. Run the four-machine stress scenario for several minutes, capture the second runtime JSON and assign it to **Worst-case stress**.
-10. Verify browser state sync plus complete project backup/restore, including the rule that restore stays RAM-only until explicit PROJECT SAVE.
-11. Verify USB MIDI, TRS MIDI and USB audio under playback/edit load.
-12. Verify physical project slot save/load, corruption fallback and power-cycle behavior.
-13. Prove rollback to official/Felucca firmware and repeat the update/rollback cycle.
-14. Export the VALIDATION JSON + Markdown evidence bundle.
-15. Run `tools/physical_validation_report.py` against the JSON with beta.2 expected tag/commit/SHA and require exit code 0 before calling beta.2 hardware-proven.
+1. Finish the current exact-head Build-all run and require **Host tests + WASM engine + FM-1 target package** all green.
+2. Add/verify a small visible FOCUS/location indicator only if the real 240×240 screen needs it; keep hardware and virtual identical.
+3. Exercise every held layer in Virtual FM-1, especially press/hold/release ordering and return to normal live notes.
+4. Verify 808 and 909 physical-key mapping is comfortable and unambiguous before freezing legends.
+5. Run the physical interaction checklist above without republishing beta.2.
+6. Re-run CPU/DMA/stack diagnostics with the interaction layer active.
+7. Fix any physical hold-timing or accidental-primary-action issues in the shared layer/overlay, not with target-specific divergent mappings.
+8. Produce a fresh exact-green commit, artifact hashes and physical evidence before preparing the next beta.
 
 ---
 
@@ -326,20 +285,16 @@ These are the main blockers between **software-gated beta.2** and **hardware-pro
 - [x] patterns/song baseline;
 - [x] accent/slide/probability;
 - [x] mixer + essential FX;
-- [x] combined browser installer/editor/virtual FM-1/WASM reference workflow;
-- [x] virtual FM-1 uses physical `ui240` state/edit semantics and target beta LCD layout;
-- [x] release hashes/provenance;
-- [x] loader-mediated installer foundation;
-- [x] dedicated physical ReFm beta UI implemented software-side;
-- [x] runtime user/supervisor stack instrumentation implemented software-side;
-- [x] device-to-browser current-state synchronization implemented software-side;
-- [x] full bidirectional browser project/pattern transfer implemented software-side;
-- [x] browser-accessible physical runtime diagnostics implemented software-side;
-- [x] guided/exportable/offline-verifiable hardware validation evidence pipeline implemented;
-- [x] exact-green corrective beta.2 published;
-- [ ] comfortable FM-1 CPU headroom proven physically;
-- [ ] runtime stack headroom proven physically;
-- [ ] physical UI/controls validated;
+- [x] combined browser installer/editor/virtual FM-1/WASM workflow;
+- [x] dedicated physical ReFm/RB-240 UI implemented software-side;
+- [x] shared keyboard-first hardware/virtual interaction layer;
+- [x] distinct 808/909 keyboard workflows and real 909 flam controls;
+- [x] PCF / Delay / Dist / Comp panel separation;
+- [x] modifier layers and quick FOCUS navigation implemented software-side;
+- [x] runtime diagnostics and validation evidence pipeline;
+- [x] release hashes/provenance and loader-mediated installer foundation;
+- [ ] comfortable FM-1 CPU/stack headroom proven physically with the final interaction build;
+- [ ] physical UI, keyboard layers and FOCUS validated;
 - [ ] USB MIDI/TRS MIDI/USB audio validated;
 - [ ] save/load validated physically;
 - [ ] recovery/return-to-official proven;
