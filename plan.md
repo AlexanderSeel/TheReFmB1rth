@@ -48,7 +48,10 @@ Later commits extend the interaction model and must obtain their own exact-head 
 - [x] ACID EDIT shortcuts for Accent / Slide / Tie / Rest / probability;
 - [x] SEQ / ARP / GLO / FX / SAVE / EDIT / REC / SCL temporary modifier layers;
 - [x] **tap-vs-hold arbitration**: primary button action is deferred until release and suppressed when a key/encoder consumes the hold;
-- [x] identical tap/hold contract in physical overlay and built Virtual FM-1;
+- [x] identical tap/hold contract in physical overlay and Virtual FM-1;
+- [x] Virtual FM-1 tracks **multiple simultaneously held modifier buttons** and restores the lower-priority held layer when a higher-priority button is released;
+- [x] Virtual desktop long-press latch (~360 ms) allows one virtual panel button to stay held while another button/key/encoder is used;
+- [x] second-button/key/encoder use consumes the primary virtual tap so no unwanted page action fires afterward;
 - [x] FOCUS navigation for ACID / STEP / DRUM / MIXER / PCF / DELAY / DIST / COMP;
 - [x] PRESET / ALGORITHM focus navigation and HOME panic-safe escape;
 - [x] eight-position cyan FOCUS location map mirrored on hardware and Virtual FM-1;
@@ -57,7 +60,8 @@ Later commits extend the interaction model and must obtain their own exact-head 
 - [x] pending manual pattern requests resolve on STOP;
 - [x] regression coverage for quantized pattern requests;
 - [x] browser **VIRTUAL FM-1 HELP / README** directly below the virtual hardware;
-- [x] help documents controls, tap/hold layers, FOCUS, 808/909 maps and PC keyboard shortcuts;
+- [x] help documents controls, tap/hold layers, multi-button chords/latch, FOCUS, 808/909 maps and PC keyboard shortcuts;
+- [x] browser interaction contract tests cover canonical ABI, tap/hold, multi-button priority, desktop latch, second-button consumption, SEL/FOCUS cleanup and blur cleanup;
 - [x] WASM build assertions verify the help module, performance ABI and FOCUS renderer patch;
 - [x] beta publication guard verified: no release/channel write occurs without an explicit one-shot request.
 
@@ -67,7 +71,7 @@ Later commits extend the interaction model and must obtain their own exact-head 
 
 ## Tap vs hold
 
-Modifier-capable buttons have one deterministic contract on hardware and Virtual FM-1:
+Modifier-capable buttons have one deterministic base contract on hardware and Virtual FM-1:
 
 1. press button → activate its temporary modifier layer and defer the normal button action;
 2. use a keyboard key or encoder → mark the hold consumed;
@@ -75,7 +79,14 @@ Modifier-capable buttons have one deterministic contract on hardware and Virtual
 4. if consumed, do **not** fire the normal button action;
 5. if not consumed, fire the normal button action on release.
 
-This avoids accidental page changes during performance gestures without inventing different hardware/browser timing rules.
+Virtual FM-1 extends this for browser input without changing the musical layer IDs:
+
+- touch/pen can hold multiple virtual modifier buttons simultaneously;
+- active virtual layer priority mirrors the physical held-button scan: `SEL > REC > EDIT > SAVE > FX > GLO > ARP > SEQ`;
+- releasing a higher-priority virtual modifier restores the still-held lower layer;
+- pressing another panel button while a modifier is held consumes the primary tap action;
+- desktop mouse users can long-press a modifier for about 360 ms to latch it, use additional controls, then click the latched button again to release it;
+- blur/focus loss clears every virtual held/latch state.
 
 ## Held layers
 
@@ -212,11 +223,15 @@ Physical validation still required:
 - [x] shared physical key index + MIDI note + edge behavior;
 - [x] shared modifier IDs and FOCUS state;
 - [x] shared tap/hold consumed-gesture contract;
+- [x] multi-pointer held-button state with hardware-priority modifier resolution;
+- [x] desktop long-hold latch for mouse-accessible button chords;
+- [x] second panel-button presses consume a held modifier tap action;
 - [x] quantized pattern switching uses shared groovebox runtime;
 - [x] eight-position FOCUS indicator mirrored in virtual renderer;
 - [x] expandable Virtual FM-1 help/readme under the instrument;
+- [x] browser interaction contract regression tests;
 - [x] WASM build asserts help/performance/focus integration;
-- [ ] add higher-level browser interaction tests for press → key/encoder → release sequences;
+- [ ] add full DOM/browser automation for pointer timing and real multi-touch dispatch;
 - [ ] final pixel-font/LED polish after real LCD comparison.
 
 ---
@@ -259,6 +274,7 @@ No custom firmware has a zero-brick guarantee.
 - [x] publication guard has been observed skipping release/channel mutation without a request;
 - [ ] require one exact-green **current** next-beta candidate commit with host + WASM + real FM-1 package success;
 - [ ] exercise the complete tap/hold/focus/pattern workflow in Virtual FM-1;
+- [ ] exercise virtual multi-button/latch chords with mouse and touch input;
 - [ ] exercise the same workflow on physical FM-1 and capture evidence;
 - [ ] only then prepare a new beta tag/channel.
 
@@ -267,13 +283,14 @@ No custom firmware has a zero-brick guarantee.
 # Immediate next tasks
 
 1. Require the latest interaction/documentation head to pass normal CI, WASM and real FM-1 target package jobs from one exact commit.
-2. Add browser-level gesture regression tests for tap, consumed hold, key release and encoder-consumed hold.
-3. Exercise quantized Pattern A–H switching in Virtual FM-1 during playback.
-4. Exercise every modifier layer and confirm release restores normal keyboard behavior.
-5. Run the physical interaction checklist without changing beta.2.
-6. Capture CPU/DMA/stack diagnostics with the final interaction layer active.
-7. Fix any hardware interaction issue in the shared contract/overlay, not with divergent virtual-only mappings.
-8. Prepare the next beta only after exact-green software evidence plus physical approval.
+2. Exercise virtual long-hold latch plus second button/key/encoder controls and verify release returns to the expected active layer.
+3. Exercise true two-pointer/touch modifier combinations and priority restoration.
+4. Exercise quantized Pattern A–H switching in Virtual FM-1 during playback.
+5. Exercise every modifier layer and confirm release restores normal keyboard behavior.
+6. Run the physical interaction checklist without changing beta.2.
+7. Capture CPU/DMA/stack diagnostics with the final interaction layer active.
+8. Fix any hardware interaction issue in the shared contract/overlay, not with divergent musical mappings.
+9. Prepare the next beta only after exact-green software evidence plus physical approval.
 
 ---
 
@@ -290,6 +307,7 @@ No custom firmware has a zero-brick guarantee.
 - [x] distinct 808/909 workflows and real 909 flam controls;
 - [x] PCF / Delay / Dist / Comp separation;
 - [x] tap/hold modifier arbitration and quick FOCUS navigation;
+- [x] Virtual FM-1 multi-button hold/chord handling and desktop latch;
 - [x] browser help/readme for the virtual hardware;
 - [x] runtime diagnostics and release provenance foundation;
 - [ ] final physical CPU/stack headroom proven;
