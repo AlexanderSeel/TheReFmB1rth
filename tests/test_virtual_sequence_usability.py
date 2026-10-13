@@ -39,9 +39,11 @@ class VirtualSequenceUsabilityTests(unittest.TestCase):
         self.assertIn("g.drawImage(src,0,0,480,480)", s)
         self.assertIn("DISPLAY 2×", s)
 
-    def test_compatibility_entry_points_to_v2(self):
-        s = (ROOT / "web/app/rb240_renderer.js").read_text(encoding="utf-8")
-        self.assertIn("rb240_renderer_v2.js", s)
+    def test_compatibility_entry_preserves_boot_then_v2_chain(self):
+        entry = (ROOT / "web/app/rb240_renderer.js").read_text(encoding="utf-8")
+        boot = (ROOT / "web/app/rb240_boot_renderer.js").read_text(encoding="utf-8")
+        self.assertIn("rb240_boot_renderer.js", entry)
+        self.assertIn("rb240_renderer_v2.js", boot)
 
 
 if __name__ == "__main__":
