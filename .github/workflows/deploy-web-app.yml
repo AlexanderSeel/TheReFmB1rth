@@ -19,12 +19,12 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 
 concurrency:
-  group: pages
+  group: wasm-web-channel
   cancel-in-progress: true
 
 jobs:
@@ -55,11 +55,34 @@ jobs:
           test -s build/wasm/app/virtual_fm1.js
           test -s build/wasm/app/latest_wasm.js
           grep -q 'DOWNLOAD LATEST WASM' build/wasm/app/latest_wasm.js
+          grep -q 'cdn.jsdelivr.net/gh/AlexanderSeel/TheReFmB1rth@wasm-channel' build/wasm/app/latest_wasm.js
           grep -q 'latest_wasm.js' build/wasm/app/index.html
           grep -q 'data-tab="virtual"' build/wasm/app/index.html
           grep -q '_refm_wasm_panel_value' build/wasm/refm.js
           node --check build/wasm/app/virtual_fm1.js
           node --check build/wasm/app/latest_wasm.js
+      - name: Publish CORS-safe WASM channel branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          rm -rf "$RUNNER_TEMP/wasm-channel"
+          mkdir -p "$RUNNER_TEMP/wasm-channel"
+          cp build/wasm/refm.js "$RUNNER_TEMP/wasm-channel/"
+          cp build/wasm/refm.wasm "$RUNNER_TEMP/wasm-channel/"
+          cp build/wasm/worklet_client.js "$RUNNER_TEMP/wasm-channel/"
+          cp build/wasm/refm_audio_worklet.js "$RUNNER_TEMP/wasm-channel/"
+          cp build/wasm/wasm-channel.json "$RUNNER_TEMP/wasm-channel/"
+          cp build/wasm/SHA256SUMS "$RUNNER_TEMP/wasm-channel/"
+          cd "$RUNNER_TEMP/wasm-channel"
+          git init
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git checkout -b wasm-channel
+          git add .
+          git commit -m "wasm channel ${GITHUB_SHA}"
+          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git push --force origin HEAD:wasm-channel
       - name: Configure GitHub Pages when repository Pages is enabled
         id: pages
         continue-on-error: true
