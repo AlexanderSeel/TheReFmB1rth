@@ -45,9 +45,9 @@ class VirtualFm1Tests(unittest.TestCase):
     def test_panel_uses_reference_fm1_geometry_and_27_key_index_map(self):
         js = (ROOT / 'web/app/virtual_fm1.js').read_text()
         css = (ROOT / 'web/app/virtual_fm1.css').read_text()
-        self.assertIn('const WHITE_K = [0,2,4,6,7,9,11,12,14,16,18,19,21,23,24,26]', js)
-        self.assertIn('const BLACK_K = [1,3,5,8,10,13,15,17,20,22,25]', js)
-        self.assertIn('const BLACK_AFTER = [0,1,2,4,5,7,8,9,11,12,14]', js)
+        self.assertIn('const WHITE_K=[0,2,4,6,7,9,11,12,14,16,18,19,21,23,24,26]', js)
+        self.assertIn('const BLACK_K=[1,3,5,8,10,13,15,17,20,22,25]', js)
+        self.assertIn('const BLACK_AFTER=[0,1,2,4,5,7,8,9,11,12,14]', js)
         self.assertIn("knob(105,100,24,'MASTER'", js)
         self.assertIn("knob(215,100,24,'SELECT'", js)
         self.assertIn('x:568,y:160,width:400,height:140', js)
@@ -56,38 +56,53 @@ class VirtualFm1Tests(unittest.TestCase):
         self.assertIn('width:20%', css)
         self.assertIn('height:31.25%', css)
 
-    def test_virtual_lcd_tracks_target_beta_renderer_contract(self):
-        js = (ROOT / 'web/app/virtual_fm1.js').read_text()
+    def test_beta3_virtual_renderer_matches_approved_screen_language(self):
+        shell = (ROOT / 'web/app/virtual_fm1.js').read_text()
+        renderer = (ROOT / 'web/app/rb240_renderer.js').read_text()
+        self.assertIn("import {drawRB240} from './rb240_renderer.js'", shell)
         for marker in (
-            "card(3,61,'TRACK'", "card(62,61,'PATTERN'", "card(121,61,'STEP'",
-            "card(3,61,'CUTOFF'", "steps(selStep, playing ? playStep : -1)",
-            "card(3,139,'LANE'", "card(3,61,'LEVEL'", "card(3,61,'DRIVE'",
-            "footer('OCT- LOAD   OCT+ SAVE   HOME EXIT')",
+            "'SEQ EDIT'", "'PITCH'", "'MODE'", "'TR-808 RHYTHM'", "'TR-909 RHYTHM'",
+            "'PCF'", "'DELAY'", "'DIST'", "'COMP'", "'FLAM'", "'CHANNEL / LEVELS'",
+            "'PATTERN / SONG'", 'function screw(', 'function knob(', 'function meter('
         ):
-            self.assertIn(marker, js)
-        self.assertIn("if(value(0)===7)restoreLocal();else encoder(ENC.ALGORITHM,-1);", js)
-        self.assertIn("if(value(0)===7)saveLocal();else encoder(ENC.ALGORITHM,1);", js)
+            self.assertIn(marker, renderer)
+        for field in ('get(29)', 'get(30)', 'get(31)', 'get(32)'):
+            self.assertIn(field, renderer)
 
-    def test_rb240_skin_is_shared_between_hardware_and_virtual(self):
-        js = (ROOT / 'web/app/virtual_fm1.js').read_text()
-        css = (ROOT / 'web/app/virtual_fm1.css').read_text()
-        skin = (ROOT / 'tools/apply_rb240_skin.py').read_text()
+    def test_beta3_panel_state_is_shared_by_target_and_wasm(self):
+        ui_h = (ROOT / 'firmware/proto/ui240.h').read_text()
+        ui_c = (ROOT / 'firmware/proto/ui240.c').read_text()
+        target = (ROOT / 'firmware/integration/refm_felucca_bridge.c').read_text()
+        wasm = (ROOT / 'web/emu/refm_wasm.c').read_text()
+        for marker in ('UI240_FX_PCF','UI240_FX_DELAY','UI240_FX_DIST','UI240_FX_COMP','fx_section'):
+            self.assertIn(marker, ui_h)
+            self.assertIn(marker, ui_c)
+        self.assertIn('ui240_cycle_fx_section(&g_ui, d)', target)
+        self.assertIn('ui240_cycle_fx_section(&panel_ui, d)', wasm)
+        for marker in ('case 29:', 'case 30:', 'case 31:', 'case 32:'):
+            self.assertIn(marker, target)
+        for marker in ('acid_cutoff_pct','acid_resonance_pct','acid_env_pct','acid_decay_pct'):
+            self.assertIn(marker, ui_h)
+            self.assertIn(marker, ui_c)
+
+    def test_beta3_physical_overlay_applies_same_seq_drum_fx_contract(self):
+        base = (ROOT / 'tools/apply_rb240_skin.py').read_text()
+        beta3 = (ROOT / 'tools/apply_rb240_beta3_layout.py').read_text()
         overlay = (ROOT / 'tools/patch_fm1_rebirth_ui.py').read_text()
-        for marker in ("led:'#250708'", "red:'#ff4a3f'", "amber:'#ffb326'", 'function bevel(', 'function ledBox(', 'function band(', 'function meter('):
-            self.assertIn(marker, js)
-        for marker in ('--rb240-metal', '--rb240-red', '--rb240-amber', '--rb240-cyan'):
-            self.assertIn(marker, css)
-        for marker in ('RB240_PANEL', 'RB240_LED_BG', 'RB240_RED', 'RB240_AMBER', 'RB240_CYAN', 'refm_bevel', 'refm_band', 'refm_meter'):
-            self.assertIn(marker, skin)
-        for label in ('PERFORMANCE', 'ACID CONTROL', 'STEP PROGRAMMER', 'DRUM MACHINE', 'MIXER / SENDS', 'MASTER FX', 'PATTERN / SONG', 'PROJECT MEMORY'):
-            self.assertIn(label, js)
-            self.assertIn(label, skin)
-        self.assertIn('meter(24,164,38,pct(p0),C.green)', js)
-        self.assertIn('refm_meter(24, 164, 38, refm_pct(p0), RB240_GREEN)', skin)
-        self.assertIn('meter(24,124,70,pct(p0),C.red)', js)
-        self.assertIn('refm_meter(24, 124, 70, refm_pct(p0), RB240_RED)', skin)
-        self.assertIn('apply_rb240_skin.py', overlay)
-        self.assertIn('rb240-metal-panel-v2', overlay)
+        for marker in ('RB240_PANEL','RB240_LED_BG','RB240_AMBER','RB240_CYAN','refm_knob','refm_button'):
+            self.assertIn(marker, base)
+        for marker in ('SEQ EDIT','TR-808 RHYTHM','TR-909 RHYTHM','PCF','DELAY','DIST','COMP','FLAM UI BETA'):
+            self.assertIn(marker, beta3)
+        self.assertIn('apply_rb240_beta3_layout.py', overlay)
+        self.assertIn('rb240-beta3-approved', overlay)
+
+    def test_909_flam_is_not_falsely_persisted_as_audio_feature(self):
+        renderer = (ROOT / 'web/app/rb240_renderer.js').read_text()
+        beta3 = (ROOT / 'tools/apply_rb240_beta3_layout.py').read_text()
+        # UI labels the control as beta/visual until a real sequencer flam state exists.
+        self.assertIn("'FLAM'", renderer)
+        self.assertIn('FLAM UI BETA', beta3)
+        self.assertNotIn('drum_flam', (ROOT / 'firmware/proto/drum_machine.h').read_text())
 
     def test_virtual_audio_uses_buffered_worklet_not_deprecated_script_processor(self):
         js = (ROOT / 'web/app/virtual_fm1.js').read_text()
