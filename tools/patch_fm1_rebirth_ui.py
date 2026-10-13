@@ -38,6 +38,11 @@ def main() -> int:
         cwd=ROOT,
     )
     subprocess.run(
+        [sys.executable, str(ROOT / "tools" / "apply_rb240_skin.py"), str(root)],
+        check=True,
+        cwd=ROOT,
+    )
+    subprocess.run(
         [sys.executable, str(ROOT / "tools" / "fix_beta_input_safety.py"), str(root)],
         check=True,
         cwd=ROOT,
@@ -70,9 +75,9 @@ def main() -> int:
     ):
         h.update(path.read_bytes())
     (root / ".refm-ui-overlay").write_text(
-        f"style=compact-rebirth-inspired+refm-hardware-beta\nsha256={h.hexdigest()}\n"
+        f"style=compact-rebirth-inspired+refm-hardware-beta+rb240-metal-panel-v1\nsha256={h.hexdigest()}\n"
     )
-    print("FM-1 dedicated ReFm hardware beta UI + runtime diagnostics applied")
+    print("FM-1 dedicated ReFm hardware beta UI + RB-240 skin + runtime diagnostics applied")
     return 0
 
 
