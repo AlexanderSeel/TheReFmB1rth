@@ -32,7 +32,7 @@ int main(void)
 
     ui.selected_lane = DRUM_BD;
     (void)ui240_performance_key(&ui, &g, UI240_MOD_DRUM, 22u, 58u, 1u);
-    assert(g.drum_flams[3] & (1u << DRUM_BD));
+    assert(g.drum_909_flams[3] & (1u << DRUM_BD));
 
     /* Direct pattern keyboard switching preserves the edited source pattern. */
     ui240_select_pattern_direct(&g, 3u);
