@@ -69,8 +69,6 @@ typedef struct {
     uint8_t slide;
     uint8_t step_probability;
     uint8_t drum_state;
-    uint8_t drum_flam;
-    uint8_t flam_width_pct;
     uint8_t mute;
     uint8_t solo;
     uint16_t drum_hits;
@@ -84,6 +82,12 @@ typedef struct {
     uint8_t song_loop;
     uint8_t song_length;
 } ui240_view_t;
+
+/* On the DRUM page p2/p3 are intentionally the selected 909 step's flam flag
+   and global flam-width percentage. This keeps the bridge ABI compact while
+   MIXER/FX continue to use p0..p3 for their page-specific parameters. */
+#define drum_flam p2
+#define flam_width_pct p3
 
 void ui240_init(ui240_state_t *ui);
 void ui240_set_page(ui240_state_t *ui, ui240_page_t page);
