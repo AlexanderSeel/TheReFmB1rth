@@ -13,7 +13,7 @@ sed 's#"../../firmware/proto/acid303_wavetable.h"#"acid303_hq_wavetable.h"#' \
 # Keep the checked-in bridge compact while appending the interaction layer into
 # the same translation unit; it needs direct access to the static VM/panel state.
 cat "$ROOT/web/emu/refm_wasm.c" "$ROOT/web/emu/refm_wasm_performance.inc" > "$OUT/refm_wasm_build.c"
-COMMON="$OUT/acid303_hq_build.c $ROOT/firmware/proto/seq16.c $ROOT/firmware/proto/sample_voice.c $ROOT/firmware/proto/drum_machine.c $ROOT/firmware/proto/mixer_fx.c $ROOT/firmware/proto/midi_transport.c $ROOT/firmware/proto/song.c $ROOT/firmware/proto/project_store.c $ROOT/firmware/proto/pattern_bank.c $ROOT/firmware/proto/groovebox.c $ROOT/firmware/proto/ui_graph_model.c $ROOT/firmware/proto/ui240.c"
+COMMON="$OUT/acid303_hq_build.c $ROOT/firmware/proto/seq16.c $ROOT/firmware/proto/sample_voice.c $ROOT/firmware/proto/drum_machine.c $ROOT/firmware/proto/mixer_fx.c $ROOT/firmware/proto/midi_transport.c $ROOT/firmware/proto/song.c $ROOT/firmware/proto/project_store.c $ROOT/firmware/proto/pattern_bank.c $ROOT/firmware/proto/ui_graph_model.c $ROOT/firmware/proto/groovebox.c $ROOT/firmware/proto/ui240.c"
 FEATURES="$ROOT/firmware/proto/groovebox_pattern.c $ROOT/firmware/proto/midi_router.c $ROOT/firmware/proto/groovebox_midi.c"
 SAMPLE_SRC=""
 SAMPLE_FLAGS=""
@@ -49,6 +49,7 @@ mkdir -p "$OUT/app"
 cp "$ROOT/web/app/"*.html "$ROOT/web/app/"*.js "$ROOT/web/app/"*.css "$OUT/app/"
 python3 "$ROOT/tools/patch_virtual_fm1_performance.py" "$OUT/app/virtual_fm1.js"
 python3 "$ROOT/tools/patch_rb240_virtual_focus.py" "$OUT/app/rb240_renderer.js"
+command -v node >/dev/null 2>&1 && node --check "$OUT/app/virtual_fm1.js"
 
 # The combined app is deployed under /app while refm.js/refm.wasm live one level up.
 # Inject the current-runtime download helper into the built copy without forcing the
@@ -87,6 +88,8 @@ grep -q '_refm_wasm_panel_key_event' "$OUT/refm.js"
 grep -q '_refm_wasm_panel_modifier' "$OUT/refm.js"
 grep -q 'BUTTON_MOD' "$OUT/app/virtual_fm1.js"
 grep -q '_refm_wasm_panel_key_event' "$OUT/app/virtual_fm1.js"
+grep -q 'focusExit' "$OUT/app/virtual_fm1.js"
+grep -q "name==='SEL'&&!used" "$OUT/app/virtual_fm1.js"
 grep -q 'focus=!!v(34)' "$OUT/app/rb240_renderer.js"
 grep -q 'for(let i=0;i<8;i++)lamp' "$OUT/app/rb240_renderer.js"
 test -s "$OUT/wasm-channel.json"
