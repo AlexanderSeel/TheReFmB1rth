@@ -5,6 +5,16 @@ on:
     branches: [main]
     paths:
       - 'web/app/**'
+      - 'web/emu/**'
+      - 'web/refm.js'
+      - 'web/worklet_client.js'
+      - 'firmware/proto/**'
+      - 'firmware/integration/**'
+      - 'tools/generate_303_wavetables.py'
+      - 'tools/generate_303_hq_wavetables.py'
+      - 'tools/fetch_samples.py'
+      - 'tools/preprocess_samples.py'
+      - 'samples/**'
       - '.github/workflows/deploy-web-app.yml'
   workflow_dispatch:
 
@@ -18,44 +28,53 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  validate:
+  build:
     runs-on: ubuntu-24.04
     outputs:
       pages_ready: ${{ steps.pages.outcome }}
     steps:
       - uses: actions/checkout@v4
-      - name: Validate static app
+      - name: Install Emscripten
         run: |
-          test -s web/app/index.html
-          test -s web/app/style.css
-          test -s web/app/app.js
-          test -s web/app/fm1pkg.js
-          test -s web/app/fm1ota.js
-          node --check web/app/app.js
-          node --check web/app/fm1pkg.js
-          node --check web/app/fm1ota.js
-          grep -q 'FLASH THE FM-1' web/app/index.html
-          grep -q 'requestMIDIAccess({sysex:true})' web/app/app.js
-          grep -q 'logicalImage' web/app/fm1pkg.js
-          grep -q '0xe0000000' web/app/fm1ota.js
-          grep -q '0xf0000000' web/app/fm1ota.js
-          grep -q '16-STEP PROGRAMMER' web/app/index.html
-          grep -q 'cc(102' web/app/app.js
+          sudo apt-get update
+          sudo apt-get install -y emscripten
+      - name: Prepare approved browser samples
+        run: |
+          python3 tools/fetch_samples.py
+          python3 tools/preprocess_samples.py --rate 22050
+      - name: Build combined installer/editor/virtual FM-1
+        run: sh web/emu/build_wasm.sh
+      - name: Validate deployable WASM app
+        run: |
+          test -s build/wasm/refm.js
+          test -s build/wasm/refm.wasm
+          test -s build/wasm/worklet_client.js
+          test -s build/wasm/refm_audio_worklet.js
+          test -s build/wasm/wasm-channel.json
+          test -s build/wasm/app/index.html
+          test -s build/wasm/app/virtual_fm1.js
+          test -s build/wasm/app/latest_wasm.js
+          grep -q 'DOWNLOAD LATEST WASM' build/wasm/app/latest_wasm.js
+          grep -q 'latest_wasm.js' build/wasm/app/index.html
+          grep -q 'data-tab="virtual"' build/wasm/app/index.html
+          grep -q '_refm_wasm_panel_value' build/wasm/refm.js
+          node --check build/wasm/app/virtual_fm1.js
+          node --check build/wasm/app/latest_wasm.js
       - name: Configure GitHub Pages when repository Pages is enabled
         id: pages
         continue-on-error: true
         uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: web/app
+          path: build/wasm
 
   deploy:
-    if: needs.validate.outputs.pages_ready == 'success'
+    if: needs.build.outputs.pages_ready == 'success'
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-24.04
-    needs: validate
+    needs: build
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
