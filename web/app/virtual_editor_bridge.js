@@ -16,7 +16,7 @@ document.addEventListener('click',e=>{
   if(t.id==='stepAccent'||t.id==='stepSlide'){later(()=>{cc(102,step);const accent=document.querySelector('#stepAccent')?.classList.contains('active'),slide=document.querySelector('#stepSlide')?.classList.contains('active');cc(105,(accent?1:0)|(slide?2:0));});return;}
   if(t.closest('#voiceSelect')){const a=[...document.querySelectorAll('#voiceSelect button')],i=a.indexOf(t);if(i>=0){voice=i;cc(104,voice);}return;}
   if(t.matches('[data-drum-state]')){cc(102,step);cc(104,voice);cc(105,Number(t.dataset.drumState));return;}
-  if(t.matches('[data-transport]')){const c=t.dataset.transport;send([c==='start'?0xFA:c==='continue'?0xFB:0xFC]);return;}
+  if(t.matches('[data-transport]'))return; // transport.js owns realtime start/continue/stop exactly once.
   if(t.closest('#keyboard')){const a=[...document.querySelectorAll('#keyboard button')],i=a.indexOf(t);if(i>=0&&machine<2){const note=36+i;send([0x90+machine,note,100]);setTimeout(()=>send([0x80+machine,note,0]),180);}return;}
   if(t.closest('#drumPads')){const a=[...document.querySelectorAll('#drumPads button')],i=a.indexOf(t);if(i>=0&&machine>=2){const note=drumNotes[i];send([0x90+machine,note,110]);setTimeout(()=>send([0x80+machine,note,0]),120);}}
 });
