@@ -65,9 +65,11 @@ class VirtualFm1Tests(unittest.TestCase):
     def test_virtual_renderer_v2_matches_pattern_first_screen_language(self):
         shell = (ROOT / 'web/app/virtual_fm1.js').read_text()
         entry = (ROOT / 'web/app/rb240_renderer.js').read_text()
+        boot = (ROOT / 'web/app/rb240_boot_renderer.js').read_text()
         renderer = (ROOT / 'web/app/rb240_renderer_v2.js').read_text()
         self.assertIn("import {drawRB240} from './rb240_renderer.js'", shell)
-        self.assertIn("rb240_renderer_v2.js", entry)
+        self.assertIn("rb240_boot_renderer.js", entry)
+        self.assertIn("rb240_renderer_v2.js", boot)
         for marker in (
             "'SEQ EDIT'", "'TB-303 STYLE STEP EDIT'", "'TR-808 STEP PROGRAMMER'", "'TR-909 STEP PROGRAMMER'",
             "'PCF'", "'DELAY'", "'DIST'", "'COMP'", "'FLAM'", "'MIXER'",
@@ -79,6 +81,20 @@ class VirtualFm1Tests(unittest.TestCase):
         self.assertIn('window.refmRB240State=s', renderer)
         self.assertIn('focus=!!v(34)', renderer)
         self.assertIn('focusRegion=v(35)&7', renderer)
+
+    def test_refm_boot_renderer_is_short_hardware_feasible_sequence(self):
+        entry = (ROOT / 'web/app/rb240_renderer.js').read_text()
+        boot = (ROOT / 'web/app/rb240_boot_renderer.js').read_text()
+        patch = (ROOT / 'tools/apply_refm_boot_splash.py').read_text()
+        overlay = (ROOT / 'tools/patch_fm1_rebirth_ui.py').read_text()
+        self.assertIn("rb240_boot_renderer.js", entry)
+        for marker in ('ACID A','ACID B','808','909','16-STEP BUS','MIXER + FX','READY','elapsed<1560'):
+            self.assertIn(marker, boot)
+        self.assertIn('refm_boot_tick', patch)
+        self.assertIn('fm1_ms - refm_boot_t0 < 1560u', patch)
+        self.assertNotIn('fm1_delay_ms(400)', patch)
+        self.assertIn('apply_refm_boot_splash.py', overlay)
+        self.assertIn('refm-boot-splash', overlay)
 
     def test_beta3_panel_state_is_shared_by_target_and_wasm(self):
         ui_h = (ROOT / 'firmware/proto/ui240.h').read_text()
