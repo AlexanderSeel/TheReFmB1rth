@@ -35,6 +35,66 @@ Implemented foundations include:
 - release manifests, SHA/product/device checks and a double-confirmed experimental installer wrapper that delegates to the pinned Felucca loader-mediated installer;
 - CI tests for DSP, sequencer, runtime, pattern/MIDI, projects and hardware-gate logic.
 
+## Next interaction milestone — keyboard-first live workflow
+
+The next UI pass should make much stronger use of the FM-1 keyboard and treat the keys as a contextual performance/edit surface rather than only as note keys. The physical hardware and virtual FM-1 must expose the same mappings so virtual rehearsal matches the real unit.
+
+### Keyboard-assisted note and drum entry
+
+- On ACID pages, the keyboard should enter notes directly into the selected sequencer step.
+- In step-edit mode, pressing a key writes the pitch immediately; holding a modifier button while pressing a key may assign accent, slide, tie or probability-related variants without navigating through extra pages.
+- A dedicated live-record mode should allow notes played on the keyboard to be captured into the running pattern with sensible quantization.
+- On DRUM pages, the keyboard should become a drum-pad bank. Individual keys should map to BD, SD, clap, hats, toms, cymbals and the remaining 808/909 voices.
+- Drum live-record should write hits directly into the running step position. Accent/high-level and 909 flam states should be accessible through modifiers rather than requiring deep menu navigation.
+- The 808 and 909 mappings should remain visibly different where the machines differ: 909 flam/high-low behavior versus the broader 808 percussion voice set.
+
+### Live performance mode
+
+A dedicated live-performance mode should keep the most useful performance actions one gesture away while the sequencer is running.
+
+- Keyboard notes remain immediately playable for ACID A/B.
+- Selected keyboard keys may temporarily become performance controls when a modifier is held.
+- Quick access should exist for filter cutoff/resonance, delay, PCF, distortion and compressor/performance effects.
+- Mute/solo for ACID A, ACID B, 808 and 909 should be available without entering the mixer page.
+- Pattern A–H switching should be possible from the keyboard and should respect the configured quantized-change behavior.
+- One-shot/special-effect actions should be possible from spare keys, for example delay throw, filter sweep, temporary distortion, repeat/stutter, mute cut or similar performance-safe effects.
+- Entering live play should be fast, and leaving it should restore the normal keyboard mapping immediately.
+
+### Hold/modifier behavior
+
+Physical buttons should gain a consistent short-press/hold language. A short press keeps the existing primary action. Holding a button temporarily exposes a second layer on the keyboard or encoders.
+
+Examples:
+
+- hold `SEQ` + keyboard: select/write sequencer steps or notes;
+- hold `ARP/DRUM` + keyboard: choose or trigger drum voices;
+- hold `GLO/MIXER` + keyboard: mute/solo tracks and select mixer channels;
+- hold `FX` + keyboard: select PCF/Delay/Dist/Comp and trigger performance FX;
+- hold `PRESET` or a dedicated pattern modifier + keyboard: choose patterns A–H;
+- hold `EDIT` + keyboard: accent/slide/tie/flam or other context-specific edit layer;
+- hold `HOME` should always provide a predictable escape/back behavior and must never leave stuck notes.
+
+Modifier mappings must be contextual, visible on the 240×240 screen, and designed so accidental mode changes are difficult during live use.
+
+### Quick panel zoom/navigation mode
+
+The 240×240 display should support a quick zoom/focus mode for dense ReBirth-inspired panels. This is not a graphical magnification effect only; it is a navigation mode for temporarily focusing on one logical panel.
+
+- A short dedicated gesture should enter `ZOOM`/`FOCUS` mode from HOME, ACID, STEP, DRUM, MIXER or FX.
+- The keyboard can act as direct panel selectors while zoom mode is active.
+- Keys may select regions such as oscillator/filter, sequencer, drum voices, mixer, PCF, delay, distortion and compressor.
+- Once zoomed, the four K encoders should control the most important parameters of that focused panel.
+- PRESET/ALGORITHM/SELECT or spare keyboard keys can move left/right/up/down between adjacent logical panels.
+- The display should show a small overview/location indicator so the user always knows which part of the larger virtual panel is currently focused.
+- HOME or the same zoom gesture exits immediately.
+- Virtual mode must mirror the same focus state and navigation so it is useful for hardware training and testing.
+
+### Interaction design rules
+
+The goal is speed and muscle memory, not adding hidden complexity. Every secondary mapping must be shown on-screen when its modifier is held. Common live actions should require at most one held modifier plus one key. Note-off/panic behavior must remain safe across page, machine, pattern and mode changes. The keyboard mapping should be consistent between physical FM-1, virtual FM-1 and Live Editor wherever possible.
+
+The implementation should be validated against realistic tasks: enter a bassline without leaving STEP mode, record a drum beat live, switch A–H patterns during playback, mute one machine, perform a filter/delay gesture, jump into a zoomed FX panel, edit it with K1–K4, and return to live notes without stopping playback.
+
 ## Build everything in GitHub
 
 `.github/workflows/build-all.yml` builds the project on every push to `main` and can also be started manually with **Actions → Build all artifacts → Run workflow**.
