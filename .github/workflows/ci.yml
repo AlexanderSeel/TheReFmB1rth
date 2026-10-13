@@ -32,14 +32,19 @@ jobs:
         run: |
           test -s .upstream/felucca/.refm-overlay
           test -s .upstream/felucca/.refm-ui-overlay
+          test -s .upstream/felucca/.refm-runtime-diag
+          grep -q 'no-legacy-graph-strip' .upstream/felucca/.refm-ui-overlay
+          grep -q 'protocol=2' .upstream/felucca/.refm-runtime-diag
           grep -q 'refm_felucca_audio_block(out, n);' .upstream/felucca/firmware/src/audio.c
+          grep -q 'refm_nonzero_blocks' .upstream/felucca/firmware/src/audio.c
+          grep -q 'refm_felucca_diag_value' .upstream/felucca/firmware/refm/integration/refm_felucca_bridge.c
           grep -q 'REFM_MIRROR_MIDI(pkt);' .upstream/felucca/firmware/src/usb.c
           grep -q 'refm_platform_midi_out_event' .upstream/felucca/firmware/src/usb.c
           grep -q '#define REFM_APP 1' .upstream/felucca/firmware/src/felucca.c
           grep -q 'refm_platform_storage_save' .upstream/felucca/firmware/src/felucca.c
           grep -q 'refm_backup_handle(cmd, a, na)' .upstream/felucca/firmware/src/editor.c
           grep -q '#define ED_REFM_PROJECT 90u' .upstream/felucca/firmware/refm/integration/refm_editor_backup.h
-          grep -q 'Compact dual-bassline visual language' .upstream/felucca/firmware/src/ui_graph.c
+          ! grep -q 'Compact dual-bassline visual language' .upstream/felucca/firmware/src/ui_graph.c
           grep -q '\*refm_objs' .upstream/felucca/tools/build.py
       - name: Compile and link copied ReFmB1rth target sources
         run: |
