@@ -102,6 +102,10 @@ void ui240_snapshot(const ui240_state_t *ui, const groovebox_t *g, ui240_view_t 
         out->wave_square = s->square;
         out->acid_tune = s->tune;
         out->acid_accent = (uint8_t)(((uint32_t)s->accent * 100u) / 32767u);
+        out->acid_cutoff_pct = (uint8_t)(((uint32_t)s->cutoff * 100u) / 32767u);
+        out->acid_resonance_pct = (uint8_t)(((uint32_t)s->resonance * 100u) / 32767u);
+        out->acid_env_pct = (uint8_t)(((uint32_t)s->env_mod * 100u) / 32767u);
+        out->acid_decay_pct = (uint8_t)(((uint32_t)s->decay * 100u) / 32767u);
         out->accent = (st->flags & SEQ16_ACCENT) != 0;
         out->slide = (st->flags & SEQ16_SLIDE) != 0;
         out->step_probability = st->probability;
@@ -140,27 +144,27 @@ void ui240_snapshot(const ui240_state_t *ui, const groovebox_t *g, ui240_view_t 
         switch (out->fx_section) {
         case UI240_FX_PCF:
             out->p0 = (uint16_t)g->mixer.filter_cutoff;
-            out->p1 = 0u;       /* LP mode in the current embedded DSP */
-            out->p2 = 100u;     /* full pattern-filter amount */
-            out->p3 = 50u;      /* visual envelope decay */
+            out->p1 = 0u;
+            out->p2 = 100u;
+            out->p3 = 50u;
             break;
         case UI240_FX_DELAY:
             out->p0 = (uint16_t)(((uint32_t)g->mixer.delay_len * 16u + MIX_DELAY_MAX - 1u) / MIX_DELAY_MAX);
             if (out->p0 < 1u) out->p0 = 1u;
             if (out->p0 > 16u) out->p0 = 16u;
-            out->p1 = 50u;      /* centered delay pan */
+            out->p1 = 50u;
             out->p2 = (uint16_t)(((uint32_t)g->mixer.delay_feedback * 100u) / 31000u);
             out->p3 = (uint16_t)(((uint32_t)g->mixer.delay_mix * 100u) / 32767u);
             break;
         case UI240_FX_DIST:
             out->p0 = (uint16_t)(((uint32_t)g->mixer.drive * 100u) / 32767u);
-            out->p1 = 50u;      /* current soft-clip shape */
+            out->p1 = 50u;
             out->p2 = 0u;
             out->p3 = 0u;
             break;
         default:
             out->p0 = (uint16_t)(100u - ((uint32_t)g->mixer.compressor_threshold * 100u) / 32767u);
-            out->p1 = 4u;       /* current DSP is 4:1 above threshold */
+            out->p1 = 4u;
             out->p2 = 0u;
             out->p3 = 0u;
             break;
