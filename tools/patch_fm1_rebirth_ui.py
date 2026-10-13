@@ -32,6 +32,7 @@ def main() -> int:
     replace_once(graph, old, new)
 
     subprocess.run([sys.executable, str(ROOT / "tools" / "apply_hardware_beta_fixes.py"), str(root)], check=True, cwd=ROOT)
+    subprocess.run([sys.executable, str(ROOT / "tools" / "apply_keyboard_performance.py"), str(root)], check=True, cwd=ROOT)
     subprocess.run([sys.executable, str(ROOT / "tools" / "apply_rb240_skin.py"), str(root)], check=True, cwd=ROOT)
     subprocess.run([sys.executable, str(ROOT / "tools" / "apply_rb240_beta3_layout.py"), str(root)], check=True, cwd=ROOT)
     subprocess.run([sys.executable, str(ROOT / "tools" / "apply_rb240_beta3_flam.py"), str(root)], check=True, cwd=ROOT)
@@ -52,9 +53,9 @@ def main() -> int:
     ):
         h.update(path.read_bytes())
     (root / ".refm-ui-overlay").write_text(
-        f"style=compact-rebirth-inspired+refm-hardware-beta+rb240-beta3-approved+909-flam\nsha256={h.hexdigest()}\n"
+        f"style=compact-rebirth-inspired+refm-hardware-beta+rb240-beta3-approved+909-flam+keyboard-performance\nsha256={h.hexdigest()}\n"
     )
-    print("FM-1 dedicated ReFm hardware beta UI + approved RB-240 beta3 layout + real 909 flam + runtime diagnostics applied")
+    print("FM-1 dedicated ReFm hardware beta UI + RB-240 beta3 + keyboard performance/focus + runtime diagnostics applied")
     return 0
 
 
