@@ -2,21 +2,16 @@
 # SPDX-License-Identifier: GPL-3.0-only
 """Apply the compact ReFm visual layer and physical-hardware beta integration.
 
-The hardware beta renderer applies the approved RB-240 beta3 screen contract,
-including the real 909 flam sequencer binding, after the base integration.
+The dedicated ReFm renderer owns the normal 240x240 LCD. Legacy Felucca graph
+content is deliberately left untouched; injecting the old compatibility step
+strip caused a stray horizontal pattern line to bleed across ReFm pages on
+physical hardware.
 """
 from __future__ import annotations
 import argparse, hashlib, subprocess, sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-
-
-def replace_once(path: Path, old: str, new: str) -> None:
-    text = path.read_text()
-    if text.count(old) != 1:
-        raise SystemExit(f"FM-1 UI patch anchor mismatch in {path}")
-    path.write_text(text.replace(old, new, 1))
 
 
 def main() -> int:
@@ -27,10 +22,10 @@ def main() -> int:
     if not (root / ".refm-overlay").is_file():
         raise SystemExit("apply the ReFmB1rth Felucca overlay first")
     graph = root / "firmware" / "src" / "ui_graph.c"
-    old = """    return 1;\n}\n\nstatic void draw_graph(void)\n"""
-    new = """    /* Compact dual-bassline visual language: 16 grouped step lamps.\n       This graph strip remains as a compatibility/provenance marker; the\n       dedicated ReFm beta renderer replaces normal Felucca pages afterwards. */\n    {\n        extern uint8_t refm_felucca_step(void);\n        uint32_t st = refm_felucca_step() & 15u;\n        for (i = 0; i < 16; ++i) {\n            int32_t sx = 11 + i * 13 + (i / 4) * 4;\n            uint16_t sc = ((uint32_t)i == st) ? T_ACCENT : T_RAISE;\n            cv_rect(sx, graph_ht - 7, 9, 4, sc);\n        }\n    }\n    return 1;\n}\n\nstatic void draw_graph(void)\n"""
-    replace_once(graph, old, new)
 
+    # Do not patch ui_graph.c with ReFm step lamps. The dedicated RB-240
+    # renderer already draws its own sequencer state, and the legacy graph
+    # overlay was visible on unrelated physical pages.
     subprocess.run([sys.executable, str(ROOT / "tools" / "apply_hardware_beta_fixes.py"), str(root)], check=True, cwd=ROOT)
     subprocess.run([sys.executable, str(ROOT / "tools" / "apply_keyboard_performance.py"), str(root)], check=True, cwd=ROOT)
     subprocess.run([sys.executable, str(ROOT / "tools" / "apply_rb240_skin.py"), str(root)], check=True, cwd=ROOT)
@@ -55,9 +50,9 @@ def main() -> int:
     ):
         h.update(path.read_bytes())
     (root / ".refm-ui-overlay").write_text(
-        f"style=compact-rebirth-inspired+refm-hardware-beta+rb240-beta3-approved+909-flam+keyboard-performance+focus-indicator+refm-boot-splash\nsha256={h.hexdigest()}\n"
+        f"style=compact-rebirth-inspired+refm-hardware-beta+rb240-beta3-approved+909-flam+keyboard-performance+focus-indicator+no-legacy-graph-strip+refm-boot-splash\nsha256={h.hexdigest()}\n"
     )
-    print("FM-1 dedicated ReFm hardware beta UI + RB-240 beta3 + keyboard performance/focus + boot splash + runtime diagnostics applied")
+    print("FM-1 dedicated ReFm hardware UI + RB-240 + keyboard performance/focus + clean graph ownership + boot splash + runtime diagnostics applied")
     return 0
 
 
