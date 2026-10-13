@@ -46,9 +46,10 @@ def main() -> int:
     # Must be last: beta.4 hardware validation proved that the earlier layered
     # renderer/input assumptions were not valid on the physical unit.
     subprocess.run([sys.executable, str(ROOT / "tools" / "apply_hardware_rework.py"), str(root)], check=True, cwd=ROOT)
-    # The first rework used int64_t for gain, which pi32v2 lowered to an
-    # undocumented ROM helper. Keep the final generated target 32-bit only.
+    # Keep final generated target arithmetic self-contained. The pi32v2 compiler
+    # otherwise emits undocumented ROM helpers for some generic arithmetic.
     subprocess.run([sys.executable, str(ROOT / "tools" / "fix_hardware_gain_target.py"), str(root)], check=True, cwd=ROOT)
+    subprocess.run([sys.executable, str(ROOT / "tools" / "fix_hardware_renderer_target.py"), str(root)], check=True, cwd=ROOT)
 
     h = hashlib.sha256()
     for path in (
@@ -63,7 +64,7 @@ def main() -> int:
     ):
         h.update(path.read_bytes())
     (root / ".refm-ui-overlay").write_text(
-        f"style=hardware-240x240-clean+direct-isr-keyboard+physical-master+gain32+contextual-controls+dirty-regions+no-legacy-graph-strip+refm-boot-splash\nsha256={h.hexdigest()}\n"
+        f"style=hardware-240x240-clean+direct-isr-keyboard+physical-master+gain32+render-shifts+contextual-controls+dirty-regions+no-legacy-graph-strip+refm-boot-splash\nsha256={h.hexdigest()}\n"
     )
     print("FM-1 ReFm hardware UI/input/audio correction stack applied")
     return 0
