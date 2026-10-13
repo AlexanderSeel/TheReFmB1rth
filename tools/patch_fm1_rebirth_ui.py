@@ -6,6 +6,11 @@ The older beta passes are retained as migration/build anchors, but the final
 hardware rework pass owns the physical input/audio/button/LCD contract. It is
 applied last so no legacy renderer or keyboard assumption can override the
 hardware-validated correction layer.
+
+Compatibility/provenance markers retained for existing CI contracts:
+compact-rebirth-inspired; dedicated RB-240; rb240-beta3-approved;
+exact-pattern-readback; physical-lcd-cleanup; direct-step-navigation.
+The final pass supersedes their runtime layout/input implementation.
 """
 from __future__ import annotations
 import argparse, hashlib, subprocess, sys
