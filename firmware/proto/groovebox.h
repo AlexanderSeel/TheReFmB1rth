@@ -16,6 +16,7 @@
 #define GROOVEBOX_PROJECT_PAYLOAD_MAX 3072u
 #define GROOVEBOX_909_FLAM_MIN_SAMPLES 96u
 #define GROOVEBOX_909_FLAM_MAX_SAMPLES 704u
+#define GROOVEBOX_NO_PENDING_PATTERN 0xffu
 typedef struct {
     acid303_t acid[2];
     seq16_t acid_seq[2];
@@ -31,13 +32,14 @@ typedef struct {
     mixer_fx_t mixer;
     midi_transport_t transport;
     song_t song;
-    uint8_t step,current_pattern,external_clock;
+    uint8_t step,current_pattern,external_clock,pending_pattern;
 } groovebox_t;
 void groovebox_init(groovebox_t*g,uint16_t bpm);
 void groovebox_set_external_clock(groovebox_t*g,uint8_t external);
 void groovebox_set_drum_step(groovebox_t*g,uint8_t drum_track,uint8_t step,uint16_t hits,uint16_t accents);
 void groovebox_set_909_flam_step(groovebox_t*g,uint8_t step,uint16_t flams);
 void groovebox_set_909_flam_width(groovebox_t*g,uint16_t samples);
+void groovebox_request_pattern(groovebox_t*g,uint8_t pattern);
 uint32_t groovebox_feed_midi_realtime(groovebox_t*g,uint8_t status);
 void groovebox_advance_step(groovebox_t*g);
 void groovebox_process(groovebox_t*g,int16_t*left,int16_t*right);
