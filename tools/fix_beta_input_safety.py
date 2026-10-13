@@ -29,12 +29,13 @@ def main() -> int:
         "extern uint16_t refm_felucca_ui_value(uint8_t id);\n",
         "extern uint16_t refm_felucca_ui_value(uint8_t id);\nextern void refm_felucca_panic(void);\n")
 
-    # SEQ, ARP, SCL and SAVE are navigation/context actions. They are now
-    # deferred until release by apply_keyboard_performance.py. Only panic when
-    # the hold was not consumed and the deferred primary action will fire.
+    # SEQ, ARP, SCL and SAVE are navigation/context actions. They are deferred
+    # until release by apply_keyboard_performance.py. SCL/SEL additionally
+    # clears the temporary focus state before its SONG tap action.
     rep(p,
-        "        if (!used) refm_felucca_ui_action(action);\n",
+        "        if (!used) { if (action == 7u) refm_felucca_focus_exit(); refm_felucca_ui_action(action); }\n",
         "        if (!used) {\n"
+        "            if (action == 7u) refm_felucca_focus_exit();\n"
         "            if (action == 3u || action == 4u || action == 7u || action == 8u) refm_felucca_panic();\n"
         "            refm_felucca_ui_action(action);\n"
         "        }\n")
