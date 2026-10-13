@@ -68,6 +68,8 @@ class VirtualFm1Tests(unittest.TestCase):
             self.assertIn(marker, renderer)
         for field in ('get(29)', 'get(30)', 'get(31)', 'get(32)'):
             self.assertIn(field, renderer)
+        self.assertIn('drumFlam:page===3?!!p2:false', renderer)
+        self.assertIn('flamWidth:page===3?p3:0', renderer)
 
     def test_beta3_panel_state_is_shared_by_target_and_wasm(self):
         ui_h = (ROOT / 'firmware/proto/ui240.h').read_text()
@@ -89,20 +91,27 @@ class VirtualFm1Tests(unittest.TestCase):
     def test_beta3_physical_overlay_applies_same_seq_drum_fx_contract(self):
         base = (ROOT / 'tools/apply_rb240_skin.py').read_text()
         beta3 = (ROOT / 'tools/apply_rb240_beta3_layout.py').read_text()
+        flam = (ROOT / 'tools/apply_rb240_beta3_flam.py').read_text()
         overlay = (ROOT / 'tools/patch_fm1_rebirth_ui.py').read_text()
         for marker in ('RB240_PANEL','RB240_LED_BG','RB240_AMBER','RB240_CYAN','refm_knob','refm_button'):
             self.assertIn(marker, base)
-        for marker in ('SEQ EDIT','TR-808 RHYTHM','TR-909 RHYTHM','PCF','DELAY','DIST','COMP','FLAM UI BETA'):
+        for marker in ('SEQ EDIT','TR-808 RHYTHM','TR-909 RHYTHM','PCF','DELAY','DIST','COMP'):
             self.assertIn(marker, beta3)
+        for marker in ('909-flam=real','K3-toggle,K4-width','machine == 3u && p2 != 0u'):
+            self.assertIn(marker, flam)
         self.assertIn('apply_rb240_beta3_layout.py', overlay)
+        self.assertIn('apply_rb240_beta3_flam.py', overlay)
         self.assertIn('rb240-beta3-approved', overlay)
 
-    def test_909_flam_is_not_falsely_persisted_as_audio_feature(self):
+    def test_909_flam_is_real_persisted_engine_state(self):
         renderer = (ROOT / 'web/app/rb240_renderer.js').read_text()
-        beta3 = (ROOT / 'tools/apply_rb240_beta3_layout.py').read_text()
+        groove = (ROOT / 'firmware/proto/groovebox.c').read_text()
+        bank = (ROOT / 'firmware/proto/pattern_bank.h').read_text()
         self.assertIn("'FLAM'", renderer)
-        self.assertIn('FLAM UI BETA', beta3)
-        self.assertNotIn('drum_flam', (ROOT / 'firmware/proto/drum_machine.h').read_text())
+        self.assertIn('drum_909_flams', groove)
+        self.assertIn('flam_pending', groove)
+        self.assertIn('0xABu', groove)
+        self.assertIn('drum_909_flams', bank)
 
     def test_virtual_audio_uses_buffered_worklet_not_deprecated_script_processor(self):
         js = (ROOT / 'web/app/virtual_fm1.js').read_text()
