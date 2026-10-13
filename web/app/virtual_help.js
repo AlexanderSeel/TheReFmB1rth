@@ -114,3 +114,5 @@ export function installVirtualHelp(){
   if(!document.querySelector('#virtual-help-style')){const style=document.createElement('style');style.id='virtual-help-style';style.textContent=HELP_STYLE;document.head.appendChild(style);}
   page.insertAdjacentHTML('beforeend',HELP_HTML);
 }
+
+installVirtualHelp();
