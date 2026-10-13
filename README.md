@@ -79,9 +79,34 @@ The intended basic workflow is now:
 - `SAVE` → project page;
 - `PLAY` → transport immediately.
 
-On **SEQ**, `PRESET` selects one of 16 steps and pressing a musical key writes that note directly into the selected step. `K1` adjusts note, `K2` cycles REST/NOTE/TIE, `K3` cycles Accent/Slide combinations and `K4` changes probability. `EDIT` toggles Accent and `REC` toggles Slide for the selected ACID step.
+### Physical ACID step entry
 
-On **DRUM**, `PRESET` selects the step, `K1` selects the lane and `K2` cycles OFF/HIT/ACCENT. Pressing a physical musical key directly selects/programs/auditions the mapped drum voice at the selected step. On 909, the additional edit action retains real flam state.
+The physical keyboard now has its own deterministic chromatic ReFm mapping. It no longer inherits Felucca's hidden selected-track engine/quantize key map, which could previously turn a ReFm ACID key into a drum note or a silent key.
+
+On **SEQ**:
+
+- `PRESET` → previous/next one of the 16 steps;
+- press a musical keyboard key → write that pitch into the selected step and make it a NOTE step;
+- `OCT-` / `OCT+` → move the stored pitch down/up by one semitone;
+- `K1` → note down/up;
+- `K2` → REST / NOTE / TIE;
+- `K3` → Accent/Slide combinations;
+- `K4` → probability.
+
+The physical LCD now renders the real pattern as an **8×2 note grid**. Populated steps show note names such as `C4`, `F#3`; rest steps show `--`; tie steps show `TIE`. Accent, slide, selected step and playback position have independent visual markers, so a stored note is no longer represented by an anonymous lamp only.
+
+### Physical 808 / 909 programming
+
+On **DRUM**:
+
+- `PRESET` → previous/next step;
+- `OCT-` / `OCT+` → previous/next drum lane;
+- `K1` → previous/next drum lane;
+- `K2` → OFF / HIT / ACCENT for the selected lane and step;
+- physical musical keys → directly select, program and audition their mapped drum voices at the selected step;
+- on 909, `K3` toggles FLAM and `K4` adjusts flam width.
+
+The 16-step drum grid is sourced from the actual selected lane masks, so OFF/HIT/ACCENT and 909 flam are real sequencer state rather than inferred UI state.
 
 Machine/page transitions are panic-guarded so held live notes cannot survive a context switch.
 
@@ -115,6 +140,8 @@ The next hardware pass must verify:
 - routine knob/step changes no longer cause a full-screen flash;
 - live keyboard notes are audible;
 - PLAY starts the seeded Pattern A audibly;
+- physical keyboard writes visible ACID note names into the selected step;
+- OCT-/OCT+ edits ACID pitch and drum lane as documented above;
 - ACID step editing is fast and predictable;
 - 808/909 lane + step editing is fast and predictable;
 - labels correspond to the controls actually used.
