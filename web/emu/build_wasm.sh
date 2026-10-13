@@ -48,6 +48,7 @@ rm -rf "$OUT/app"
 mkdir -p "$OUT/app"
 cp "$ROOT/web/app/"*.html "$ROOT/web/app/"*.js "$ROOT/web/app/"*.css "$OUT/app/"
 python3 "$ROOT/tools/patch_virtual_fm1_performance.py" "$OUT/app/virtual_fm1.js"
+python3 "$ROOT/tools/patch_rb240_virtual_focus.py" "$OUT/app/rb240_renderer.js"
 
 # The combined app is deployed under /app while refm.js/refm.wasm live one level up.
 # Inject the current-runtime download helper into the built copy without forcing the
@@ -84,8 +85,10 @@ grep -q '_refm_wasm_panel_key_event' "$OUT/refm.js"
 grep -q '_refm_wasm_panel_modifier' "$OUT/refm.js"
 grep -q 'BUTTON_MOD' "$OUT/app/virtual_fm1.js"
 grep -q '_refm_wasm_panel_key_event' "$OUT/app/virtual_fm1.js"
+grep -q 'focus=!!v(34)' "$OUT/app/rb240_renderer.js"
+grep -q 'if(s.focus)lamp' "$OUT/app/rb240_renderer.js"
 test -s "$OUT/wasm-channel.json"
 
-echo "WASM groovebox built with full-mipmap Open303-HQ acid core + keyboard-performance virtual FM-1 app: $OUT/app/index.html"
+echo "WASM groovebox built with full-mipmap Open303-HQ acid core + keyboard-performance/focus virtual FM-1 app: $OUT/app/index.html"
 echo "WASM channel: commit=$COMMIT sha256=$WASM_SHA"
 if [ -n "$SAMPLE_SRC" ]; then echo "Bundled audition samples: enabled"; else echo "Bundled audition samples: not present (synth fallback)"; fi
