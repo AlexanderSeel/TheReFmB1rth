@@ -407,6 +407,33 @@ void refm_felucca_ui_action(uint8_t action)
     }
 }
 
+/* Read the exact 16-step pattern state for the machine/lane currently shown
+   on the physical panel. This mirrors the Virtual FM-1 panel window but avoids
+   forcing the 24-bit ACID payload through the older uint16_t ui_value ABI.
+
+   ACID: note | flags<<8 | probability<<16.
+   DRUM: bits 0..1 OFF/HIT/ACCENT, bit 2 = 909 FLAM. */
+uint32_t refm_felucca_pattern_step(uint8_t step)
+{
+    ensure_ready();
+    step &= 15u;
+    if (g_ui.machine < UI240_MACHINE_808) {
+        const seq16_step_t *st = &g_refm.groovebox.acid_seq[g_ui.machine].step[step];
+        return (uint32_t)st->note |
+               ((uint32_t)st->flags << 8) |
+               ((uint32_t)st->probability << 16);
+    } else {
+        unsigned d = (unsigned)g_ui.machine - UI240_MACHINE_808;
+        uint8_t lane = g_ui.selected_lane < DRUM_VOICES ? g_ui.selected_lane : 0u;
+        uint16_t bit = (uint16_t)(1u << lane);
+        uint32_t state = (g_refm.groovebox.drum_accents[d][step] & bit) ? 2u :
+                         (g_refm.groovebox.drum_hits[d][step] & bit) ? 1u : 0u;
+        if (g_ui.machine == UI240_MACHINE_909 && (g_refm.groovebox.drum_909_flams[step] & bit))
+            state |= 4u;
+        return state;
+    }
+}
+
 uint16_t refm_felucca_ui_value(uint8_t id)
 {
     ui240_view_t v;
