@@ -2,10 +2,12 @@
 const CDN='https://cdn.jsdelivr.net/gh/AlexanderSeel/TheReFmB1rth@wasm-channel/';
 const localChannel=new URL('../wasm-channel.json',import.meta.url);
 const localWasm=new URL('../refm.wasm',import.meta.url);
+const repoDev=/\/web\/app\//.test(import.meta.url);
 function remote(name){return new URL(`${name}?v=${Date.now()}`,CDN);}
 
 async function channel(){
-  for(const u of [localChannel,remote('wasm-channel.json')]){
+  const urls=repoDev?[remote('wasm-channel.json')]:[localChannel,remote('wasm-channel.json')];
+  for(const u of urls){
     try{const r=await fetch(u,{cache:'no-store'});if(r.ok)return await r.json();}catch{}
   }
   return null;
@@ -22,11 +24,12 @@ export async function installLatestWasmControl(){
   host.append(btn,meta);
   const info=await channel();
   if(info?.commit)meta.textContent=`WASM ${String(info.commit).slice(0,8)}${info.sha256?' · verified':''}`;
+  else meta.textContent='WASM channel not published yet';
   btn.addEventListener('click',async()=>{
     btn.disabled=true;const old=btn.textContent;btn.textContent='DOWNLOADING…';
     try{
       let url=remote('refm.wasm');
-      try{const r=await fetch(localWasm,{method:'HEAD',cache:'no-store'});if(r.ok)url=localWasm;}catch{}
+      if(!repoDev){try{const r=await fetch(localWasm,{method:'HEAD',cache:'no-store'});if(r.ok)url=localWasm;}catch{}}
       await download(url,`TheReFmB1rth-${info?.commit?String(info.commit).slice(0,8):'latest'}.wasm`);
     }catch(e){meta.textContent=`WASM download failed · ${e.message}`;}
     finally{btn.disabled=false;btn.textContent=old;}
