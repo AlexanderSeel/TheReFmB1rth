@@ -15,7 +15,7 @@ const HELP_HTML=`
           <h3>Learn the instrument here before using the physical FM-1</h3>
           <p>The virtual unit uses the same <code>ui240</code> state, keyboard-performance mappings and contextual actions as the hardware target. The goal is that muscle memory learned here transfers directly to the FM-1.</p>
         </div>
-        <div class="virtualHelpCallout"><strong>Quick start</strong><br>1. SWITCH ON.<br>2. Press PLAY.<br>3. Use ENV/LFO for ACID A/B or ARP for drums.<br>4. Use SEQ for step editing.<br>5. Hold a modifier and use the FM-1 keyboard for fast actions.</div>
+        <div class="virtualHelpCallout"><strong>Quick start</strong><br>1. SWITCH ON.<br>2. Press PLAY.<br>3. Use ENV/LFO for ACID A/B or tap ARP for drums.<br>4. Tap SEQ for step editing.<br>5. Hold a modifier and use the FM-1 keyboard for fast actions. A used hold does not also trigger the button's normal tap action.</div>
       </div>
 
       <div class="virtualHelpGrid">
@@ -24,12 +24,12 @@ const HELP_HTML=`
           <table class="virtualHelpTable"><tbody>
             <tr><td>ENV</td><td>Select ACID A.</td></tr>
             <tr><td>LFO</td><td>Select ACID B. The label is reused as a shortcut; this is not an LFO page.</td></tr>
-            <tr><td>ARP</td><td>Open drums / cycle 808 and 909.</td></tr>
-            <tr><td>SEQ</td><td>Open ACID step editor.</td></tr>
-            <tr><td>GLO</td><td>Open mixer.</td></tr>
-            <tr><td>FX</td><td>Open PCF / Delay / Dist / Comp rack.</td></tr>
-            <tr><td>SEL</td><td>Song / pattern workflow; hold for FOCUS navigation.</td></tr>
-            <tr><td>SAVE</td><td>Project page; hold for direct Pattern A–H selection.</td></tr>
+            <tr><td>ARP</td><td>Tap: open drums / cycle 808 and 909. Hold: drum-entry layer.</td></tr>
+            <tr><td>SEQ</td><td>Tap: open ACID step editor. Hold: direct note-entry layer.</td></tr>
+            <tr><td>GLO</td><td>Tap: open mixer. Hold: mute/solo/machine layer.</td></tr>
+            <tr><td>FX</td><td>Tap: open PCF / Delay / Dist / Comp rack. Hold: direct FX layer.</td></tr>
+            <tr><td>SEL</td><td>Tap: Song / pattern workflow. Hold: FOCUS navigation.</td></tr>
+            <tr><td>SAVE</td><td>Tap: Project page. Hold: direct Pattern A–H selection.</td></tr>
             <tr><td>PLAY</td><td>Start / stop the ReFm sequencer.</td></tr>
             <tr><td>HOME</td><td>Return to the performance home page and escape focused editing.</td></tr>
           </tbody></table>
@@ -44,17 +44,18 @@ const HELP_HTML=`
             <tr><td>SELECT</td><td>BPM normally; contextual navigation while focused.</td></tr>
             <tr><td>OCT− / OCT+</td><td>Machine/context decrement/increment; on PROJECT they LOAD / SAVE.</td></tr>
           </tbody></table>
-          <p>On the virtual panel, drag a knob vertically, use the mouse wheel, or focus it and use arrow keys.</p>
+          <p>On the virtual panel, drag a knob vertically, use the mouse wheel, or focus it and use arrow keys. Turning an encoder while a modifier is held consumes that hold, so the modifier button's normal tap action is not fired on release.</p>
         </section>
 
         <section class="virtualHelpBlock">
           <h4>HOLD / MODIFIER LAYERS</h4>
+          <p><strong>Tap vs hold:</strong> modifier-capable buttons defer their normal action until release. If you use a keyboard key or encoder during the hold, the gesture is consumed as a modifier and the normal tap action is suppressed.</p>
           <table class="virtualHelpTable"><tbody>
             <tr><td>hold SEQ + keys</td><td>Write ACID notes directly into the selected step.</td></tr>
             <tr><td>hold ARP + keys</td><td>Use the keyboard as 808/909 drum pads.</td></tr>
             <tr><td>hold GLO + keys</td><td>Keys 1–4 mute tracks, 5–8 solo tracks, following keys select machines.</td></tr>
             <tr><td>hold FX + keys</td><td>Keys 1–4 jump to PCF, Delay, Dist, Comp. Additional keys trigger performance-safe FX throws.</td></tr>
-            <tr><td>hold SAVE + keys</td><td>Direct Pattern A–H selection.</td></tr>
+            <tr><td>hold SAVE + keys</td><td>Direct Pattern A–H selection. While PLAY is running, the requested pattern switches cleanly on the next 16-step boundary; while stopped it changes immediately.</td></tr>
             <tr><td>hold EDIT + keys</td><td>Context edit layer: accent, slide, tie/rest and drum high/accent behavior.</td></tr>
             <tr><td>hold REC + keys</td><td>Live-write into the running step position.</td></tr>
             <tr><td>hold SEL + keys</td><td>FOCUS/ZOOM: direct logical-panel selection.</td></tr>
@@ -65,7 +66,7 @@ const HELP_HTML=`
           <h4>FOCUS / ZOOM MAP</h4>
           <p>FOCUS is logical zoom rather than pixel magnification. Hold <code>SEL</code>, then use the first eight keyboard positions:</p>
           <div class="virtualHelpKeys"><span class="virtualHelpKey">1 ACID</span><span class="virtualHelpKey">2 STEP</span><span class="virtualHelpKey">3 DRUM</span><span class="virtualHelpKey">4 MIXER</span><span class="virtualHelpKey">5 PCF</span><span class="virtualHelpKey">6 DELAY</span><span class="virtualHelpKey">7 DIST</span><span class="virtualHelpKey">8 COMP</span></div>
-          <p>The cyan <strong>FOCUS</strong> indicator on the RB-240 display shows the active logical area. Use PRESETS / ALGORITHM to move between areas. HOME exits immediately.</p>
+          <p>The RB-240 header shows an eight-position cyan focus map; the active dot is the current logical area. Use PRESETS / ALGORITHM to move between areas. HOME exits immediately.</p>
         </section>
 
         <section class="virtualHelpBlock">
