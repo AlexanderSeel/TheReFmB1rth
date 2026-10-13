@@ -40,8 +40,6 @@ typedef struct {
 
 static inline uint8_t ui240_key_to_drum_lane(uint8_t machine, uint8_t key)
 {
-    /* Keep the two machines intentionally different. 808 puts its characteristic
-       rim/clap/percussion voices first; 909 groups the tom bank directly after SD. */
     static const uint8_t map808[DRUM_VOICES] = {
         DRUM_BD, DRUM_SD, DRUM_RS, DRUM_CP, DRUM_CH, DRUM_OH,
         DRUM_LT, DRUM_MT, DRUM_HT, DRUM_CR, DRUM_RD
@@ -176,9 +174,6 @@ static inline ui240_key_result_t ui240_performance_key(ui240_state_t *ui,
         if (ui->machine < UI240_MACHINE_808) ui240_set_machine(ui, UI240_MACHINE_808);
         r.consumed = 1u;
         if (!press) return r;
-
-        /* Two 11-key banks: LOW then HIGH/ACCENT. On 909 the final five keys
-           become dedicated flam/performance controls. */
         if (key < 22u) {
             high = key >= DRUM_VOICES ? 1u : 0u;
             local_key = (uint8_t)(key % DRUM_VOICES);
@@ -187,9 +182,15 @@ static inline ui240_key_result_t ui240_performance_key(ui240_state_t *ui,
             return r;
         }
         if (ui->machine == UI240_MACHINE_909) {
-            if (key == 22u) ui240_toggle_909_flam(ui, g);
-            else if (key == 23u) groovebox_set_909_flam_width(g, (uint16_t)(g->flam_width_samples - 24u));
-            else if (key == 24u) groovebox_set_909_flam_width(g, (uint16_t)(g->flam_width_samples + 24u));
+            if (key == 22u) {
+                ui240_toggle_909_flam(ui, g);
+            } else if (key == 23u) {
+                uint16_t width = g->flam_width_samples;
+                groovebox_set_909_flam_width(g, width > 24u ? (uint16_t)(width - 24u) : 0u);
+            } else if (key == 24u) {
+                uint32_t width = (uint32_t)g->flam_width_samples + 24u;
+                groovebox_set_909_flam_width(g, (uint16_t)(width > 65535u ? 65535u : width));
+            }
         }
         return r;
     }
@@ -221,8 +222,6 @@ static inline ui240_key_result_t ui240_performance_key(ui240_state_t *ui,
         return r;
     }
 
-    /* Normal ACID live play is deliberately not consumed. The target/WASM
-       wrappers own MIDI note-on/off so release/panic behavior stays identical. */
     return r;
 }
 
