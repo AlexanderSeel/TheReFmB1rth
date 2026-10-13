@@ -8,7 +8,8 @@ const MAX_SUSTAINED=75;
 const MAX_PEAK=82;
 const MIN_USTACK_FREE=4096;
 const MIN_SSTACK_FREE=1024;
-const FIELDS=['magic','halves','last_us','max_us','cpu_q8','late','nested','timer_irqs','ui_frames','ustack_used','ustack_free','sstack_used','sstack_free'];
+const FIELDS_V1=['magic','halves','last_us','max_us','cpu_q8','late','nested','timer_irqs','ui_frames','ustack_used','ustack_free','sstack_used','sstack_free'];
+const FIELDS_V2=[...FIELDS_V1,'refm_blocks','refm_nonzero_blocks','key_edges','key_consumed','live_note_edges','transport_events','transport_playing'];
 
 function r32(a,o){return (a[o]|a[o+1]<<7|a[o+2]<<14|a[o+3]<<21|(a[o+4]&15)<<28)>>>0;}
 function status(text,on=true){const e=document.querySelector('#midiStatus');if(!e)return;e.textContent=text;e.classList.toggle('online',on);}
@@ -36,18 +37,38 @@ function evaluate(snapshot){
   if(snapshot.sstack_free<MIN_SSTACK_FREE)failures.push(`supervisor-stack free ${snapshot.sstack_free} B is below ${MIN_SSTACK_FREE} B gate`);
   return {pass:failures.length===0,half_frames:HALF_FRAMES,deadline_us:Number(deadline.toFixed(3)),halves:snapshot.halves,late:snapshot.late,last_us:snapshot.last_us,max_us:snapshot.max_us,sustained_cpu_pct:Number(sustained.toFixed(3)),last_render_pct:Number(last.toFixed(3)),peak_render_pct:Number(peak.toFixed(3)),stack:{user:{used_bytes:snapshot.ustack_used,free_bytes:snapshot.ustack_free},supervisor:{used_bytes:snapshot.sstack_used,free_bytes:snapshot.sstack_free},limits:{min_user_free_bytes:MIN_USTACK_FREE,min_supervisor_free_bytes:MIN_SSTACK_FREE}},limits:{max_sustained_pct:MAX_SUSTAINED,max_peak_pct:MAX_PEAK},failures};
 }
+function physicalLines(snapshot){
+  if(snapshot.protocol<2)return ['Physical path  diagnostic protocol v1 (upgrade firmware for event/audio-path counters)'];
+  const rendered=snapshot.refm_blocks||0,nonzero=snapshot.refm_nonzero_blocks||0;
+  const renderState=!rendered?'NO RENDER':nonzero?'NON-ZERO AUDIO':'RENDERING SILENCE';
+  return [
+    `ReFm blocks      ${rendered}`,
+    `Non-zero blocks  ${nonzero}  (${renderState})`,
+    `Panel key edges  ${snapshot.key_edges}`,
+    `Consumed edges   ${snapshot.key_consumed}`,
+    `Live note edges  ${snapshot.live_note_edges}`,
+    `Transport events ${snapshot.transport_events}`,
+    `Transport state  ${snapshot.transport_playing?'PLAY':'STOP'}`,
+  ];
+}
 function render(panel,snapshot,report){
   panel.innerHTML='';
   const title=document.createElement('strong');title.textContent=report.pass?'RUNTIME GATE · PASS':'RUNTIME GATE · FAIL';panel.appendChild(title);
-  const pre=document.createElement('pre');pre.className='log';pre.textContent=[`CPU sustained  ${report.sustained_cpu_pct.toFixed(1)}%  (≤ ${MAX_SUSTAINED}%)`,`Render last    ${report.last_render_pct.toFixed(1)}%`,`Render peak    ${report.peak_render_pct.toFixed(1)}%  (≤ ${MAX_PEAK}%)`,`DMA late       ${snapshot.late}  (${snapshot.late===0?'OK':'FAIL'})`,`User stack     ${snapshot.ustack_free} B free  (≥ ${MIN_USTACK_FREE})`,`Supervisor     ${snapshot.sstack_free} B free  (≥ ${MIN_SSTACK_FREE})`,`Audio halves   ${snapshot.halves}`,...(report.failures.length?['',...report.failures.map(x=>`FAIL: ${x}`)]:[])].join('\n');panel.appendChild(pre);
+  const pre=document.createElement('pre');pre.className='log';pre.textContent=[`Protocol        v${snapshot.protocol}`,`CPU sustained  ${report.sustained_cpu_pct.toFixed(1)}%  (≤ ${MAX_SUSTAINED}%)`,`Render last    ${report.last_render_pct.toFixed(1)}%`,`Render peak    ${report.peak_render_pct.toFixed(1)}%  (≤ ${MAX_PEAK}%)`,`DMA late       ${snapshot.late}  (${snapshot.late===0?'OK':'FAIL'})`,`User stack     ${snapshot.ustack_free} B free  (≥ ${MIN_USTACK_FREE})`,`Supervisor     ${snapshot.sstack_free} B free  (≥ ${MIN_SSTACK_FREE})`,`Audio halves   ${snapshot.halves}`,'',...physicalLines(snapshot),...(report.failures.length?['',...report.failures.map(x=>`FAIL: ${x}`)]:[])].join('\n');panel.appendChild(pre);
+  const hint=document.createElement('p');hint.className='muted';hint.textContent=snapshot.protocol<2?'Protocol v1 proves timing/stack only. Protocol v2 also separates panel/transport/render activity from the later DAC/USB output path.':'Hardware silence triage: key/live counters prove input delivery; transport events prove PLAY/STOP; non-zero ReFm blocks prove engine output before DAC/USB scaling.';panel.appendChild(hint);
   const dl=document.createElement('button');dl.className='secondary';dl.textContent='DOWNLOAD DIAGNOSTIC JSON';dl.addEventListener('click',()=>{const blob=new Blob([JSON.stringify(snapshot,null,2)+'\n'],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`fm1-runtime-${new Date().toISOString().replace(/[:.]/g,'-')}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);});panel.appendChild(dl);
+}
+function parse(payload){
+  const version=payload[0];
+  const fields=version===1?FIELDS_V1:version===2?FIELDS_V2:null;
+  if(!fields)throw new Error(`FM-1 returned unsupported diagnostic protocol v${version}.`);
+  if(payload.length!==1+fields.length*5)throw new Error(`Unexpected diagnostic payload length ${payload.length} for protocol v${version}.`);
+  const snapshot={protocol:version};fields.forEach((name,i)=>snapshot[name]=r32(payload,1+i*5));
+  return snapshot;
 }
 async function capture(panel){
   const link=await pair();status('CAPTURING RUNTIME…');const payload=await request(link);
-  if(payload[0]!==1)throw new Error('FM-1 returned an unsupported diagnostic protocol version.');
-  if(payload.length!==1+FIELDS.length*5)throw new Error(`Unexpected diagnostic payload length ${payload.length}.`);
-  const snapshot={};FIELDS.forEach((name,i)=>snapshot[name]=r32(payload,1+i*5));
-  const report=evaluate(snapshot);render(panel,snapshot,report);status(report.pass?'RUNTIME PASS':'RUNTIME FAIL',report.pass);
+  const snapshot=parse(payload);const report=evaluate(snapshot);render(panel,snapshot,report);status(report.pass?'RUNTIME PASS':'RUNTIME FAIL',report.pass);
   window.dispatchEvent(new CustomEvent('refm-runtime-diagnostic',{detail:{captured_at:new Date().toISOString(),snapshot,report}}));
 }
 function install(){
