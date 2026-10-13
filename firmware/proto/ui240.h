@@ -75,6 +75,10 @@ typedef struct {
     uint16_t drum_accents;
     int8_t acid_tune;
     uint8_t acid_accent;
+    uint8_t acid_cutoff_pct;
+    uint8_t acid_resonance_pct;
+    uint8_t acid_env_pct;
+    uint8_t acid_decay_pct;
     uint8_t song_loop;
     uint8_t song_length;
 } ui240_view_t;
