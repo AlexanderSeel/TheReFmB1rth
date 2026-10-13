@@ -51,7 +51,8 @@ def main() -> int:
         "    uint16_t page = refm_felucca_ui_value(0u);\n"
         "#define RB_HIT(lbl) ((pressed & (1u << panel.btn[(lbl)])) != 0u)\n",
         "extern uint16_t refm_felucca_ui_value(uint8_t id);\n"
-        "extern void refm_felucca_ui_modifier(uint8_t modifier);\n\n"
+        "extern void refm_felucca_ui_modifier(uint8_t modifier);\n"
+        "extern void refm_felucca_focus_exit(void);\n\n"
         "static uint32_t refm_mod_mask;\n"
         "static uint8_t refm_mod_action;\n"
         "static uint8_t refm_mod_used;\n\n"
@@ -114,7 +115,7 @@ def main() -> int:
         "        uint8_t used = refm_mod_used;\n"
         "        refm_mod_mask = 0u; refm_mod_action = 0u; refm_mod_used = 0u;\n"
         "        refm_felucca_ui_modifier(0u);\n"
-        "        if (!used) refm_felucca_ui_action(action);\n"
+        "        if (!used) { if (action == 7u) refm_felucca_focus_exit(); refm_felucca_ui_action(action); }\n"
         "    }\n",
     )
     replace_once(
@@ -142,6 +143,7 @@ def main() -> int:
         "layers=seq,drum,mixer,fx,pattern,edit,live,focus\n"
         "focus=hold-scl\n"
         "tap-hold=deferred-primary-until-release\n"
+        "focus-tap=temporary-focus-cleared-before-song\n"
         "modifier-consume=keyboard-or-encoder\n"
         "parity=ui240-performance\n"
     )
