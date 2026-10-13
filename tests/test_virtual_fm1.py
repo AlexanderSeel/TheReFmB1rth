@@ -76,6 +76,7 @@ class VirtualFm1Tests(unittest.TestCase):
         wasm = (ROOT / 'web/emu/refm_wasm.c').read_text()
         for marker in ('UI240_FX_PCF','UI240_FX_DELAY','UI240_FX_DIST','UI240_FX_COMP','fx_section'):
             self.assertIn(marker, ui_h)
+        for marker in ('UI240_FX_PCF','UI240_FX_DELAY','UI240_FX_DIST','UI240_FX_SECTION_COUNT','fx_section'):
             self.assertIn(marker, ui_c)
         self.assertIn('ui240_cycle_fx_section(&g_ui, d)', target)
         self.assertIn('ui240_cycle_fx_section(&panel_ui, d)', wasm)
@@ -99,7 +100,6 @@ class VirtualFm1Tests(unittest.TestCase):
     def test_909_flam_is_not_falsely_persisted_as_audio_feature(self):
         renderer = (ROOT / 'web/app/rb240_renderer.js').read_text()
         beta3 = (ROOT / 'tools/apply_rb240_beta3_layout.py').read_text()
-        # UI labels the control as beta/visual until a real sequencer flam state exists.
         self.assertIn("'FLAM'", renderer)
         self.assertIn('FLAM UI BETA', beta3)
         self.assertNotIn('drum_flam', (ROOT / 'firmware/proto/drum_machine.h').read_text())
