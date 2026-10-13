@@ -45,6 +45,25 @@ rm -rf "$OUT/app"
 mkdir -p "$OUT/app"
 cp "$ROOT/web/app/"*.html "$ROOT/web/app/"*.js "$ROOT/web/app/"*.css "$OUT/app/"
 
+# The combined app is deployed under /app while refm.js/refm.wasm live one level up.
+# Inject the current-runtime download helper into the built copy without forcing the
+# source app to depend on a generated build directory.
+python3 - "$OUT/app/index.html" <<'PY'
+from pathlib import Path
+import sys
+p=Path(sys.argv[1]); s=p.read_text()
+needle='</body>'
+script='  <script type="module" src="./latest_wasm.js"></script>\n'
+if script.strip() not in s:
+    if needle not in s: raise SystemExit('combined app body anchor missing')
+    s=s.replace(needle,script+needle,1)
+p.write_text(s)
+PY
+
+WASM_SHA=$(sha256sum "$OUT/refm.wasm" | awk '{print $1}')
+COMMIT=${GITHUB_SHA:-local}
+printf '{\n  "commit": "%s",\n  "sha256": "%s",\n  "file": "refm.wasm",\n  "app": "app/index.html"\n}\n' "$COMMIT" "$WASM_SHA" > "$OUT/wasm-channel.json"
+
 grep -q 'rebirth_skin.css' "$OUT/index.html"
 grep -q 'installRebirthSkin' "$OUT/index.html"
 grep -q 'installSampleControls' "$OUT/index.html"
@@ -55,7 +74,10 @@ grep -q 'REFM_ACID_WT_SIZE 2048u' "$OUT/acid303_hq_wavetable.h"
 grep -q 'Browser-only high-quality TB-303 voice' "$ROOT/web/emu/acid303_hq.c"
 grep -q 'data-tab="virtual"' "$OUT/app/index.html"
 grep -q 'virtual_fm1.js' "$OUT/app/index.html"
+grep -q 'latest_wasm.js' "$OUT/app/index.html"
 grep -q '_refm_wasm_panel_value' "$OUT/refm.js"
+test -s "$OUT/wasm-channel.json"
 
 echo "WASM groovebox built with full-mipmap Open303-HQ acid core + combined installer/editor/virtual FM-1 app: $OUT/app/index.html"
+echo "WASM channel: commit=$COMMIT sha256=$WASM_SHA"
 if [ -n "$SAMPLE_SRC" ]; then echo "Bundled audition samples: enabled"; else echo "Bundled audition samples: not present (synth fallback)"; fi
