@@ -33,9 +33,20 @@ jobs:
           test -s .upstream/felucca/.refm-overlay
           test -s .upstream/felucca/.refm-ui-overlay
           test -s .upstream/felucca/.refm-runtime-diag
+          test -s .upstream/felucca/.refm-hardware-rework
           grep -q 'no-legacy-graph-strip' .upstream/felucca/.refm-ui-overlay
           grep -q 'protocol=2' .upstream/felucca/.refm-runtime-diag
-          grep -q 'refm_felucca_audio_block(out, n);' .upstream/felucca/firmware/src/audio.c
+          grep -q 'keyboard=audio-isr-direct-note-edges' .upstream/felucca/.refm-hardware-rework
+          grep -q 'master=felucca-physical-pot-restored' .upstream/felucca/.refm-hardware-rework
+          grep -q 'lcd=dirty-region-no-page-rebuild-on-knob' .upstream/felucca/.refm-hardware-rework
+          grep -q 'refm_hw_keyboard_scan();' .upstream/felucca/firmware/src/audio.c
+          grep -q 'REFM_HW_HEADROOM_Q15 16384' .upstream/felucca/firmware/src/audio.c
+          grep -q 'song.master_q12' .upstream/felucca/firmware/src/audio.c
+          grep -q 'refm_hw_output_gain(out, n);' .upstream/felucca/firmware/src/audio.c
+          grep -q 'struct rb5_cache' .upstream/felucca/firmware/src/ui_draw.c
+          grep -q 'force || p0 != rb5.p0' .upstream/felucca/firmware/src/ui_draw.c
+          grep -q 'refm_felucca_pattern_step((uint8_t)i)' .upstream/felucca/firmware/src/ui_draw.c
+          grep -q 'cycle_machine_context' .upstream/felucca/firmware/refm/integration/refm_felucca_bridge.c
           grep -q 'refm_nonzero_blocks' .upstream/felucca/firmware/src/audio.c
           grep -q 'refm_felucca_diag_value' .upstream/felucca/firmware/refm/integration/refm_felucca_bridge.c
           grep -q 'REFM_MIRROR_MIDI(pkt);' .upstream/felucca/firmware/src/usb.c
@@ -45,6 +56,7 @@ jobs:
           grep -q 'refm_backup_handle(cmd, a, na)' .upstream/felucca/firmware/src/editor.c
           grep -q '#define ED_REFM_PROJECT 90u' .upstream/felucca/firmware/refm/integration/refm_editor_backup.h
           ! grep -q 'Compact dual-bassline visual language' .upstream/felucca/firmware/src/ui_graph.c
+          ! grep -q 'PRESET=PAT  ALGO=TRACK  SELECT=BPM' .upstream/felucca/firmware/src/ui_draw.c
           grep -q '\*refm_objs' .upstream/felucca/tools/build.py
       - name: Compile and link copied ReFmB1rth target sources
         run: |
