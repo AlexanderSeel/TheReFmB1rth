@@ -91,8 +91,9 @@ class VirtualFm1Tests(unittest.TestCase):
         for marker in ('ACID A','ACID B','808','909','16-STEP BUS','MIXER + FX','READY','elapsed<1560'):
             self.assertIn(marker, boot)
         self.assertIn('refm_boot_tick', patch)
+        self.assertIn('refm_boot_t0 = fm1_ms;', patch)
         self.assertIn('fm1_ms - refm_boot_t0 < 1560u', patch)
-        self.assertNotIn('fm1_delay_ms(400)', patch)
+        self.assertIn('refm_boot_base();', patch)
         self.assertIn('apply_refm_boot_splash.py', overlay)
         self.assertIn('refm-boot-splash', overlay)
 
