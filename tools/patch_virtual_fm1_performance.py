@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
-"""Patch the built virtual FM-1 panel to use the shared performance ABI."""
+"""Compatibility patch for older Virtual FM-1 source snapshots.
+
+The canonical web/app/virtual_fm1.js now contains the shared performance ABI,
+tap/hold arbitration and SEL/FOCUS cleanup directly. Keep this tool idempotent
+because older retained build inputs may still need the previous transformation.
+"""
 from __future__ import annotations
 import sys
 from pathlib import Path
@@ -15,6 +20,11 @@ def rep(text: str, old: str, new: str) -> str:
 def main() -> int:
     path = Path(sys.argv[1])
     s = path.read_text()
+    # Current source already owns the interaction behavior. Do not rewrite it.
+    if "const BUTTON_MOD=" in s and "function focusExit()" in s and "name==='SEL'&&!used" in s:
+        print("virtual FM-1 performance behavior already canonical; compatibility patch skipped")
+        return 0
+
     s = rep(
         s,
         "const ACTION={HOME:0,ENV:1,LFO:2,SEQ:3,ARP:4,GLO:5,FX:6,SEL:7,SAVE:8,PLAY:9,EDIT:10,REC:11};\n",
@@ -45,7 +55,7 @@ def main() -> int:
         "window.addEventListener('blur',()=>{for(const k of held.values())key(k,0);held.clear();modifier(MOD.NONE);heldModifierButton=null;modifierUsed=false;});",
     )
     path.write_text(s)
-    print("virtual FM-1 tap/hold keyboard-modifier/focus parity patch applied")
+    print("legacy virtual FM-1 source upgraded to canonical performance behavior")
     return 0
 
 
