@@ -380,6 +380,10 @@ uint16_t refm_felucca_ui_value(uint8_t id) {
     case 26: return v.acid_accent;
     case 27: return v.song_loop;
     case 28: return v.song_length;
+    case 29: return v.acid_cutoff_pct;
+    case 30: return v.acid_resonance_pct;
+    case 31: return v.acid_env_pct;
+    case 32: return v.acid_decay_pct;
     default: return 0u;
     }
 }
