@@ -13,6 +13,7 @@ int main(void)
     ui240_init(&ui);
     assert(ui.page == UI240_HOME);
     assert(ui.machine == UI240_MACHINE_ACID1);
+    assert(ui.fx_section == UI240_FX_PCF);
 
     ui240_set_page(&ui, UI240_ACID_MAIN);
     ui240_set_machine(&ui, UI240_MACHINE_ACID2);
@@ -20,8 +21,16 @@ int main(void)
     assert(ui.machine == UI240_MACHINE_ACID2);
 
     g.acid[1].cutoff = 10000u;
+    g.acid[1].resonance = 9000u;
+    g.acid[1].env_mod = 8000u;
+    g.acid[1].decay = 7000u;
     ui240_edit_acid_main(&ui, &g, 0u, 2);
     assert(g.acid[1].cutoff > 10000u);
+    ui240_snapshot(&ui, &g, &v);
+    assert(v.acid_cutoff_pct > 0u);
+    assert(v.acid_resonance_pct > 0u);
+    assert(v.acid_env_pct > 0u);
+    assert(v.acid_decay_pct > 0u);
 
     ui.selected_step = 5u;
     ui240_set_acid_step_type(&ui, &g, UI240_STEP_NOTE);
@@ -35,7 +44,7 @@ int main(void)
     assert(v.slide == 1u);
 
     ui240_edit_acid_step(&ui, &g, 0u, 1);
-    assert(g.acid_seq[1].step[5].note == 24u); /* empty step enters playable range */
+    assert(g.acid_seq[1].step[5].note == 24u);
     ui240_edit_acid_step(&ui, &g, 0u, 1);
     assert(g.acid_seq[1].step[5].note == 25u);
     ui240_edit_acid_step(&ui, &g, 3u, -1);
@@ -53,9 +62,11 @@ int main(void)
     ui240_edit_drum(&ui, &g, 1u, 1);
     ui240_snapshot(&ui, &g, &v);
     assert(v.drum_state == 1u);
+    assert(v.drum_hits & (1u << DRUM_BD));
     ui240_edit_drum(&ui, &g, 1u, 1);
     ui240_snapshot(&ui, &g, &v);
     assert(v.drum_state == 2u);
+    assert(v.drum_accents & (1u << DRUM_BD));
 
     ui240_set_page(&ui, UI240_MIXER);
     {
@@ -67,10 +78,33 @@ int main(void)
     }
 
     ui240_set_page(&ui, UI240_FX);
+    ui240_snapshot(&ui, &g, &v);
+    assert(v.fx_section == UI240_FX_PCF);
+    {
+        int16_t before = g.mixer.filter_cutoff;
+        ui240_edit_fx(&ui, &g, 0u, 1);
+        assert(g.mixer.filter_cutoff > before);
+    }
+    ui240_cycle_fx_section(&ui, 1);
+    assert(ui.fx_section == UI240_FX_DELAY);
+    {
+        int16_t before = g.mixer.delay_feedback;
+        ui240_edit_fx(&ui, &g, 2u, 1);
+        assert(g.mixer.delay_feedback > before);
+    }
+    ui240_cycle_fx_section(&ui, 1);
+    assert(ui.fx_section == UI240_FX_DIST);
     {
         int16_t before = g.mixer.drive;
         ui240_edit_fx(&ui, &g, 0u, 1);
         assert(g.mixer.drive > before);
+    }
+    ui240_cycle_fx_section(&ui, 1);
+    assert(ui.fx_section == UI240_FX_COMP);
+    {
+        int16_t before = g.mixer.compressor_threshold;
+        ui240_edit_fx(&ui, &g, 0u, 1);
+        assert(g.mixer.compressor_threshold < before);
     }
 
     ui240_set_page(&ui, UI240_PROJECT);
