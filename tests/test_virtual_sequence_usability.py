@@ -74,18 +74,21 @@ class VirtualSequenceUsabilityTests(unittest.TestCase):
         self.assertIn("g.setTransform(sx,0,0,sy,0,0)", boot)
         self.assertIn("four times as many pixels", boot)
 
-    def test_physical_overlay_applies_rebirth_down_up_after_hardware_rework(self):
+    def test_physical_overlay_keeps_real_keyboard_while_virtual_keeps_rebirth_register(self):
         stack = (ROOT / "tools" / "patch_fm1_rebirth_ui.py").read_text(encoding="utf-8")
         patch = (ROOT / "tools" / "apply_rebirth303_pitch_model.py").read_text(encoding="utf-8")
         self.assertLess(stack.index("apply_hardware_rework.py"), stack.index("apply_rebirth303_pitch_model.py"))
-        self.assertIn("void refm_felucca_step_octave(int8_t direction)", patch)
-        self.assertIn("SEQ16_DOWN | SEQ16_UP", patch)
-        self.assertIn("48u && st->note < 60u", patch)
-        self.assertIn("st->note > 72u && st->note <= 84u", patch)
-        self.assertIn("refm_felucca_step_octave(-1)", patch)
-        self.assertIn("refm_felucca_step_octave(1)", patch)
-        self.assertIn("ReBirth DOWN", patch)
-        self.assertIn("ReBirth UP", patch)
+        self.assertIn("hardware has a real 27-key chromatic keyboard", patch)
+        self.assertIn("musical keys: enter exactly the pitch", patch)
+        self.assertIn("song.octave > -3", patch)
+        self.assertIn("song.octave < 3", patch)
+        self.assertIn("keyboard OCT-", patch)
+        self.assertIn("keyboard OCT+", patch)
+        self.assertIn("hardware-step-entry=exact-midi-note", patch)
+        self.assertIn("virtual-step-keyboard=rebirth-c-to-c-down-normal-up", patch)
+        self.assertNotIn("void refm_felucca_step_octave(int8_t direction)", patch)
+        self.assertNotIn("refm_felucca_step_octave(-1)", patch)
+        self.assertNotIn("refm_felucca_step_octave(1)", patch)
 
     def test_compatibility_entry_preserves_boot_then_v2_chain(self):
         entry = (ROOT / "web/app/rb240_renderer.js").read_text(encoding="utf-8")

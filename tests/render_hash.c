@@ -3,11 +3,11 @@
 #include <stdio.h>
 #include "../firmware/proto/groovebox.h"
 
-/* Updated after aligning the acid core more closely with Open303: 4x
-   oscillator/filter oversampling, corrected analog-conditioning high-pass
-   recurrences and neutral reference defaults. Pitch remains independently
-   guarded by the end-to-end C2/C3/C4 rendered-frequency tests. */
-#define EXPECTED_RENDER_HASH 0x437f9fce018e97b3ull
+/* beta.7 calibration fingerprint. The intentional change is the 6 dB source
+   headroom in the compact 303 wavetable bank: pitch, measured cutoff/Env Mod,
+   resonance, accent timing and slide laws remain independently guarded by
+   behavioral tests. This hash must only move after those tests pass. */
+#define EXPECTED_RENDER_HASH 0x828246b14755ca83ull
 
 static uint64_t fnv1a_u16(uint64_t h, uint16_t v) {
     h ^= (uint8_t)v; h *= 1099511628211ull;
