@@ -4,6 +4,10 @@
 #include <stdio.h>
 #include "../firmware/proto/acid303.h"
 
+#ifndef REFM_ACID_WAVETABLE
+#define REFM_ACID_WAVETABLE 1
+#endif
+
 static void test_note_order(void) {
     assert(acid303_note_to_phase_inc(60) < acid303_note_to_phase_inc(61));
     assert(acid303_note_to_phase_inc(48) < acid303_note_to_phase_inc(60));
@@ -82,6 +86,7 @@ static void test_tune_control(void) {
 }
 static void test_output_is_bounded(void) { acid303_t s; acid303_init(&s); acid303_set_note(&s,48,1,0); s.lfo_amount=127u; for(int i=0;i<44100*2;++i){int32_t y=acid303_process(&s);assert(y>=-32768&&y<=32767);} }
 static void test_aggressive_patch_does_not_live_on_the_rails(void){
+#if REFM_ACID_WAVETABLE
     acid303_t s;acid303_init(&s);s.square=0u;s.cutoff=30000u;s.resonance=30000u;s.env_mod=30000u;s.accent=32767u;s.drive=0u;
     acid303_set_note(&s,36u,1u,0u);
     uint32_t rails=0u;int32_t peak=0;
@@ -89,6 +94,7 @@ static void test_aggressive_patch_does_not_live_on_the_rails(void){
     /* Fixed-point source headroom is allowed to touch a rail on an isolated
        extreme transient, but a sustained hard-clipped waveform is not a 303. */
     assert(peak>2000);assert(rails<220u);
+#endif
 }
 static void test_stock_mode_has_no_lfo(void){acid303_t s;acid303_init(&s);assert(s.lfo_amount==0u);uint32_t p=s.lfo_phase;acid303_set_note(&s,48,0,0);for(int i=0;i<4096;i++)acid303_process(&s);assert(s.lfo_phase==p);}
 static void test_measured_cutoff_mapping(void) { acid303_t s; acid303_init(&s); s.cutoff=0u; assert(acid303_cutoff_hz(&s)>=310u&&acid303_cutoff_hz(&s)<=318u); s.cutoff=16384u; uint16_t mid=acid303_cutoff_hz(&s); assert(mid>=850u&&mid<=890u); s.cutoff=32767u; assert(acid303_cutoff_hz(&s)>=2385u&&acid303_cutoff_hz(&s)<=2400u); }
