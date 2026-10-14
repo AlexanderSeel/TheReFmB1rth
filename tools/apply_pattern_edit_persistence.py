@@ -39,17 +39,18 @@ def main() -> int:
 
     bridge = root / "firmware" / "refm" / "integration" / "refm_felucca_bridge.c"
 
+    # Anchor immediately after the shared performance editor call. Later target
+    # hardening may expand the consumed-return path, but this call remains the
+    # single mutation boundary for keyboard STEP/DRUM programming.
     replace_once(
         bridge,
-        "    if (r.consumed) return;\n",
-        "    if (r.consumed) {\n"
-        "        if (on && (g_ui.page == UI240_ACID_STEP || g_ui.page == UI240_DRUM ||\n"
-        "                   g_modifier == UI240_MOD_SEQ || g_modifier == UI240_MOD_DRUM ||\n"
-        "                   g_modifier == UI240_MOD_EDIT || g_modifier == UI240_MOD_LIVE))\n"
-        "            groovebox_pattern_store(&g_refm.groovebox.patterns, &g_refm.groovebox,\n"
-        "                                    g_refm.groovebox.current_pattern);\n"
-        "        return;\n"
-        "    }\n",
+        "    r = ui240_performance_key(&g_ui, &g_refm.groovebox, g_modifier, key, note, on);\n",
+        "    r = ui240_performance_key(&g_ui, &g_refm.groovebox, g_modifier, key, note, on);\n"
+        "    if (on && (g_ui.page == UI240_ACID_STEP || g_ui.page == UI240_DRUM ||\n"
+        "               g_modifier == UI240_MOD_SEQ || g_modifier == UI240_MOD_DRUM ||\n"
+        "               g_modifier == UI240_MOD_EDIT || g_modifier == UI240_MOD_LIVE))\n"
+        "        groovebox_pattern_store(&g_refm.groovebox.patterns, &g_refm.groovebox,\n"
+        "                                g_refm.groovebox.current_pattern);\n",
     )
 
     replace_once(
