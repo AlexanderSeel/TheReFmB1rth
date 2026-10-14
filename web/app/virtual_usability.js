@@ -66,6 +66,7 @@ function applyDisplayDensity(canvas,button,badge){
   if(canvas.width!==px)canvas.width=px;
   if(canvas.height!==px)canvas.height=px;
   canvas.dataset.renderPixels=String(px);
+  canvas.style.imageRendering=display2x?'auto':'pixelated';
   canvas.setAttribute('aria-label',`FM-1 ${px} by ${px} high-density in-panel display`);
   button.classList.toggle('active',display2x);
   button.textContent=display2x?'DISPLAY 1×':'DISPLAY 2×';
