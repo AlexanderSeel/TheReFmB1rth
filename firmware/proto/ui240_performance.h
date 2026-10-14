@@ -6,6 +6,9 @@
 #include "ui240.h"
 #include "groovebox_pattern.h"
 
+#define UI240_303_NOTE_MIN 24u
+#define UI240_303_NOTE_MAX 60u
+
 typedef enum {
     UI240_MOD_NONE = 0,
     UI240_MOD_SEQ,
@@ -208,7 +211,9 @@ static inline ui240_key_result_t ui240_performance_key(ui240_state_t *ui,
         seq16_step_t *st;
         uint8_t step;
         r.consumed = 1u;
-        if (!press || note > 127u) return r;
+        if (!press) return r;
+        if (note < UI240_303_NOTE_MIN) note = UI240_303_NOTE_MIN;
+        if (note > UI240_303_NOTE_MAX) note = UI240_303_NOTE_MAX;
         step = modifier == UI240_MOD_LIVE && g->transport.playing ? (uint8_t)(g->step & 15u) : (uint8_t)(ui->selected_step & 15u);
         ui->selected_step = step;
         st = &g->acid_seq[ui->machine].step[step];
