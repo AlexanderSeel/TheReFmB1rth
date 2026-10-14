@@ -32,12 +32,19 @@ class VirtualSequenceUsabilityTests(unittest.TestCase):
         self.assertIn("moveWrapped(s.selectedStep,target,16,'PRESETS')", s)
         self.assertIn("moveWrapped(s.lane,target,11,'KNOB1')", s)
 
-    def test_true_two_x_display_is_480_square(self):
-        s = (ROOT / "web/app/virtual_usability.js").read_text(encoding="utf-8")
-        self.assertIn("zoomCanvas.width=480", s)
-        self.assertIn("zoomCanvas.height=480", s)
-        self.assertIn("g.drawImage(src,0,0,480,480)", s)
-        self.assertIn("DISPLAY 2×", s)
+    def test_true_two_x_display_rerenders_primary_panel_canvas_at_480_square(self):
+        usability = (ROOT / "web/app/virtual_usability.js").read_text(encoding="utf-8")
+        boot = (ROOT / "web/app/rb240_boot_renderer.js").read_text(encoding="utf-8")
+        self.assertIn("const px=display2x?480:240", usability)
+        self.assertIn("if(canvas.width!==px)canvas.width=px", usability)
+        self.assertIn("if(canvas.height!==px)canvas.height=px", usability)
+        self.assertIn("window.refmVirtual?.draw?.()", usability)
+        self.assertIn("LCD 480 × 480 · HIGH DENSITY", usability)
+        self.assertNotIn("drawImage(src,0,0,480,480)", usability)
+        self.assertNotIn("zoomCanvas", usability)
+        self.assertIn("const sx=w/240,sy=h/240", boot)
+        self.assertIn("g.setTransform(sx,0,0,sy,0,0)", boot)
+        self.assertIn("four times as many pixels", boot)
 
     def test_compatibility_entry_preserves_boot_then_v2_chain(self):
         entry = (ROOT / "web/app/rb240_renderer.js").read_text(encoding="utf-8")
