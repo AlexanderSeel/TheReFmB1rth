@@ -112,8 +112,28 @@ static inline void ui240_set_drum_hit(groovebox_t *g, ui240_state_t *ui,
     uint8_t lane = ui240_key_to_drum_lane(ui->machine, key);
     uint8_t step = live && g->transport.playing ? (uint8_t)(g->step & 15u) : (uint8_t)(ui->selected_step & 15u);
     uint16_t bit = (uint16_t)(1u << lane);
+    uint8_t was_hit = (g->drum_hits[d][step] & bit) ? 1u : 0u;
+    uint8_t was_accent = (g->drum_accents[d][step] & bit) ? 1u : 0u;
+    uint8_t turn_off = 0u;
+
     ui->selected_lane = lane;
     ui->selected_step = step;
+
+    /* Normal STEP programming is toggle-based so the same physical key that
+       creates a hit can remove it again. The second 11-key bank toggles an
+       accented hit. LIVE recording keeps the old write-only behaviour so a
+       repeated performance note cannot accidentally erase an earlier step. */
+    if (!live)
+        turn_off = high ? (uint8_t)(was_hit && was_accent) : (uint8_t)(was_hit && !was_accent);
+
+    if (turn_off) {
+        g->drum_hits[d][step] &= (uint16_t)~bit;
+        g->drum_accents[d][step] &= (uint16_t)~bit;
+        if (ui->machine == UI240_MACHINE_909)
+            g->drum_909_flams[step] &= (uint16_t)~bit;
+        return;
+    }
+
     g->drum_hits[d][step] |= bit;
     if (high) g->drum_accents[d][step] |= bit;
     else g->drum_accents[d][step] &= (uint16_t)~bit;
