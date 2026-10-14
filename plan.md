@@ -17,71 +17,91 @@ No Roland/Propellerhead/ReBirth artwork, logos, proprietary source, ROMs, or non
 
 ---
 
-# Current checkpoint — post-beta.3 hardware usability work, 2026-10-13
+# Current checkpoint — beta.4 failed physical validation, 2026-10-14
 
-`v0.1.0-beta.3` remains the current published hardware-test baseline. **Do not overwrite or repoint beta.3.** Current `main` is unreleased post-beta.3 work.
+`v0.1.0-beta.4` is the latest published hardware-test prerelease, but **it failed physical usability validation and must not be treated as a stable baseline**. Do not overwrite or repoint beta.4. Current `main` is an unreleased hardware-stabilization branch state on the normal `main` branch.
 
-The first hardware validation proved install/boot and basic LCD rendering, but also exposed real blockers: stray renderer content, visible full-screen refreshes, wasted footer space, confusing controls, unusable sequence editing and no proven audible/live-play path. Those findings remain the acceptance criteria for the next physical test.
+The beta.4 device test established:
 
-## Implemented corrective work on `main`
+- [x] update/install and boot still work;
+- [x] the firmware can navigate to ACID, STEP, DRUM, MIX, FX and SONG pages;
+- [ ] button/encoder behavior is reliable — **FAILED on beta.4**;
+- [ ] musical keyboard reaches ReFm — **FAILED on beta.4**;
+- [ ] PLAY produces acceptable audio — **FAILED on beta.4: loud/annoying output**;
+- [ ] physical MASTER affects ReFm output — **FAILED on beta.4**;
+- [ ] knob changes redraw cleanly — **FAILED on beta.4: visible clear/rebuild/flicker**;
+- [ ] all 240×240 layouts are readable — **FAILED on beta.4: crowded/clipped/overlapping content**.
 
-- [x] Virtual FM-1 reads the real 16 ACID steps and real 16 drum steps from the groovebox state.
-- [x] Virtual ACID editing is direct/TB-303-style: step → note/rest/tie → accent/slide.
-- [x] Virtual drum editing is direct: lane → step → OFF/HIT/ACCENT, with real 909 flam.
-- [x] Virtual display has a true pixel-perfect **480×480 DISPLAY 2×** mode.
-- [x] Added original TheReFmB1rth startup animation: ACID A → ACID B → 808 → 909 → 16-step bus → READY.
-- [x] Physical startup phases run after audio/input/USB/timer initialization and remove the previous additional blocking Felucca splash delay.
-- [x] Removed the legacy Felucca graph-strip injection that caused the stray horizontal pattern line.
-- [x] Removed the persistent 28 px physical help footer.
-- [x] Physical renderer now performs a full 240×240 clear only on page/machine transitions, not on routine same-page parameter changes.
-- [x] Physical primary buttons are now **immediate page-first controls**; deferred tap-vs-hold modifier ownership is no longer used on hardware.
-- [x] Advanced modifier/chord shortcuts remain available only as optional Virtual performance controls.
-- [x] Physical SEQ page accepts direct musical-key note entry into the selected ACID step.
-- [x] Physical DRUM page accepts direct mapped-key drum programming/audition at the selected step.
-- [x] Physical renderer now reads the **exact 16-step pattern window** from the same groovebox state as Virtual:
-  - ACID REST / NOTE / TIE / ACCENT / SLIDE;
-  - DRUM OFF / HIT / ACCENT;
-  - 909 flam;
-  - independent selected-step and playhead indicators.
-- [x] Runtime diagnostic protocol v2 distinguishes panel input, transport, ReFm rendering and non-zero engine output before the later DAC/UAC path.
-- [x] Regression tests cover startup renderer, clean graph ownership, physical LCD cleanup, simple hardware controls, exact physical pattern readback and diagnostics v2.
-- [ ] Revalidate all of this on real FM-1 hardware.
+These are release blockers. No beta.5 should be requested until the corrective target build is green and a deliberate hardware retest is wanted.
+
+## Root causes confirmed after beta.4
+
+The device failures were not independent cosmetic bugs:
+
+1. The ReFm target replaced Felucca's normal `mix_block()` audio path.
+2. Felucca's physical musical-key scan normally runs from that bypassed control/audio path, so the ReFm engine never received the physical keyboard on beta.4.
+3. Felucca's physical MASTER scaling also lived in the bypassed mix path, so the MASTER control could not attenuate ReFm audio on beta.4.
+4. The beta.4 LCD patch stopped one explicit full-screen clear but still rebuilt most visible regions after ordinary parameter changes, which remained visibly flickery on the real LCD.
+5. Several inherited desktop-like/legacy layout passes were too dense for the physical 240×240 panel.
+
+## Post-beta.4 hardware stabilization implemented on `main`
+
+- [x] Musical keys are scanned directly from `fm1_in.notes` in the real audio/control ISR.
+- [x] Per-key note ownership is retained so key-up sends the same note even after octave/page changes.
+- [x] Keyboard note mapping is independent from Felucca's old selected-track engine state.
+- [x] Physical MASTER (`song.master_q12`) is applied after the ReFm render again.
+- [x] Added conservative **-6 dB target output headroom** before DAC/UAC handoff.
+- [x] Output is clamped to the signed Q15 range after target gain.
+- [x] Primary hardware controls use strict immediate page-first/contextual behavior.
+- [x] `OCT- / OCT+` are contextual editor controls on STEP/DRUM and actual keyboard octave controls elsewhere.
+- [x] Replaced the inherited physical renderer with a compact hardware-only RB-240 renderer.
+- [x] Ordinary knob/step changes redraw only changed cards/cells; full 240×240 clear is reserved for page/machine transitions.
+- [x] ACID and DRUM pages use exact 16-step groovebox readback.
+- [x] Target renderer math is division-free/fixed-point where needed for JieLi safety.
+- [x] ROM-reference diagnostics now identify the owning target symbol and nearby instructions without relaxing the safety gate.
+- [x] Fixed a target safety false-positive where PAN constant folding produced arithmetic immediate `0xFFCE0064`; equivalent `×25 >> 13` scaling avoids the ROM-address bit pattern.
+- [x] Exact corrective code commit `d3f0b6c0a9bfd9f1714d5aeaaef9048389df7287` passed Host, WASM and the real FM-1 app/loader/FWSC build, target memory/manifest gates and sample link-size experiment.
+- [ ] Revalidate the corrective build on real FM-1 hardware.
 
 ---
 
-# Simple sequencing contract
+# Simple physical control contract
 
-## Virtual ACID
+The physical unit must remain usable without hidden modifier holds.
 
-1. Open **SEQ**.
-2. Select one of 16 steps.
-3. Choose note, REST or TIE.
-4. Toggle ACCENT / SLIDE.
-5. Play through the same groovebox runtime used by the target build.
+## ACID
 
-## Physical ACID
+1. `ENV` → ACID A.
+2. `LFO` → ACID B.
+3. `SEQ` → ACID step editor.
+4. `PRESET` → step 1–16.
+5. Musical key → write/audition the note for the selected step.
+6. `K1` → note/pitch.
+7. `K2` → REST / NOTE / TIE.
+8. `K3` → accent/slide flags.
+9. `K4` → probability.
+10. `OCT- / OCT+` → pitch down/up while in STEP; real keyboard octave elsewhere.
 
-Primary workflow is now page-first, without hidden holds:
+## DRUM
 
-1. `ENV` selects ACID A or `LFO` selects ACID B.
-2. `SEQ` opens the step editor immediately.
-3. `PRESET` selects step 1–16.
-4. A musical key writes its note directly to the selected step.
-5. `K1` note, `K2` REST/NOTE/TIE, `K3` flag combination, `K4` probability.
-6. `EDIT` toggles Accent; `REC` toggles Slide.
+1. `ARP` → drum programmer.
+2. Repeated/contextual DRUM selection toggles 808/909.
+3. `PRESET` → step 1–16.
+4. `K1` or `OCT- / OCT+` → lane down/up.
+5. `K2` → OFF / HIT / ACCENT.
+6. Musical key → select/program/audition mapped drum lane.
+7. 909 keeps real flam state/width.
 
-Machine/page changes are panic-guarded against stuck live notes.
+## Other primary pages
 
-## Physical drums
+- `HOME` → home/status.
+- `GLO` → mixer.
+- `FX` → effects.
+- `SCL` → song/pattern.
+- `SAVE` → project.
+- `PLAY` → ReFm transport immediately.
 
-1. `ARP` opens the drum programmer immediately.
-2. `PRESET` selects step 1–16.
-3. `K1` selects lane.
-4. `K2` cycles OFF/HIT/ACCENT.
-5. A mapped musical key directly selects/programs/auditions its drum lane.
-6. 909 keeps real flam state.
-
-Physical usability still needs device approval; software implementation alone is not sufficient.
+Machine/page changes remain panic-guarded against stuck notes.
 
 ---
 
@@ -92,61 +112,59 @@ Physical usability still needs device approval; software implementation alone is
 - [x] real 16-step ACID/drum state;
 - [x] selected step distinct from playback step;
 - [x] direct screen editing;
-- [x] 240×240 source + 480×480 2× view.
+- [x] 240×240 source + true 480×480 2× view.
 
-## Physical
+## Physical corrective renderer
 
-- [x] no injected legacy Felucca step graph;
-- [x] real 16-step state instead of fake selected/playhead-only strip;
-- [x] ACID NOTE = amber, ACCENT NOTE = red, TIE = cyan, REST = off, SLIDE = cyan marker;
-- [x] drum HIT = amber, ACCENT = red, OFF = off, 909 FLAM = cyan marker;
-- [x] selected step and running playhead are independent;
-- [x] persistent help footer removed;
-- [x] same-page changes do not begin with a full LCD clear;
-- [ ] verify no residual renderer bleed-through on real LCD;
-- [ ] verify no distracting redraw artifacts remain.
-
----
-
-# Startup / identity screen
-
-- [x] original **THE ReFM B1RTH** identity;
-- [x] **RB-240** display designation;
-- [x] ACID A / ACID B / 808 / 909 activation sequence;
-- [x] 16-step bus;
-- [x] final READY state;
-- [x] 240×240 logical target implementation without large bitmap assets;
-- [x] no copied Roland, Propellerhead or ReBirth logos/artwork;
-- [ ] verify timing/appearance on physical FM-1.
+- [x] no legacy Felucca graph strip;
+- [x] no persistent help footer;
+- [x] compact page-specific layout rather than stacked legacy layers;
+- [x] exact ACID NOTE / REST / TIE / ACCENT / SLIDE readback;
+- [x] exact DRUM OFF / HIT / ACCENT / 909 FLAM readback;
+- [x] selected step and playhead are independent;
+- [x] dirty-region/card/cell redraw for same-page changes;
+- [x] full-screen clear only on page/machine transition;
+- [ ] verify zero visible full-screen flash during continuous knob rotation;
+- [ ] verify no clipped/overlapping labels on the real LCD;
+- [ ] verify no stale pixels remain when values shrink/change.
 
 ---
 
-# Audio / live-play investigation
+# Audio / keyboard investigation
 
-Software-side facts already proven:
+Software/target facts now proven:
 
 - [x] direct MIDI into `refm_felucca_midi_packet()` produces non-zero ReFm audio;
-- [x] PLAY starts the ReFm transport;
+- [x] PLAY starts the ReFm transport in host integration tests;
 - [x] seeded Pattern A produces non-zero audio and advances steps;
-- [x] target audio callback calls `refm_felucca_audio_block()` instead of Felucca `mix_block()`;
-- [x] ReFm Q15 samples are handed into Felucca's existing output scaling path.
+- [x] ReFm owns the target render path;
+- [x] physical musical-key edges are now scanned independently of Felucca `mix_block()`;
+- [x] physical MASTER scaling is restored after the ReFm render;
+- [x] -6 dB target headroom is applied before output handoff;
+- [x] the corrective audio/input path compiles and links in the real JieLi target package.
 
-Diagnostic protocol v2 now exposes:
+Diagnostic protocol v2 exposes:
 
 - [x] ReFm render-block count;
 - [x] non-zero ReFm render-block count;
 - [x] panel key-edge count;
 - [x] consumed key-edge count;
 - [x] live-note edge count;
-- [x] transport-event count and current transport state.
+- [x] transport-event count and transport state.
 
-Next hardware test must determine the silence location in this order:
+Next physical test must verify in this order:
 
-1. [ ] physical key edge reaches ReFm;
-2. [ ] PLAY reaches ReFm transport;
-3. [ ] audio ISR continuously renders ReFm blocks;
-4. [ ] rendered blocks contain non-zero samples;
-5. [ ] if non-zero but output is silent, isolate DAC/codec/UAC/master-volume handoff instead of changing proven DSP.
+1. [ ] STOP is silent;
+2. [ ] MASTER at minimum is effectively silent and scales smoothly upward;
+3. [ ] one live ACID key gives one controlled note and releases cleanly;
+4. [ ] keyboard octave changes work outside editor context;
+5. [ ] PLAY starts a controlled seeded pattern rather than a loud invalid signal;
+6. [ ] STOP ends that signal immediately;
+7. [ ] 808/909 single-hit audition is controlled;
+8. [ ] no stuck key survives page/machine/octave changes;
+9. [ ] capture diagnostic v2 if any of the above fails.
+
+Do not perform initial audio tests at high headphone/amplifier volume.
 
 ---
 
@@ -161,21 +179,19 @@ Next hardware test must determine the silence location in this order:
 - [x] independent dual instances;
 - [x] per-ACID distortion;
 - [x] fixed-point target engine + WASM HQ reference;
-- [ ] compare against real TB-303 reference recordings;
 - [ ] physical cutoff/resonance/env-mod calibration;
-- [ ] physical square/distortion listening approval.
+- [ ] physical listening approval.
 
 ## 808 / 909
 
 - [x] 11 logical voices per machine;
 - [x] independent 808/909 lanes;
 - [x] synthesized baseline voices;
-- [x] optional redistributable sample path;
 - [x] open-hat choke;
 - [x] real 909 flam state + width;
 - [x] direct runtime drum audition;
 - [ ] physical listening approval;
-- [ ] final physical lane/edit workflow approval.
+- [ ] physical lane/edit workflow approval.
 
 ## Sequencer / song / mixer / FX
 
@@ -188,7 +204,7 @@ Next hardware test must determine the silence location in this order:
 - [x] delay/reverb returns;
 - [x] master Dist → Comp → PCF;
 - [x] versioned project save/load;
-- [ ] defer longer patterns/ratchets/automation until the basic 16-step hardware workflow is physically solid.
+- [ ] defer longer patterns/ratchets/automation until the basic hardware workflow is physically solid.
 
 ---
 
@@ -197,13 +213,15 @@ Next hardware test must determine the silence location in this order:
 - [x] pinned Felucca 1.0.5 foundation `3dd2b0852bc310a2c1bf00c2d443ac19202c2140`;
 - [x] reproducible JieLi target build and `.fwsc` generation;
 - [x] package identity/SHA/memory gates;
+- [x] strict ROM-reference safety gate retained;
 - [x] runtime CPU/DMA/user-stack/supervisor-stack instrumentation;
 - [x] physical-path diagnostic v2;
 - [x] guarded one-shot beta publisher;
-- [x] beta.3 remains immutable.
+- [x] beta.3 and beta.4 remain immutable.
 
 Still required physically:
 
+- [ ] controlled audio-output test at low external volume;
 - [ ] factory-pattern runtime capture;
 - [ ] worst-case four-machine stress capture;
 - [ ] `late == 0`;
@@ -225,24 +243,23 @@ No custom firmware has a zero-brick guarantee.
 - [x] `main` builds temporary host/WASM/FM-1 artifacts;
 - [x] one-shot verified publisher exists;
 - [x] publication is skipped without an explicit release request;
-- [x] `v0.1.0-beta.3` is immutable;
-- [ ] require exact-green current-head host + WASM + real FM-1 package result;
-- [ ] physically validate startup, clean LCD, direct ACID/drum sequencing and audio path;
-- [ ] only then create another hardware beta after explicit user request.
+- [x] `v0.1.0-beta.3` and `v0.1.0-beta.4` are immutable;
+- [x] corrective code checkpoint has exact-green Host + WASM + real FM-1 package gates;
+- [ ] do not publish beta.5 merely because software gates are green;
+- [ ] publish another hardware-test beta only after explicit user request.
 
 ---
 
 # Immediate next tasks
 
-1. Finish the exact-head Build-all target/sample-link gate for the current direct-control + exact-pattern-readback head.
-2. Flash only after an explicit new hardware-test release is requested.
-3. Verify startup animation and that the old horizontal pattern strip is gone.
-4. Verify footer is gone and same-page parameter changes no longer visibly blank the entire LCD.
-5. Program an ACID pattern using SEQ → PRESET step → musical key / K1-K4 / EDIT / REC.
-6. Program 808 and 909 patterns using ARP → PRESET step → K1/K2 / mapped keys.
-7. Confirm the physical LCD shows the exact edited 16-step pattern state.
-8. Capture diagnostic v2 after PLAY and live-key tests to localize any remaining silence.
-9. Re-run the full physical validation checklist before considering the next beta.
+1. Keep the post-beta.4 hardware correction stack as the owning final target pass.
+2. Verify the physical button/encoder contract one control at a time on the next device build.
+3. Verify keyboard edge → ReFm note-on/note-off independently from Felucca track state.
+4. Verify MASTER minimum/maximum and -6 dB headroom before testing PLAY loudly.
+5. Verify continuous knob rotation causes only local card/cell updates with no full LCD flash.
+6. Verify STEP note writing and DRUM lane/hit writing are visible immediately.
+7. Capture diagnostic v2 after any failed keyboard/PLAY/audio test.
+8. Only after that physical evidence, iterate remaining sound/layout issues.
 
 ---
 
@@ -255,12 +272,12 @@ No custom firmware has a zero-brick guarantee.
 - [x] mixer + essential FX;
 - [x] browser installer/editor/Virtual FM-1/WASM workflow;
 - [x] original startup identity;
-- [x] direct software-side physical ACID/drum editing workflow;
 - [x] exact physical/Virtual 16-step pattern readback;
 - [ ] physical ACID sequencing is fast and predictable;
 - [ ] physical 808/909 sequencing is fast and predictable;
 - [ ] live keyboard play and PLAY transport are audibly proven;
-- [ ] physical UI has no bleed-through or distracting refresh artifacts;
+- [ ] MASTER controls the real ReFm output correctly;
+- [ ] physical UI has no bleed-through, clipping or distracting refresh artifacts;
 - [ ] CPU/stack headroom proven on device;
 - [ ] USB MIDI/TRS MIDI/USB audio validated;
 - [ ] persistence and recovery validated physically;
