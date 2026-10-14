@@ -195,9 +195,9 @@ void ui240_edit_acid_step(ui240_state_t *ui, groovebox_t *g, uint8_t slot, int8_
     if (ui->machine >= UI240_MACHINE_808) return;
     st = &g->acid_seq[ui->machine].step[ui->selected_step & 15u];
     if (slot == 0u) {
-        int lo = 36, hi = 48;
-        if ((st->flags & SEQ16_DOWN) || st->note < 36u) { lo = 24; hi = 36; }
-        else if ((st->flags & SEQ16_UP) || st->note > 48u) { lo = 48; hi = 60; }
+        int lo = 60, hi = 72;
+        if ((st->flags & SEQ16_DOWN) || (st->note >= 48u && st->note < 60u)) { lo = 48; hi = 60; }
+        else if ((st->flags & SEQ16_UP) || (st->note > 72u && st->note <= 84u)) { lo = 72; hi = 84; }
         n = (int)st->note + delta;
         if (n < lo) n = lo;
         if (n > hi) n = hi;
