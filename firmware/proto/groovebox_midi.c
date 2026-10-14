@@ -1,8 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "groovebox_midi.h"
 
+#define REFM_303_NOTE_MIN 24u
+#define REFM_303_NOTE_MAX 60u
+
 static uint16_t cc16(uint8_t v) { return (uint16_t)v * 258u; }
 static int16_t pan16(uint8_t v) { return (int16_t)(((int32_t)v - 64) * 512); }
+static uint8_t acid_note(uint8_t v) { return v < REFM_303_NOTE_MIN ? REFM_303_NOTE_MIN : v > REFM_303_NOTE_MAX ? REFM_303_NOTE_MAX : v; }
 
 void groovebox_midi_init(midi_router_t *r) { midi_router_init(r); }
 
@@ -14,6 +18,8 @@ void groovebox_midi_init(midi_router_t *r) { midi_router_init(r); }
    104 acid step type / drum voice, 105 acid flags / drum state,
    106 acid probability, 119 solo, 120 mute.
 
+   Acid step pitches are constrained to the ReBirth/TB-303 three-octave
+   pattern range C1..C4 (MIDI 24..60, where 60=C4).
    Acid step type: 0=REST, 1=NOTE, 2=TIE.
    Acid flags: bit0=accent, bit1=slide. Drum state: 0=off, 1=hit, 2=accent. */
 static void track_mix_cc(groovebox_t *g, unsigned track, uint8_t cc, uint8_t v)
@@ -31,7 +37,7 @@ static void acid_step_cc(groovebox_t *g, midi_router_t *r, unsigned a, uint8_t c
 {
     seq16_step_t *st = &g->acid_seq[a].step[r->editor_step & 15u];
     if (cc == 102u) r->editor_step = v & 15u;
-    else if (cc == 103u) st->note = v;
+    else if (cc == 103u) st->note = acid_note(v);
     else if (cc == 104u) {
         st->flags &= (uint8_t)~(SEQ16_GATE | SEQ16_TIE);
         if (v == 1u) st->flags |= SEQ16_GATE;
@@ -82,7 +88,7 @@ uint8_t groovebox_handle_channel_midi(groovebox_t *g, midi_router_t *r, uint8_t 
 
     if (e.target == MIDI_TARGET_ACID1 || e.target == MIDI_TARGET_ACID2) {
         unsigned a = e.target == MIDI_TARGET_ACID1 ? 0u : 1u;
-        if (e.type == MIDI_EVENT_NOTE_ON) acid303_set_note(&g->acid[a], e.data1, e.data2 > 100u, 0u);
+        if (e.type == MIDI_EVENT_NOTE_ON) acid303_set_note(&g->acid[a], acid_note(e.data1), e.data2 > 100u, 0u);
         else if (e.type == MIDI_EVENT_NOTE_OFF) acid303_note_off(&g->acid[a]);
         else if (e.type == MIDI_EVENT_CC) acid_cc(g, r, a, e.data1, e.data2);
         else if (e.type == MIDI_EVENT_PROGRAM) g->current_pattern = (uint8_t)(e.data1 & 7u);
