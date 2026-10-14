@@ -5,11 +5,13 @@
 For the WASM reference path we deliberately use the spectral construction from
 js303 as a second benchmark beside Open303: all harmonics for saw, odd
 harmonics only for square, with a cosine-squared roll-off toward the highest
-retained partial.  This produces a stable hollow/reedy square without the
+retained partial. This produces a stable hollow/reedy square without the
 experimental pulse-width/memory model that drifted away from the reference.
 
-The emitted interface matches the compact firmware wavetable header so the
-FM-1 implementation remains untouched.
+The emitted interface matches the compact firmware wavetable header. Both the
+browser and target oscillator banks reserve 6 dB of source headroom so the
+fixed-point 303 filter/VCA can reproduce high accent/resonance peaks without
+turning them into hard numerical clipping.
 """
 from __future__ import annotations
 import argparse, math
@@ -17,6 +19,7 @@ from pathlib import Path
 
 N=2048
 LEVELS=12
+OSC_HEADROOM=0.5
 
 
 def normalize_bank(tables:list[list[float]])->list[list[float]]:
@@ -32,7 +35,7 @@ def spectral_table(hmax:int, odd_only:bool)->list[float]:
 
     js303 weights harmonic j with
       cos^2((j-1) * pi / (2*hmax)) / j
-    and keeps only odd j for square.  We retain that spectral shape while using
+    and keeps only odd j for square. We retain that spectral shape while using
     our 2048-sample mipmapped representation instead of js303's per-MIDI-note
     4096-sample table bank.
     """
@@ -67,7 +70,7 @@ def validate_mips(name:str,tables:list[list[float]])->None:
 
 
 def q15(v:float)->int:
-    return max(-32768,min(32767,round(v*32767.0)))
+    return max(-32768,min(32767,round(v*32767.0*OSC_HEADROOM)))
 
 
 def emit_single(name:str,values:list[float])->str:
