@@ -29,9 +29,12 @@ static int32_t clamp32(int64_t x, int32_t lo, int32_t hi) {
     return (int32_t)x;
 }
 
+/* Equal-tempered DDS increments at 44.1 kHz for MIDI notes 0..11
+   (C-1..B-1, A4=440 Hz). The previous table was about five times too low,
+   which made the entire acid engine sound almost 28 semitones flat. */
 static const uint32_t semitone_inc[12] = {
-    159321, 168796, 178834, 189468, 200734, 212670,
-    225316, 238714, 252908, 267948, 283881, 300760
+    796254u, 843601u, 893765u, 946911u, 1003217u, 1062871u,
+    1126073u, 1193033u, 1263974u, 1339134u, 1418763u, 1503127u
 };
 
 uint32_t acid303_note_to_phase_inc(uint8_t note) {
@@ -44,11 +47,26 @@ uint32_t acid303_note_to_phase_inc(uint8_t note) {
     return inc;
 }
 
+/* ReBirth's Tune control is +/- one octave in semitone steps. Keep that
+   musical contract rather than the former tiny linear pitch offset. */
 uint32_t acid303_apply_tune(uint32_t phase_inc, int8_t tune) {
-    int64_t delta = ((int64_t)phase_inc * (int32_t)tune) / 1536;
-    int64_t tuned = (int64_t)phase_inc + delta;
-    if (tuned < 1) tuned = 1;
-    if (tuned > 0xffffffffll) tuned = 0xffffffffll;
+    static const uint32_t up_q16[13] = {
+        65536u,69433u,73562u,77936u,82570u,87480u,92682u,
+        98193u,104032u,110218u,116772u,123715u,131072u
+    };
+    static const uint32_t down_q16[13] = {
+        65536u,61858u,58386u,55109u,52016u,49097u,46341u,
+        43740u,41285u,38968u,36781u,34716u,32768u
+    };
+    int t = tune;
+    uint32_t ratio;
+    uint64_t tuned;
+    if (t < -12) t = -12;
+    if (t > 12) t = 12;
+    ratio = t < 0 ? down_q16[-t] : up_q16[t];
+    tuned = ((uint64_t)phase_inc * ratio + 32768u) >> 16;
+    if (tuned < 1u) tuned = 1u;
+    if (tuned > 0xffffffffull) tuned = 0xffffffffull;
     return (uint32_t)tuned;
 }
 
