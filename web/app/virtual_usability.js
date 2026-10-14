@@ -2,7 +2,7 @@
 // Virtual-only usability layer. Keeps physical FM-1 interaction untouched.
 
 const NOTE_X0=6,NOTE_W=19,STEP_X0=5,STEP_W=14.4;
-let zoomCanvas=null,zoomWrap=null,zoomOn=false;
+let display2x=false;
 
 const state=()=>window.refmRB240State||null;
 const send=bytes=>window.refmVirtual?.sendMidi?.(bytes);
@@ -57,25 +57,34 @@ function installCanvasEditing(canvas){canvas.addEventListener('pointerdown',e=>{
 function installQuickHelp(card){
   if(document.querySelector('#virtualDirectGuide'))return;
   const guide=document.createElement('article');guide.id='virtualDirectGuide';guide.className='card virtualDirectGuide';
-  guide.innerHTML=`<div class="eyebrow">SIMPLE SEQUENCING</div><h3>Program patterns directly on the LCD</h3><div class="virtualDirectGuideGrid"><div><strong>ACID A / B</strong><ol><li>Open <b>SEQ</b>.</li><li>Click one of the 16 steps.</li><li>Click a note, or REST / NOTE / TIE.</li><li>Toggle ACC or SLD directly.</li></ol></div><div><strong>808 / 909</strong><ol><li>Open <b>ARP / DRUM</b>.</li><li>Click a drum lane.</li><li>Click steps to cycle OFF → HIT → ACCENT.</li><li>The grid always shows the real selected-lane pattern.</li></ol></div><div><strong>Display</strong><p>Use <b>DISPLAY 2×</b> for a real 480 × 480 copy of the LCD. The enlarged display is editable too.</p></div></div><p class="virtualDirectGuideNote">Modifier holds/chords remain available for performance shortcuts, but they are no longer required for normal step programming in the Virtual FM-1.</p>`;
+  guide.innerHTML=`<div class="eyebrow">SIMPLE SEQUENCING</div><h3>Program patterns directly on the LCD</h3><div class="virtualDirectGuideGrid"><div><strong>ACID A / B</strong><ol><li>Open <b>SEQ</b>.</li><li>Click one of the 16 steps.</li><li>Click a note, or REST / NOTE / TIE.</li><li>Toggle ACC or SLD directly.</li></ol></div><div><strong>808 / 909</strong><ol><li>Open <b>ARP / DRUM</b>.</li><li>Click a drum lane.</li><li>Click steps to cycle OFF → HIT → ACCENT.</li><li>The grid always shows the real selected-lane pattern.</li></ol></div><div><strong>Display</strong><p><b>DISPLAY 2×</b> switches the LCD inside the FM-1 panel itself from a 240 × 240 backing surface to a true 480 × 480 backing surface. The UI is re-rendered at the higher pixel density; it is not a stretched screenshot.</p></div></div><p class="virtualDirectGuideNote">Modifier holds/chords remain available for performance shortcuts, but they are no longer required for normal step programming in the Virtual FM-1.</p>`;
   card.insertAdjacentElement('afterend',guide);
 }
 
-function installZoom(){
+function applyDisplayDensity(canvas,button,badge){
+  const px=display2x?480:240;
+  if(canvas.width!==px)canvas.width=px;
+  if(canvas.height!==px)canvas.height=px;
+  canvas.dataset.renderPixels=String(px);
+  canvas.setAttribute('aria-label',`FM-1 ${px} by ${px} high-density in-panel display`);
+  button.classList.toggle('active',display2x);
+  button.textContent=display2x?'DISPLAY 1×':'DISPLAY 2×';
+  badge.textContent=display2x?'LCD 480 × 480 · HIGH DENSITY':'LCD 240 × 240';
+  window.refmVirtual?.draw?.();
+}
+
+function installDisplayDensity(){
   const primary=document.querySelector('#virtualScreen'),bar=document.querySelector('.virtualBar'),card=document.querySelector('.virtualCard');if(!primary||!bar||!card)return;
   const button=document.createElement('button');button.type='button';button.className='secondary virtualZoomButton';button.textContent='DISPLAY 2×';
-  zoomWrap=document.createElement('div');zoomWrap.className='virtualDisplayZoom';zoomWrap.hidden=true;
-  const head=document.createElement('div');head.className='virtualDisplayZoomHead';head.innerHTML='<strong>FM-1 LCD · 2× ZOOM</strong><span>480 × 480</span>';
-  zoomCanvas=document.createElement('canvas');zoomCanvas.width=480;zoomCanvas.height=480;zoomCanvas.setAttribute('aria-label','FM-1 display 2x zoom 480 by 480');
-  zoomWrap.append(head,zoomCanvas);card.appendChild(zoomWrap);bar.appendChild(button);
-  installCanvasEditing(primary);installCanvasEditing(zoomCanvas);installQuickHelp(card);
-  button.addEventListener('click',()=>{zoomOn=!zoomOn;zoomWrap.hidden=!zoomOn;button.classList.toggle('active',zoomOn);button.textContent=zoomOn?'DISPLAY 1×':'DISPLAY 2×';syncZoom();});
+  const badge=document.createElement('span');badge.className='virtualDisplayDensity';badge.textContent='LCD 240 × 240';
+  bar.append(button,badge);
+  installCanvasEditing(primary);installQuickHelp(card);
+  button.addEventListener('click',()=>{display2x=!display2x;applyDisplayDensity(primary,button,badge);});
   const style=document.createElement('style');style.textContent=`
-    #virtualScreen{cursor:crosshair}.virtualDisplayZoom{margin:14px auto 2px;max-width:520px;padding:12px;border:1px solid #3b4853;border-radius:14px;background:#090d11;box-shadow:0 18px 44px #0008}.virtualDisplayZoom[hidden]{display:none}.virtualDisplayZoomHead{display:flex;justify-content:space-between;gap:12px;margin-bottom:8px;color:#dce8ef;font:700 11px ui-monospace,monospace}.virtualDisplayZoom canvas{display:block;width:min(480px,100%);height:auto;aspect-ratio:1;background:#17191b;image-rendering:pixelated;border:5px solid #30363b;box-shadow:0 0 0 2px #0c0f11;cursor:crosshair}.virtualZoomButton.active{border-color:#ffc75a;color:#ffe5aa}.virtualDirectHint{color:#ffcf72!important}.virtualDirectGuide{margin-top:12px;border-color:#624e29}.virtualDirectGuide h3{margin:.25rem 0 1rem}.virtualDirectGuideGrid{display:grid;grid-template-columns:1fr 1fr .8fr;gap:12px}.virtualDirectGuideGrid>div{padding:12px;border:1px solid #303b45;border-radius:9px;background:#0b1117}.virtualDirectGuideGrid strong{color:#ffcf72}.virtualDirectGuideGrid ol{margin:.5rem 0 0 1.1rem;padding:0}.virtualDirectGuideGrid li{margin:.32rem 0}.virtualDirectGuideGrid p{margin:.5rem 0 0}.virtualDirectGuideNote{margin:12px 0 0;color:#9fb0bc}@media(max-width:850px){.virtualDirectGuideGrid{grid-template-columns:1fr}}
+    #virtualScreen{cursor:crosshair}.virtualZoomButton.active{border-color:#ffc75a;color:#ffe5aa}.virtualDisplayDensity{color:#8fd8e7;font-weight:700}.virtualDirectHint{color:#ffcf72!important}.virtualDirectGuide{margin-top:12px;border-color:#624e29}.virtualDirectGuide h3{margin:.25rem 0 1rem}.virtualDirectGuideGrid{display:grid;grid-template-columns:1fr 1fr .8fr;gap:12px}.virtualDirectGuideGrid>div{padding:12px;border:1px solid #303b45;border-radius:9px;background:#0b1117}.virtualDirectGuideGrid strong{color:#ffcf72}.virtualDirectGuideGrid ol{margin:.5rem 0 0 1.1rem;padding:0}.virtualDirectGuideGrid li{margin:.32rem 0}.virtualDirectGuideGrid p{margin:.5rem 0 0}.virtualDirectGuideNote{margin:12px 0 0;color:#9fb0bc}@media(max-width:850px){.virtualDirectGuideGrid{grid-template-columns:1fr}}
   `;document.head.appendChild(style);
   const hint=document.createElement('span');hint.className='virtualDirectHint';hint.textContent='SEQ/DRUM LCD is directly clickable';bar.appendChild(hint);
-  setInterval(syncZoom,50);
+  applyDisplayDensity(primary,button,badge);
 }
-function syncZoom(){if(!zoomOn||!zoomCanvas)return;const src=document.querySelector('#virtualScreen');if(!src)return;const g=zoomCanvas.getContext('2d');g.imageSmoothingEnabled=false;g.clearRect(0,0,480,480);g.drawImage(src,0,0,480,480);}
 
-queueMicrotask(installZoom);
+queueMicrotask(installDisplayDensity);
