@@ -70,7 +70,10 @@ class VirtualSequenceUsabilityTests(unittest.TestCase):
         stack = (ROOT / "tools" / "patch_fm1_rebirth_ui.py").read_text(encoding="utf-8")
         patch = (ROOT / "tools" / "apply_rebirth303_pitch_model.py").read_text(encoding="utf-8")
         self.assertLess(stack.index("apply_hardware_rework.py"), stack.index("apply_rebirth303_pitch_model.py"))
-        self.assertIn("rb303_i < 12u", patch)
+        self.assertIn("void refm_felucca_step_octave(int8_t direction)", patch)
+        self.assertIn("SEQ16_DOWN | SEQ16_UP", patch)
+        self.assertIn("refm_felucca_step_octave(-1)", patch)
+        self.assertIn("refm_felucca_step_octave(1)", patch)
         self.assertIn("ReBirth DOWN", patch)
         self.assertIn("ReBirth UP", patch)
 
