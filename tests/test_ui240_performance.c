@@ -66,15 +66,27 @@ int main(void)
     assert(ui240_focus_move(&ui, UI240_FOCUS_COMP, 1) == UI240_FOCUS_ACID);
     assert(ui.page == UI240_ACID_MAIN);
 
-    /* ACID keyboard note entry writes the selected step instead of only
-       auditioning a live note. */
+    /* ReBirth/TB-303 step entry uses one physical C..C pitch octave. The
+       incoming live MIDI-note value is deliberately ignored here: key index
+       selects the pitch, while DOWN/UP changes the octave state separately. */
     ui240_set_machine(&ui, UI240_MACHINE_ACID1);
     ui240_set_page(&ui, UI240_ACID_STEP);
     ui.selected_step = 6u;
-    r = ui240_performance_key(&ui, &g, UI240_MOD_SEQ, 5u, 52u, 1u);
+    r = ui240_performance_key(&ui, &g, UI240_MOD_SEQ, 5u, 99u, 1u);
     assert(r.consumed);
-    assert(g.acid_seq[0].step[6].note == 52u);
+    assert(g.acid_seq[0].step[6].note == 41u); /* F2 in normal range */
     assert(g.acid_seq[0].step[6].flags & SEQ16_GATE);
+
+    g.acid_seq[0].step[6].flags |= SEQ16_DOWN;
+    r = ui240_performance_key(&ui, &g, UI240_MOD_SEQ, 12u, 1u, 1u);
+    assert(r.consumed);
+    assert(g.acid_seq[0].step[6].note == 36u); /* top C of DOWN range */
+
+    g.acid_seq[0].step[6].flags &= (uint8_t)~SEQ16_DOWN;
+    g.acid_seq[0].step[6].flags |= SEQ16_UP;
+    r = ui240_performance_key(&ui, &g, UI240_MOD_SEQ, 0u, 127u, 1u);
+    assert(r.consumed);
+    assert(g.acid_seq[0].step[6].note == 48u); /* bottom C of UP range */
 
     puts("ui240 keyboard performance/focus tests: ok");
     return 0;
