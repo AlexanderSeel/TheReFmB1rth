@@ -3,10 +3,11 @@
 #include <stdio.h>
 #include "../firmware/proto/groovebox.h"
 
-/* Updated after correcting the acid DDS semitone table to true 44.1 kHz
-   equal-tempered pitch (the previous table was about 28 semitones flat).
-   This locks deterministic output for the corrected baseline. */
-#define EXPECTED_RENDER_HASH 0x54d0515eb6921d93ull
+/* Updated after aligning the acid core more closely with Open303: 4x
+   oscillator/filter oversampling, corrected analog-conditioning high-pass
+   recurrences and neutral reference defaults. Pitch remains independently
+   guarded by the end-to-end C2/C3/C4 rendered-frequency tests. */
+#define EXPECTED_RENDER_HASH 0x437f9fce018e97b3ull
 
 static uint64_t fnv1a_u16(uint64_t h, uint16_t v) {
     h ^= (uint8_t)v; h *= 1099511628211ull;
