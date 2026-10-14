@@ -34,7 +34,9 @@ def main() -> int:
 
     bridge = root / "firmware" / "refm" / "integration" / "refm_felucca_bridge.c"
     helper = r'''/* ReBirth/TB-303 step octave state. The pitch key itself is one C..C
- * octave; DOWN/UP transpose that selected pitch exactly one octave. */
+ * octave; DOWN/UP transpose that selected pitch exactly one octave. The
+ * corrected hardware register is MIDI 48..84: DOWN C=48, normal C=60,
+ * UP C=72. */
 void refm_felucca_step_octave(int8_t direction)
 {
     seq16_step_t *st;
@@ -46,18 +48,18 @@ void refm_felucca_step_octave(int8_t direction)
         return;
     st = &g_refm.groovebox.acid_seq[g_ui.machine].step[g_ui.selected_step & 15u];
     old_mode = (st->flags & SEQ16_DOWN) ? -1 : (st->flags & SEQ16_UP) ? 1 :
-               (st->note >= 24u && st->note < 36u) ? -1 :
-               (st->note > 48u && st->note <= 60u) ? 1 : 0;
-    base = (st->note >= 24u && st->note <= 60u) ? ((int)st->note - old_mode * 12) : 36;
-    while (base < 36) base += 12;
-    while (base > 48) base -= 12;
+               (st->note >= 48u && st->note < 60u) ? -1 :
+               (st->note > 72u && st->note <= 84u) ? 1 : 0;
+    base = (st->note >= 48u && st->note <= 84u) ? ((int)st->note - old_mode * 12) : 60;
+    while (base < 60) base += 12;
+    while (base > 72) base -= 12;
     new_mode = direction < 0 ? (old_mode == -1 ? 0 : -1) : (old_mode == 1 ? 0 : 1);
     st->flags &= (uint8_t)~(SEQ16_DOWN | SEQ16_UP);
     if (new_mode < 0) st->flags |= SEQ16_DOWN;
     if (new_mode > 0) st->flags |= SEQ16_UP;
     base += new_mode * 12;
-    if (base < 24) base = 24;
-    if (base > 60) base = 60;
+    if (base < 48) base = 48;
+    if (base > 84) base = 84;
     st->note = (uint8_t)base;
     if (!(st->flags & (SEQ16_GATE | SEQ16_TIE))) st->flags |= SEQ16_GATE;
     if (!st->probability) st->probability = 100u;
@@ -90,7 +92,7 @@ void refm_felucca_step_octave(int8_t direction)
     )
 
     (root / STAMP).write_text(
-        "model=rebirth-rb338-tb303\nstep-range-midi=24..60\nstep-pitch-key=C..C\nstep-octave=down-normal-up\n"
+        "model=rebirth-rb338-tb303\nstep-range-midi=48..84\nnormal-c-midi=60\nstep-pitch-key=C..C\nstep-octave=down-normal-up\n"
     )
     print("ReBirth/TB-303 physical pitch model applied")
     return 0
