@@ -1,13 +1,15 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Virtual-only usability layer. Keeps physical FM-1 interaction untouched.
 
-const NOTE_X0=6,NOTE_W=19,STEP_X0=5,STEP_W=14.4;
-const GATE=1,ACCENT=2,SLIDE=4,TIE=8;
+const NOTE_X0=6,NOTE_W=17.45,STEP_X0=5,STEP_W=14.4;
+const GATE=1,ACCENT=2,SLIDE=4,TIE=8,DOWN=16,UP=32;
+const TB_MIN=24,TB_NORMAL_LOW=36,TB_NORMAL_HIGH=48,TB_MAX=60;
 let display2x=false;
 
 const state=()=>window.refmRB240State||null;
 const send=bytes=>window.refmVirtual?.sendMidi?.(bytes);
 const cc=(track,n,v)=>send([0xB0+(track&3),n,Math.max(0,Math.min(127,Number(v)|0))]);
+const clamp303=n=>Math.max(TB_MIN,Math.min(TB_MAX,Number(n)|0));
 
 function wheelKnob(label,dir,count=1){
   const knob=document.querySelector(`.vf-knob[aria-label="${label}"]`);if(!knob)return;
@@ -20,12 +22,25 @@ function moveWrapped(current,target,count,label){
 }
 function selectStep(target){const s=state();if(!s)return;moveWrapped(s.selectedStep,target,16,'PRESETS');cc(s.machine,102,target);}
 function selectLane(target){const s=state();if(!s||s.machine<2)return;moveWrapped(s.lane,target,11,'KNOB1');cc(s.machine,104,target);}
-function currentAcidStep(s){return s?.acidSteps?.[s.selectedStep]||{note:48,type:1,accent:false,slide:false,prob:100};}
-function acidWasmFlags(st){return(st.type===1?GATE:0)|(st.type===2?TIE:0)|(st.accent?ACCENT:0)|(st.slide?SLIDE:0);}
+function currentAcidStep(s){return s?.acidSteps?.[s.selectedStep]||{note:36,type:1,accent:false,slide:false,prob:100,down:false,up:false};}
+function octaveMode(st){if(st.down&&!st.up)return-1;if(st.up&&!st.down)return 1;if(st.note<TB_NORMAL_LOW)return-1;if(st.note>TB_NORMAL_HIGH)return 1;return 0;}
+function base303Note(st){let n=clamp303(st.note)-octaveMode(st)*12;while(n<TB_NORMAL_LOW)n+=12;while(n>TB_NORMAL_HIGH)n-=12;return Math.max(TB_NORMAL_LOW,Math.min(TB_NORMAL_HIGH,n));}
+function effective303Note(base,mode){return clamp303(base+(mode<0?-12:mode>0?12:0));}
+function acidWasmFlags(st){const mode=st.octave??octaveMode(st);return(st.type===1?GATE:0)|(st.type===2?TIE:0)|(st.accent?ACCENT:0)|(st.slide?SLIDE:0)|(mode<0?DOWN:0)|(mode>0?UP:0);}
 function commitAcid(track,step,st){
-  const api=window.refmVirtual;
-  if(api?.setAcidStep)return api.setAcidStep(track,step,st.note,acidWasmFlags(st),st.prob);
-  cc(track,102,step);cc(track,103,st.note);cc(track,104,st.type);cc(track,105,(st.accent?1:0)|(st.slide?2:0));cc(track,106,st.prob);return true;
+  const api=window.refmVirtual,note=clamp303(st.note),next={...st,note};
+  if(api?.setAcidStep)return api.setAcidStep(track,step,note,acidWasmFlags(next),next.prob);
+  cc(track,102,step);cc(track,103,note);cc(track,104,next.type);cc(track,105,(next.accent?1:0)|(next.slide?2:0));cc(track,106,next.prob);return true;
+}
+function setOctaveMode(track,step,st,mode){
+  mode=Math.max(-1,Math.min(1,mode|0));
+  const base=base303Note(st),note=effective303Note(base,mode);
+  return commitAcid(track,step,{...st,note,octave:mode,down:mode<0,up:mode>0,type:st.type===0?1:st.type});
+}
+function shiftSelectedOctave(dir){
+  const s=state();if(!s||s.machine>1||s.page!==2)return false;
+  const st=currentAcidStep(s),current=octaveMode(st),wanted=dir<0?(current===-1?0:-1):(current===1?0:1);
+  return setOctaveMode(s.machine,s.selectedStep,st,wanted);
 }
 function commitDrum(machine,step,lane,next){
   const api=window.refmVirtual,d=machine-2;
@@ -43,16 +58,16 @@ function editAcid(x,y,s){
   if(y>=181&&y<=205){const i=Math.max(0,Math.min(15,Math.floor((x-STEP_X0)/STEP_W)));selectStep(i);return true;}
   const st=currentAcidStep(s),step=s.selectedStep;
   if(y>=99&&y<=119){
-    if(x>=7&&x<51){commitAcid(track,step,{...st,type:0});return true;}
-    if(x>=54&&x<98){commitAcid(track,step,{...st,type:1});return true;}
-    if(x>=101&&x<145){commitAcid(track,step,{...st,type:2});return true;}
-    if(x>=151&&x<190){commitAcid(track,step,{...st,accent:!st.accent});return true;}
-    if(x>=193&&x<=234){commitAcid(track,step,{...st,slide:!st.slide});return true;}
+    if(x>=7&&x<49){commitAcid(track,step,{...st,type:0});return true;}
+    if(x>=52&&x<94){commitAcid(track,step,{...st,type:1});return true;}
+    if(x>=97&&x<135){const m=octaveMode(st);setOctaveMode(track,step,st,m===-1?0:-1);return true;}
+    if(x>=138&&x<176){const m=octaveMode(st);setOctaveMode(track,step,st,m===1?0:1);return true;}
+    if(x>=179&&x<205){commitAcid(track,step,{...st,accent:!st.accent});return true;}
+    if(x>=208&&x<=234){commitAcid(track,step,{...st,slide:!st.slide});return true;}
   }
-  if(y>=121&&y<=164&&x>=NOTE_X0&&x<NOTE_X0+NOTE_W*12){
-    const pc=Math.max(0,Math.min(11,Math.floor((x-NOTE_X0)/NOTE_W)));
-    let note=Math.floor(st.note/12)*12+pc;if(note<24)note+=12;if(note>96)note-=12;
-    commitAcid(track,step,{...st,note,type:1});return true;
+  if(y>=121&&y<=164&&x>=NOTE_X0&&x<NOTE_X0+NOTE_W*13){
+    const key=Math.max(0,Math.min(12,Math.floor((x-NOTE_X0)/NOTE_W))),base=TB_NORMAL_LOW+key,mode=octaveMode(st);
+    commitAcid(track,step,{...st,note:effective303Note(base,mode),octave:mode,down:mode<0,up:mode>0,type:1});return true;
   }
   return false;
 }
@@ -73,7 +88,7 @@ function installCanvasEditing(canvas){canvas.addEventListener('pointerdown',e=>{
 function installQuickHelp(card){
   if(document.querySelector('#virtualDirectGuide'))return;
   const guide=document.createElement('article');guide.id='virtualDirectGuide';guide.className='card virtualDirectGuide';
-  guide.innerHTML=`<div class="eyebrow">SIMPLE SEQUENCING</div><h3>Program patterns directly on the LCD</h3><div class="virtualDirectGuideGrid"><div><strong>ACID A / B</strong><ol><li>Open <b>SEQ</b>.</li><li>Click one of the 16 steps.</li><li>Click a note, or REST / NOTE / TIE.</li><li>Toggle ACC or SLD directly.</li></ol></div><div><strong>808 / 909</strong><ol><li>Open <b>ARP / DRUM</b>.</li><li>Click a drum lane.</li><li>Click steps to cycle OFF → HIT → ACCENT.</li><li>The grid always shows the real selected-lane pattern.</li></ol></div><div><strong>Display</strong><p><b>DISPLAY 2×</b> moves the same LCD into a larger integrated upper panel and changes its backing surface to 480 × 480. The renderer works at 2× device scale, so text, lines and controls use real extra pixels rather than a stretched 240 × 240 image.</p></div></div><p class="virtualDirectGuideNote">Modifier holds/chords remain available for performance shortcuts, but they are no longer required for normal step programming in the Virtual FM-1.</p>`;
+  guide.innerHTML=`<div class="eyebrow">REBIRTH-STYLE SEQUENCING</div><h3>Program the acid pattern like the RB-338 / TB-303</h3><div class="virtualDirectGuideGrid"><div><strong>ACID A / B</strong><ol><li>Open <b>SEQ</b> and select one of 16 steps.</li><li>Choose one pitch from the single C…C keyboard.</li><li>Use <b>DOWN</b> or <b>UP</b> to transpose that step by one octave. Normal is neither.</li><li>Set NOTE/PAUSE, ACCENT and SLIDE.</li></ol><p>The resulting pitch range is C1…C4; there is no generic C1…C9 piano range.</p></div><div><strong>808 / 909</strong><ol><li>Open <b>ARP / DRUM</b>.</li><li>Click a drum lane.</li><li>Click steps to cycle OFF → HIT → ACCENT.</li><li>The grid always shows the real selected-lane pattern.</li></ol></div><div><strong>Display</strong><p><b>DISPLAY 2×</b> moves the same LCD into a larger integrated upper panel and changes its backing surface to 480 × 480. The renderer works at 2× device scale, so text, lines and controls use real extra pixels rather than a stretched 240 × 240 image.</p></div></div><p class="virtualDirectGuideNote">TIE remains an internal compatibility state for old patterns, but the primary acid workflow follows ReBirth: pitch, DOWN/UP, NOTE/PAUSE, ACCENT and SLIDE.</p>`;
   card.insertAdjacentElement('afterend',guide);
 }
 
@@ -81,9 +96,6 @@ function applyDisplayDensity(canvas,button,badge){
   const px=display2x?480:240,device=document.querySelector('#virtualDevice');
   if(canvas.width!==px)canvas.width=px;
   if(canvas.height!==px)canvas.height=px;
-  const ctx=canvas.getContext('2d'),scale=px/240;
-  ctx.setTransform(scale,0,0,scale,0,0);
-  ctx.imageSmoothingEnabled=display2x;
   canvas.dataset.renderPixels=String(px);
   canvas.style.imageRendering=display2x?'auto':'pixelated';
   canvas.setAttribute('aria-label',`FM-1 ${px} by ${px} high-density in-panel display`);
@@ -111,6 +123,7 @@ function installDisplayDensity(){
   `;document.head.appendChild(style);
   const hint=document.createElement('span');hint.className='virtualDirectHint';hint.textContent='SEQ/DRUM LCD is directly clickable';bar.appendChild(hint);
   applyDisplayDensity(primary,button,badge);
+  queueMicrotask(()=>{if(window.refmVirtual)window.refmVirtual.shiftAcidOctave=shiftSelectedOctave;});
 }
 
 queueMicrotask(installDisplayDensity);
