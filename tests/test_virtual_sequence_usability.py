@@ -28,7 +28,8 @@ class VirtualSequenceUsabilityTests(unittest.TestCase):
         self.assertIn("'PAUSE'", s)
         self.assertNotIn("'OCT-'", s[s.index("function seq"):s.index("function drums")])
         self.assertIn("window.refmRB240State=s", s)
-        self.assertIn("OFF → HIT → ACCENT", s)
+        self.assertIn("Click lane + steps", s)
+        self.assertIn("K1 lane / K2 state", s)
 
     def test_virtual_lcd_direct_edit_contract(self):
         usability = (ROOT / "web/app/virtual_usability.js").read_text(encoding="utf-8")
