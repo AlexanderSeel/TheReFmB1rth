@@ -197,7 +197,7 @@ void ui240_edit_acid_step(ui240_state_t *ui, groovebox_t *g, uint8_t slot, int8_
     if (slot == 0u) {
         n = (int)st->note + delta;
         if (n < 24) n = 24;
-        if (n > 96) n = 96;
+        if (n > 60) n = 60;
         st->note = (uint8_t)n;
     } else if (slot == 1u) {
         int type = (st->flags & SEQ16_TIE) && !(st->flags & SEQ16_GATE) ? UI240_STEP_TIE :
