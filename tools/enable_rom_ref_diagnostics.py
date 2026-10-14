@@ -2,9 +2,10 @@
 # SPDX-License-Identifier: GPL-3.0-only
 """Make Felucca's existing ROM-reference safety error actionable.
 
-This does not relax the safety check. It maps the offending instruction address
-back to the nearest .text symbol from objdump's symbol table and includes that
-symbol plus the instruction in the existing safety error.
+This does not relax the safety check. It maps each offending instruction back
+to the nearest .text symbol and prints a small disassembly window around it so
+target-only compiler helper loads can be removed from source instead of being
+whitelisted.
 """
 from __future__ import annotations
 import argparse
@@ -35,7 +36,8 @@ def main() -> int:
             except ValueError:
                 pass
     rom_symbols.sort()
-    for ln in dis.splitlines():     # nothing may call or load an address in the chip ROM
+    dis_lines = dis.splitlines()
+    for li, ln in enumerate(dis_lines):     # nothing may call or load an address in the chip ROM
         mm = LINE.match(ln)
         if not mm:
             continue
@@ -48,12 +50,18 @@ def main() -> int:
         for v in re.findall(r"= (-?\\d+) <|call -?\\d+ <[^:>]*: ([0-9a-f]+) >", mm.group(3)):
             val = (int(v[0]) & 0xFFFFFFFF) if v[0] else int(v[1], 16) & 0xFFFFFFFF
             if 0xFFC00000 <= val < 0xFFD00000:
-                errors.append(f"reference to ROM address {val:#010x} in {rom_owner} at {pc:#010x}: {ln.strip()}")
+                lo = max(0, li - 6)
+                hi = min(len(dis_lines), li + 7)
+                ctx = "\\n      ".join(x.rstrip() for x in dis_lines[lo:hi])
+                errors.append(
+                    f"reference to ROM address {val:#010x} in {rom_owner} at {pc:#010x}: {ln.strip()}"
+                    f"\\n      disassembly context:\\n      {ctx}"
+                )
 '''
     if s.count(old) != 1:
         raise SystemExit("Felucca ROM diagnostic anchor mismatch")
     p.write_text(s.replace(old, new, 1))
-    print("Felucca ROM-reference diagnostics enabled with symbol-table ownership (safety gate unchanged)")
+    print("Felucca ROM-reference diagnostics enabled with symbol + instruction context (safety gate unchanged)")
     return 0
 
 
