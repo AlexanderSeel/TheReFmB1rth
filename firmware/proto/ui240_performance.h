@@ -6,9 +6,12 @@
 #include "ui240.h"
 #include "groovebox_pattern.h"
 
-#define UI240_303_NOTE_MIN 24u
-#define UI240_303_NOTE_MAX 60u
-#define UI240_303_NORMAL_C 36u
+/* TB-303 / ReBirth keyboard register.
+ * The 13-key C..C keyboard is centered on C4 (MIDI 60) in normal mode;
+ * DOWN is one octave below and UP one octave above. */
+#define UI240_303_NOTE_MIN 48u
+#define UI240_303_NOTE_MAX 84u
+#define UI240_303_NORMAL_C 60u
 
 typedef enum {
     UI240_MOD_NONE = 0,
@@ -220,8 +223,8 @@ static inline ui240_key_result_t ui240_performance_key(ui240_state_t *ui,
         st = &g->acid_seq[ui->machine].step[step];
         while (pitch_key > 12u) pitch_key = (uint8_t)(pitch_key - 13u);
         mode = (st->flags & SEQ16_DOWN) ? -1 : (st->flags & SEQ16_UP) ? 1 :
-               (st->note >= 24u && st->note < 36u) ? -1 :
-               (st->note > 48u && st->note <= 60u) ? 1 : 0;
+               (st->note >= 48u && st->note < 60u) ? -1 :
+               (st->note > 72u && st->note <= 84u) ? 1 : 0;
         note = (uint8_t)(UI240_303_NORMAL_C + pitch_key);
         if (mode < 0) note = (uint8_t)(note - 12u);
         else if (mode > 0) note = (uint8_t)(note + 12u);
