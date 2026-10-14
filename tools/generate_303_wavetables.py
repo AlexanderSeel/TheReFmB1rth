@@ -11,6 +11,13 @@ bands to balance fidelity and XIP cost.
 The 303 square is derived from the 303 saw by Open303's tanh shaping constants
 (36.9 dB drive, +4.37 offset), inverted, shifted by 180 degrees, and rendered
 at half the saw level as Open303's BlendOscillator does.
+
+Open303 keeps floating-point headroom through the filter/VCA. The FM-1 path is
+Q15 and ultimately has to hand a bounded sample to the mixer, so the source
+bank deliberately carries 6 dB of embedded headroom. This prevents strong
+accent/resonance combinations from reaching a hard numerical rail before the
+mixer can attenuate them; it does not alter pitch, cutoff, resonance or envelope
+laws.
 """
 from __future__ import annotations
 import argparse
@@ -23,7 +30,7 @@ SIZE = 512
 BITS = 9
 OUT_SR = 44100.0
 BANDLIMIT_HZ = OUT_SR * 0.5
-SAW_SCALE = 30000.0
+SAW_SCALE = 16384.0
 SQUARE_SCALE = SAW_SCALE * 0.5
 TANH_DRIVE_DB = 36.9
 TANH_OFFSET = 4.37
