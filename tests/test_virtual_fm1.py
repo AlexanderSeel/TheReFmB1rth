@@ -71,8 +71,8 @@ class VirtualFm1Tests(unittest.TestCase):
         self.assertIn("rb240_boot_renderer.js", entry)
         self.assertIn("rb240_renderer_v2.js", boot)
         for marker in (
-            "'SEQ EDIT'", "'TB-303 STYLE STEP EDIT'", "'TR-808 STEP PROGRAMMER'", "'TR-909 STEP PROGRAMMER'",
-            "'PCF'", "'DELAY'", "'DIST'", "'COMP'", "'FLAM'", "'MIXER'",
+            "'SEQ EDIT'", "'REBIRTH / TB-303 STEP EDIT'", "'TR-808 STEP PROGRAMMER'", "'TR-909 STEP PROGRAMMER'",
+            "'DOWN'", "'UP'", "'PAUSE'", "'PCF'", "'DELAY'", "'DIST'", "'COMP'", "'FLAM'", "'MIXER'",
             "'PATTERN / SONG'", 'function knob(', 'function meter(', 'function acidStrip(', 'function drumGrid('
         ):
             self.assertIn(marker, renderer)
