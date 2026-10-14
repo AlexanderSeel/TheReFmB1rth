@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
-// Hardware-feasible Virtual FM-1 startup animation. The logical display remains
-// 240x240; the existing Virtual 2x canvas mirrors it pixel-for-pixel at 480x480.
+// Hardware-feasible Virtual FM-1 startup animation. The renderer keeps the
+// 240x240 logical UI coordinate system, but can rasterize it directly into a
+// 480x480 backing canvas so 2x mode uses four times as many pixels instead of
+// scaling a previously rendered 240x240 bitmap.
 import {drawRB240 as drawMain} from './rb240_renderer_v2.js';
 
 const C={bg:'#111416',metal:'#777b7b',metalHi:'#d4d5d1',metalLo:'#34393b',dark:'#202426',ink:'#111213',text:'#f4f1e8',red:'#ff382f',amber:'#ff9a27',cyan:'#27bdcf',green:'#55e36b',off:'#41484a'};
@@ -47,11 +49,20 @@ function bootFrame(g,ms){
   tx(g,120,224,status,6,phase>=5?C.green:C.cyan,true,'center');
 }
 
+function logicalRender(g,draw){
+  if(!g)return;
+  const w=g.canvas?.width||240,h=g.canvas?.height||240;
+  const sx=w/240,sy=h/240;
+  g.save();
+  g.setTransform(sx,0,0,sy,0,0);
+  try{return draw();}finally{g.restore();}
+}
+
 export function drawRB240(g,get,projectResult='READY'){
   const ready=!!get('ready');
-  if(!ready){wasReady=false;bootStart=0;return drawMain(g,get,projectResult);}
+  if(!ready){wasReady=false;bootStart=0;return logicalRender(g,()=>drawMain(g,get,projectResult));}
   if(!wasReady){wasReady=true;bootStart=now();}
   const elapsed=now()-bootStart;
-  if(elapsed<1560){g.imageSmoothingEnabled=false;bootFrame(g,elapsed);return;}
-  return drawMain(g,get,projectResult);
+  if(elapsed<1560)return logicalRender(g,()=>{g.imageSmoothingEnabled=false;bootFrame(g,elapsed);});
+  return logicalRender(g,()=>drawMain(g,get,projectResult));
 }
