@@ -220,7 +220,8 @@ static inline ui240_key_result_t ui240_performance_key(ui240_state_t *ui,
         st = &g->acid_seq[ui->machine].step[step];
         while (pitch_key > 12u) pitch_key = (uint8_t)(pitch_key - 13u);
         mode = (st->flags & SEQ16_DOWN) ? -1 : (st->flags & SEQ16_UP) ? 1 :
-               st->note < 36u ? -1 : st->note > 48u ? 1 : 0;
+               (st->note >= 24u && st->note < 36u) ? -1 :
+               (st->note > 48u && st->note <= 60u) ? 1 : 0;
         note = (uint8_t)(UI240_303_NORMAL_C + pitch_key);
         if (mode < 0) note = (uint8_t)(note - 12u);
         else if (mode > 0) note = (uint8_t)(note + 12u);
