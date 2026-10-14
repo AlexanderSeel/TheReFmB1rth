@@ -241,6 +241,20 @@ static inline ui240_key_result_t ui240_performance_key(ui240_state_t *ui,
         step = modifier == UI240_MOD_LIVE && g->transport.playing ? (uint8_t)(g->step & 15u) : (uint8_t)(ui->selected_step & 15u);
         ui->selected_step = step;
         st = &g->acid_seq[ui->machine].step[step];
+
+        /* Physical FM-1 STEP entry already arrives as the real chromatic MIDI
+           note derived from the 27-key F3..G5 bitmap. Do not reinterpret its
+           physical key index as the Virtual/ReBirth 13-key C..C keyboard. */
+        if (modifier == UI240_MOD_NONE && ui->page == UI240_ACID_STEP) {
+            st->note = note;
+            st->flags &= (uint8_t)~(SEQ16_TIE | SEQ16_DOWN | SEQ16_UP);
+            st->flags |= SEQ16_GATE;
+            if (!st->probability) st->probability = 100u;
+            return r;
+        }
+
+        /* Virtual/advanced SEQ entry intentionally retains the compact
+           ReBirth-style C..C pitch register with separate DOWN/UP state. */
         while (pitch_key > 12u) pitch_key = (uint8_t)(pitch_key - 13u);
         mode = (st->flags & SEQ16_DOWN) ? -1 : (st->flags & SEQ16_UP) ? 1 :
                (st->note >= 48u && st->note < 60u) ? -1 :

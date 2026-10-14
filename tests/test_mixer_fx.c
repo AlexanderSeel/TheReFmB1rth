@@ -5,6 +5,16 @@
 
 int main(void) {
     mixer_fx_t m; mixer_fx_init(&m);
+
+    /* Hardware-safe startup contract: ACID has headroom, drums retain full
+       track level, and the master DIST/COMP stages start neutral. */
+    assert(m.track[0].level == 24576);
+    assert(m.track[1].level == 24576);
+    assert(m.track[2].level == 32767);
+    assert(m.track[3].level == 32767);
+    assert(m.drive == 0);
+    assert(m.compressor_threshold == 32767);
+
     int16_t in[MIX_TRACKS]={12000,8000,4000,2000},l=0,r=0;
     mixer_fx_process(&m,in,&l,&r);
     assert(l!=0 && r!=0);

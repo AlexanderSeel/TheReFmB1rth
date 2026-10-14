@@ -7,8 +7,12 @@ static int16_t clip16(int32_t v) { return (int16_t)clamp32(v,-32768,32767); }
 
 void mixer_fx_init(mixer_fx_t *m) {
     memset(m, 0, sizeof(*m));
+    /* Keep the startup mix clean and leave extra headroom for the two ACID
+       voices. Hardware validation showed that running four full-scale buses
+       into an always-on saturation/compressor stage masked the drums and made
+       low ACID notes sound much harsher than the underlying 303 voice. */
     for (unsigned i=0; i<MIX_TRACKS; ++i) {
-        m->track[i].level = 32767;
+        m->track[i].level = i < 2u ? 24576 : 32767;
         m->track[i].pan = 0;
     }
 #if defined(__EMSCRIPTEN__)
@@ -26,8 +30,10 @@ void mixer_fx_init(mixer_fx_t *m) {
     m->reverb_mix = 6000;
     m->reverb_damp = 9000;
 #endif
-    m->drive = 3000;
-    m->compressor_threshold = 24576;
+    /* DIST and COMP are performance effects, not mandatory colouration. Start
+       neutral; the FX page can deliberately dial either stage back in. */
+    m->drive = 0;
+    m->compressor_threshold = 32767;
     m->filter_cutoff = 30000;
 }
 
@@ -47,6 +53,10 @@ void mixer_fx_set_reverb(mixer_fx_t *m, int16_t feedback, int16_t mix, int16_t d
 }
 
 static int32_t saturate(int32_t x, int16_t drive) {
+    /* A zero DIST control must be electrically/arithmetically neutral. The old
+       implementation still applied a 0.75-FS soft knee at drive=0, effectively
+       placing permanent distortion before the compressor. */
+    if (drive <= 0) return clamp32(x, -32768, 32767);
     int64_t y = ((int64_t)x * (32768 + drive)) >> 15;
     int32_t v = clamp32(y, -65536, 65535);
     int32_t a = v < 0 ? -v : v;

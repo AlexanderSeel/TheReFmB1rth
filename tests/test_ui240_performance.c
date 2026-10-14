@@ -80,10 +80,9 @@ int main(void)
     assert(ui240_focus_move(&ui, UI240_FOCUS_COMP, 1) == UI240_FOCUS_ACID);
     assert(ui.page == UI240_ACID_MAIN);
 
-    /* ReBirth/TB-303 step entry uses one physical C..C pitch octave. The
-       incoming live MIDI-note value is deliberately ignored here: key index
-       selects the pitch, while DOWN/UP changes the octave state separately.
-       Corrected register: DOWN C=48, normal C=60, UP C=72. */
+    /* ReBirth/TB-303 virtual step entry uses one C..C pitch octave. The
+       incoming live MIDI-note value is deliberately ignored for an explicit
+       SEQ modifier: key index selects pitch and DOWN/UP selects the register. */
     ui240_set_machine(&ui, UI240_MACHINE_ACID1);
     ui240_set_page(&ui, UI240_ACID_STEP);
     ui.selected_step = 6u;
@@ -102,6 +101,19 @@ int main(void)
     r = ui240_performance_key(&ui, &g, UI240_MOD_SEQ, 0u, 127u, 1u);
     assert(r.consumed);
     assert(g.acid_seq[0].step[6].note == 72u); /* bottom C of UP range */
+
+    /* Physical FM-1 STEP entry is different: the hardware scanner has already
+       converted the 27-key F3..G5 matrix to the real chromatic MIDI pitch. A
+       physical G4 (67) must therefore be stored as G4, never remapped from its
+       panel-key index into the Virtual 13-key register. */
+    g.acid_seq[0].step[6].flags |= (uint8_t)(SEQ16_DOWN | SEQ16_UP | SEQ16_TIE);
+    r = ui240_performance_key(&ui, &g, UI240_MOD_NONE, 14u, 67u, 1u);
+    assert(r.consumed);
+    assert(g.acid_seq[0].step[6].note == 67u);
+    assert(g.acid_seq[0].step[6].flags & SEQ16_GATE);
+    assert(!(g.acid_seq[0].step[6].flags & SEQ16_TIE));
+    assert(!(g.acid_seq[0].step[6].flags & SEQ16_DOWN));
+    assert(!(g.acid_seq[0].step[6].flags & SEQ16_UP));
 
     assert(UI240_303_NOTE_MIN == 48u);
     assert(UI240_303_NORMAL_C == 60u);

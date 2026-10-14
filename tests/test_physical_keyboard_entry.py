@@ -25,6 +25,16 @@ class PhysicalKeyboardEntryTests(unittest.TestCase):
         self.assertIn('apply_hardware_step_navigation.py', overlay)
         self.assertIn('direct-step-navigation', overlay)
 
+    def test_final_target_pitch_pass_restores_real_hardware_keyboard_octaves(self):
+        pitch = (ROOT / 'tools' / 'apply_rebirth303_pitch_model.py').read_text(encoding='utf-8')
+        overlay = (ROOT / 'tools' / 'patch_fm1_rebirth_ui.py').read_text(encoding='utf-8')
+        self.assertIn('hardware-keyboard=F3..G5+octave', pitch)
+        self.assertIn('hardware-step-entry=exact-midi-note', pitch)
+        self.assertIn('page == 2u && song.octave > -3', pitch)
+        self.assertIn('page == 2u && song.octave < 3', pitch)
+        self.assertNotIn('refm_felucca_step_octave', pitch)
+        self.assertIn('physical-chromatic-step-entry', overlay)
+
 
 if __name__ == '__main__':
     unittest.main()

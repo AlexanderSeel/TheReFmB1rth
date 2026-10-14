@@ -50,8 +50,9 @@ def main() -> int:
     # Narrow post-rework correction: keep active STEP/DRUM edits synchronized to
     # the selected A-H pattern bank so revisiting a step cannot resurrect stale data.
     subprocess.run([sys.executable, str(ROOT / "tools" / "apply_pattern_edit_persistence.py"), str(root)], check=True, cwd=ROOT)
-    # ReBirth/TB-303 pitch semantics: on STEP, OCT-/OCT+ are DOWN/UP by exactly
-    # one octave. The core/UI constrain effective acid pitches to C1..C4.
+    # Physical FM-1 note entry must remain a real chromatic piano keyboard. The
+    # Virtual panel keeps ReBirth's compact C..C + DOWN/UP interaction, while the
+    # hardware OCT buttons shift the actual 27-key F3..G5 register.
     subprocess.run([sys.executable, str(ROOT / "tools" / "apply_rebirth303_pitch_model.py"), str(root)], check=True, cwd=ROOT)
     # Keep final generated target arithmetic self-contained. The pi32v2 compiler
     # otherwise emits undocumented ROM helpers for some generic arithmetic.
@@ -71,7 +72,7 @@ def main() -> int:
     ):
         h.update(path.read_bytes())
     (root / ".refm-ui-overlay").write_text(
-        f"style=hardware-240x240-clean+direct-isr-keyboard+physical-master+gain32+render-shifts+contextual-controls+dirty-regions+pattern-edit-write-through+rebirth303-down-up+no-legacy-graph-strip+refm-boot-splash\nsha256={h.hexdigest()}\n"
+        f"style=hardware-240x240-clean+direct-isr-keyboard+physical-master+gain32+render-shifts+contextual-controls+dirty-regions+pattern-edit-write-through+physical-chromatic-step-entry+no-legacy-graph-strip+refm-boot-splash\nsha256={h.hexdigest()}\n"
     )
     print("FM-1 ReFm hardware UI/input/audio correction stack applied")
     return 0
