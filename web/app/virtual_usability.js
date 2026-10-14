@@ -23,8 +23,8 @@ function moveWrapped(current,target,count,label){
 function selectStep(target){const s=state();if(!s)return;moveWrapped(s.selectedStep,target,16,'PRESETS');cc(s.machine,102,target);}
 function selectLane(target){const s=state();if(!s||s.machine<2)return;moveWrapped(s.lane,target,11,'KNOB1');cc(s.machine,104,target);}
 function currentAcidStep(s){return s?.acidSteps?.[s.selectedStep]||{note:36,type:1,accent:false,slide:false,prob:100,down:false,up:false};}
-function octaveMode(st){if(st.down&&!st.up)return-1;if(st.up&&!st.down)return 1;if(st.note<TB_NORMAL_LOW)return-1;if(st.note>TB_NORMAL_HIGH)return 1;return 0;}
-function base303Note(st){let n=clamp303(st.note)-octaveMode(st)*12;while(n<TB_NORMAL_LOW)n+=12;while(n>TB_NORMAL_HIGH)n-=12;return Math.max(TB_NORMAL_LOW,Math.min(TB_NORMAL_HIGH,n));}
+function octaveMode(st){if(st.down&&!st.up)return-1;if(st.up&&!st.down)return 1;if(st.note>=TB_MIN&&st.note<TB_NORMAL_LOW)return-1;if(st.note>TB_NORMAL_HIGH&&st.note<=TB_MAX)return 1;return 0;}
+function base303Note(st){let n=(st.note>=TB_MIN&&st.note<=TB_MAX?st.note:TB_NORMAL_LOW)-octaveMode(st)*12;while(n<TB_NORMAL_LOW)n+=12;while(n>TB_NORMAL_HIGH)n-=12;return Math.max(TB_NORMAL_LOW,Math.min(TB_NORMAL_HIGH,n));}
 function effective303Note(base,mode){return clamp303(base+(mode<0?-12:mode>0?12:0));}
 function acidWasmFlags(st){const mode=st.octave??octaveMode(st);return(st.type===1?GATE:0)|(st.type===2?TIE:0)|(st.accent?ACCENT:0)|(st.slide?SLIDE:0)|(mode<0?DOWN:0)|(mode>0?UP:0);}
 function commitAcid(track,step,st){
