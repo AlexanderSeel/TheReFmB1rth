@@ -43,9 +43,13 @@ def main() -> int:
     subprocess.run([sys.executable, str(ROOT / "tools" / "apply_runtime_diagnostics.py"), str(root)], check=True, cwd=ROOT)
     subprocess.run([sys.executable, str(ROOT / "tools" / "apply_refm_boot_splash.py"), str(root)], check=True, cwd=ROOT)
 
-    # Must be last: beta.4 hardware validation proved that the earlier layered
-    # renderer/input assumptions were not valid on the physical unit.
+    # Must be last among the broad target rewrites: beta.4 hardware validation
+    # proved that the earlier layered renderer/input assumptions were not valid
+    # on the physical unit.
     subprocess.run([sys.executable, str(ROOT / "tools" / "apply_hardware_rework.py"), str(root)], check=True, cwd=ROOT)
+    # Narrow post-rework correction: keep active STEP/DRUM edits synchronized to
+    # the selected A-H pattern bank so revisiting a step cannot resurrect stale data.
+    subprocess.run([sys.executable, str(ROOT / "tools" / "apply_pattern_edit_persistence.py"), str(root)], check=True, cwd=ROOT)
     # Keep final generated target arithmetic self-contained. The pi32v2 compiler
     # otherwise emits undocumented ROM helpers for some generic arithmetic.
     subprocess.run([sys.executable, str(ROOT / "tools" / "fix_hardware_gain_target.py"), str(root)], check=True, cwd=ROOT)
@@ -64,7 +68,7 @@ def main() -> int:
     ):
         h.update(path.read_bytes())
     (root / ".refm-ui-overlay").write_text(
-        f"style=hardware-240x240-clean+direct-isr-keyboard+physical-master+gain32+render-shifts+contextual-controls+dirty-regions+no-legacy-graph-strip+refm-boot-splash\nsha256={h.hexdigest()}\n"
+        f"style=hardware-240x240-clean+direct-isr-keyboard+physical-master+gain32+render-shifts+contextual-controls+dirty-regions+pattern-edit-write-through+no-legacy-graph-strip+refm-boot-splash\nsha256={h.hexdigest()}\n"
     )
     print("FM-1 ReFm hardware UI/input/audio correction stack applied")
     return 0
