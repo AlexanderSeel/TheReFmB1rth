@@ -58,11 +58,22 @@ function logicalRender(g,draw){
   try{return draw();}finally{g.restore();}
 }
 
+function normalized303Get(get){
+  return key=>{
+    const raw=get(key);
+    if(typeof key==='number'&&key>=36&&key<52){
+      const packed=Number(raw)>>>0,note=packed&255;
+      if(note<24||note>60)return (packed&0xffffff00)|36;
+    }
+    return raw;
+  };
+}
+
 export function drawRB240(g,get,projectResult='READY'){
-  const ready=!!get('ready');
-  if(!ready){wasReady=false;bootStart=0;return logicalRender(g,()=>drawMain(g,get,projectResult));}
+  const ready=!!get('ready'),viewGet=normalized303Get(get);
+  if(!ready){wasReady=false;bootStart=0;return logicalRender(g,()=>drawMain(g,viewGet,projectResult));}
   if(!wasReady){wasReady=true;bootStart=now();}
   const elapsed=now()-bootStart;
   if(elapsed<1560)return logicalRender(g,()=>{g.imageSmoothingEnabled=false;bootFrame(g,elapsed);});
-  return logicalRender(g,()=>drawMain(g,get,projectResult));
+  return logicalRender(g,()=>drawMain(g,viewGet,projectResult));
 }
