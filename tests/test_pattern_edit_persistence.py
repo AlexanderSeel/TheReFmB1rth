@@ -18,7 +18,8 @@ class PatternEditPersistenceTests(unittest.TestCase):
         self.assertIn("g_refm.groovebox.current_pattern", self.patch)
 
     def test_keyboard_and_drum_edits_are_write_through_too(self):
-        self.assertIn("if (r.consumed) {", self.patch)
+        self.assertIn("r = ui240_performance_key(&g_ui, &g_refm.groovebox, g_modifier, key, note, on);", self.patch)
+        self.assertIn("if (on && (g_ui.page == UI240_ACID_STEP", self.patch)
         self.assertIn("g_modifier == UI240_MOD_SEQ", self.patch)
         self.assertIn("g_modifier == UI240_MOD_LIVE", self.patch)
         self.assertIn("g_modifier == UI240_MOD_DRUM", self.patch)
