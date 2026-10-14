@@ -25,11 +25,25 @@ int main(void)
     assert(g.drum_hits[1][3] & (1u << DRUM_BD));
     assert(!(g.drum_accents[1][3] & (1u << DRUM_BD)));
 
-    /* The second 11-key bank is HIGH/accent on 909. */
+    /* Pressing the same low-bank drum key again removes the programmed hit. */
+    r = ui240_performance_key(&ui, &g, UI240_MOD_DRUM, 0u, 36u, 1u);
+    assert(r.consumed && !r.drum_trigger);
+    assert(!(g.drum_hits[1][3] & (1u << DRUM_BD)));
+    assert(!(g.drum_accents[1][3] & (1u << DRUM_BD)));
+
+    /* The second 11-key bank toggles an accented hit and can switch it off too. */
     r = ui240_performance_key(&ui, &g, UI240_MOD_DRUM, 11u, 47u, 1u);
     assert(r.drum_lane == DRUM_BD && r.velocity == 122u);
+    assert(g.drum_hits[1][3] & (1u << DRUM_BD));
     assert(g.drum_accents[1][3] & (1u << DRUM_BD));
+    r = ui240_performance_key(&ui, &g, UI240_MOD_DRUM, 11u, 47u, 1u);
+    assert(r.consumed && !r.drum_trigger);
+    assert(!(g.drum_hits[1][3] & (1u << DRUM_BD)));
+    assert(!(g.drum_accents[1][3] & (1u << DRUM_BD)));
 
+    /* Recreate a normal hit so 909 flam has a valid target. */
+    r = ui240_performance_key(&ui, &g, UI240_MOD_DRUM, 0u, 36u, 1u);
+    assert(r.drum_trigger);
     ui.selected_lane = DRUM_BD;
     (void)ui240_performance_key(&ui, &g, UI240_MOD_DRUM, 22u, 58u, 1u);
     assert(g.drum_909_flams[3] & (1u << DRUM_BD));
