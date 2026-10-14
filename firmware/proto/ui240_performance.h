@@ -8,6 +8,7 @@
 
 #define UI240_303_NOTE_MIN 24u
 #define UI240_303_NOTE_MAX 60u
+#define UI240_303_NORMAL_C 36u
 
 typedef enum {
     UI240_MOD_NONE = 0,
@@ -210,13 +211,21 @@ static inline ui240_key_result_t ui240_performance_key(ui240_state_t *ui,
         ui->machine < UI240_MACHINE_808) {
         seq16_step_t *st;
         uint8_t step;
+        uint8_t pitch_key = key;
+        int mode;
         r.consumed = 1u;
         if (!press) return r;
-        if (note < UI240_303_NOTE_MIN) note = UI240_303_NOTE_MIN;
-        if (note > UI240_303_NOTE_MAX) note = UI240_303_NOTE_MAX;
         step = modifier == UI240_MOD_LIVE && g->transport.playing ? (uint8_t)(g->step & 15u) : (uint8_t)(ui->selected_step & 15u);
         ui->selected_step = step;
         st = &g->acid_seq[ui->machine].step[step];
+        while (pitch_key > 12u) pitch_key = (uint8_t)(pitch_key - 13u);
+        mode = (st->flags & SEQ16_DOWN) ? -1 : (st->flags & SEQ16_UP) ? 1 :
+               st->note < 36u ? -1 : st->note > 48u ? 1 : 0;
+        note = (uint8_t)(UI240_303_NORMAL_C + pitch_key);
+        if (mode < 0) note = (uint8_t)(note - 12u);
+        else if (mode > 0) note = (uint8_t)(note + 12u);
+        if (note < UI240_303_NOTE_MIN) note = UI240_303_NOTE_MIN;
+        if (note > UI240_303_NOTE_MAX) note = UI240_303_NOTE_MAX;
         st->note = note;
         st->flags &= (uint8_t)~SEQ16_TIE;
         st->flags |= SEQ16_GATE;
