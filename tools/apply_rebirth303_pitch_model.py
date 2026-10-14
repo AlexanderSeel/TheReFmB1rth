@@ -46,8 +46,9 @@ void refm_felucca_step_octave(int8_t direction)
         return;
     st = &g_refm.groovebox.acid_seq[g_ui.machine].step[g_ui.selected_step & 15u];
     old_mode = (st->flags & SEQ16_DOWN) ? -1 : (st->flags & SEQ16_UP) ? 1 :
-               st->note < 36u ? -1 : st->note > 48u ? 1 : 0;
-    base = (int)st->note - old_mode * 12;
+               (st->note >= 24u && st->note < 36u) ? -1 :
+               (st->note > 48u && st->note <= 60u) ? 1 : 0;
+    base = (st->note >= 24u && st->note <= 60u) ? ((int)st->note - old_mode * 12) : 36;
     while (base < 36) base += 12;
     while (base > 48) base -= 12;
     new_mode = direction < 0 ? (old_mode == -1 ? 0 : -1) : (old_mode == 1 ? 0 : 1);
