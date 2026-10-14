@@ -3,10 +3,10 @@
 #include <stdio.h>
 #include "../firmware/proto/groovebox.h"
 
-/* Updated after the intentional Open303-informed oscillator/envelope/filter
-   corrections. This locks deterministic output for the new baseline; any
-   later DSP change must explicitly update the fingerprint again. */
-#define EXPECTED_RENDER_HASH 0x6d1c4a50f3d14297ull
+/* Updated after correcting the acid DDS semitone table to true 44.1 kHz
+   equal-tempered pitch (the previous table was about 28 semitones flat).
+   This locks deterministic output for the corrected baseline. */
+#define EXPECTED_RENDER_HASH 0x54d0515eb6921d93ull
 
 static uint64_t fnv1a_u16(uint64_t h, uint16_t v) {
     h ^= (uint8_t)v; h *= 1099511628211ull;
