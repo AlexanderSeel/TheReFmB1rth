@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
-"""Remove division/modulo helper calls from the physical 240x240 renderer.
+"""Remove target-hostile arithmetic from the physical 240x240 renderer.
 
 The JieLi target safety gate rejects undocumented ROM references. The clean
-hardware renderer does not need exact integer division: percentages can use
-Q15/Q7 shifts and MIDI note names can be derived by bounded subtraction.
+hardware renderer does not need integer division: percentages use fixed-point
+shifts and MIDI note names use bounded subtraction. PAN deliberately uses the
+equivalent x25 >> 13 form rather than x100 >> 15 so constant folding cannot
+produce an arithmetic immediate that aliases the chip-ROM address window.
 """
 from __future__ import annotations
 
@@ -46,7 +48,7 @@ def main() -> int:
     text = replace_once(
         text,
         "rb5_numbox(62,66,56,42,\"PAN\",((int32_t)p1-32767)*100/32767,RB5_RED);",
-        "rb5_numbox(62,66,56,42,\"PAN\",(((int32_t)p1-32767)*100)>>15,RB5_RED);",
+        "rb5_numbox(62,66,56,42,\"PAN\",(((int32_t)p1-32767)*25)>>13,RB5_RED);",
         "pan percent",
     )
     text = replace_once(
@@ -62,8 +64,6 @@ def main() -> int:
         "reverb percent",
     )
 
-    # Power-of-two divisions are fine, but write the master percentage as an
-    # explicit shift so the generated target contract is obvious/auditable.
     text = replace_once(
         text,
         "uint16_t master_pct = (uint16_t)(((song.master_q12 > 4096u ? 4096u : song.master_q12) * 100u) / 4096u);",
@@ -73,11 +73,12 @@ def main() -> int:
 
     draw.write_text(text)
     (root / STAMP).write_text(
-        "renderer-arithmetic=q15-q7-shifts\n"
+        "renderer-arithmetic=fixed-point-shifts\n"
+        "pan-scale=x25-shift13-no-rom-range-immediate\n"
         "note-name=bounded-subtraction\n"
         "integer-divmod=none-in-rb5\n"
     )
-    print("FM-1 clean renderer converted to target-safe shift/subtraction arithmetic")
+    print("FM-1 clean renderer converted to target-safe fixed-point arithmetic")
     return 0
 
 
