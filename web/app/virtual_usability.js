@@ -5,12 +5,18 @@ const NOTE_X0=6,NOTE_W=17.45,STEP_X0=5,STEP_W=14.4;
 const GATE=1,ACCENT=2,SLIDE=4,TIE=8,DOWN=16,UP=32;
 const TB_MIN=48,TB_NORMAL_LOW=60,TB_NORMAL_HIGH=72,TB_MAX=84;
 let display2x=false;
+const drumShadow=new Map();
 
 const state=()=>window.refmRB240State||null;
 const send=bytes=>window.refmVirtual?.sendMidi?.(bytes);
 const cc=(track,n,v)=>send([0xB0+(track&3),n,Math.max(0,Math.min(127,Number(v)|0))]);
 const clamp303=n=>Math.max(TB_MIN,Math.min(TB_MAX,Number(n)|0));
+const drumShadowKey=(machine,step,lane)=>`${machine}:${step&15}:${lane}`;
 
+function virtualStatus(text){
+  const el=document.querySelector('#virtualStatus');
+  if(el){el.textContent=text;el.classList.add('online');}
+}
 function wheelKnob(label,dir,count=1){
   const knob=document.querySelector(`.vf-knob[aria-label="${label}"]`);if(!knob)return false;
   for(let i=0;i<count;i++)knob.dispatchEvent(new WheelEvent('wheel',{bubbles:true,cancelable:true,deltaY:dir>0?-100:100}));
@@ -43,20 +49,57 @@ function shiftSelectedOctave(dir){
   const st=currentAcidStep(s),current=octaveMode(st),wanted=dir<0?(current===-1?0:-1):(current===1?0:1);
   return setOctaveMode(s.machine,s.selectedStep,st,wanted);
 }
-function commitDrum(machine,step,lane,next){
-  const api=window.refmVirtual,d=machine-2;
-  if(api?.getDrumStep&&api?.setDrumStep){
-    const packed=api.getDrumStep(d,step),bit=1<<lane;
-    let hits=packed&0xffff,accents=(packed>>>16)&0xffff;
-    if(next===0){hits&=~bit;accents&=~bit;}else{hits|=bit;if(next===2)accents|=bit;else accents&=~bit;}
-    return api.setDrumStep(d,step,hits,accents);
-  }
-  cc(machine,102,step);cc(machine,104,lane);cc(machine,105,next);return true;
-}
 function drumLaneState(machine,step,lane,s){
-  const api=window.refmVirtual,d=machine-2,bit=1<<lane;
-  if(api?.getDrumStep){const packed=api.getDrumStep(d,step),hits=packed&0xffff,accents=(packed>>>16)&0xffff;return(accents&bit)?2:(hits&bit)?1:0;}
-  return(s.drumSteps?.[step]||0)&3;
+  const api=window.refmVirtual,d=machine-2,bit=1<<lane,key=drumShadowKey(machine,step,lane);
+  if(api?.getDrumStep){
+    const packed=api.getDrumStep(d,step),hits=packed&0xffff,accents=(packed>>>16)&0xffff;
+    const current=(accents&bit)?2:(hits&bit)?1:0;
+    drumShadow.set(key,current);
+    return current;
+  }
+  if(drumShadow.has(key))return drumShadow.get(key);
+  const current=(s?.drumSteps?.[step]||0)&3;
+  drumShadow.set(key,current);
+  return current;
+}
+function commitDrum(machine,step,lane,next,s=state()){
+  const api=window.refmVirtual,d=machine-2,bit=1<<lane,key=drumShadowKey(machine,step,lane);
+  next=Math.max(0,Math.min(2,next|0));
+  let wrote=false;
+  if(api?.getDrumStep&&api?.setDrumStep){
+    const packed=api.getDrumStep(d,step);
+    let hits=packed&0xffff,accents=(packed>>>16)&0xffff;
+    if(next===0){hits&=~bit;accents&=~bit;}
+    else{hits|=bit;if(next===2)accents|=bit;else accents&=~bit;}
+    wrote=api.setDrumStep(d,step,hits,accents)!==false;
+    if(wrote){
+      const check=api.getDrumStep(d,step),checkHits=check&0xffff,checkAcc=(check>>>16)&0xffff;
+      const actual=(checkAcc&bit)?2:(checkHits&bit)?1:0;
+      if(actual!==next)wrote=false;
+    }
+  }
+  if(!wrote){
+    cc(machine,102,step);cc(machine,104,lane);cc(machine,105,next);wrote=true;
+  }
+  drumShadow.set(key,next);
+  // Keep the on-screen state deterministic even when an older cached WASM lacks
+  // the 16-step readback ABI. New WASM will replace this with authoritative data
+  // on the next draw; the shadow still guarantees the next click can switch off.
+  const live=window.refmRB240State;
+  if(live?.drumSteps){
+    const flam=(live.drumSteps[step]||0)&4;
+    live.selectedStep=step;
+    live.drumSteps[step]=flam|next;
+    live.drumState=next;
+  }
+  api?.draw?.();
+  const names=machine===3?['BD','SD','CP','RS','CH','OH','LT','MT','HT','CR','RD']:['BD','SD','CP','RS','CH','OH','LT','MT','HT','CY','CB'];
+  virtualStatus(`DRUM ${machine===3?'909':'808'} · ${names[lane]||lane} · STEP ${step+1} · ${['OFF','HIT','ACC'][next]}`);
+  return wrote;
+}
+function cycleDrum(machine,step,lane,s=state()){
+  const current=drumLaneState(machine,step,lane,s),next=(current+1)%3;
+  return commitDrum(machine,step,lane,next,s);
 }
 function clickKnobCard(x,y,x0,y0,w,h){
   if(y<y0||y>y0+h||x<x0||x>x0+4*w)return false;
@@ -87,9 +130,12 @@ function editDrum(x,y,s){
   if(y>=66&&y<=98){const lane=Math.max(0,Math.min(10,Math.floor((x-6)/20.7)));selectLane(lane);return true;}
   if(y>=103&&y<=158){
     const col=Math.floor((x-7)/28),row=Math.floor((y-104)/27);if(col<0||col>7||row<0||row>1)return false;
-    const step=row*8+col;selectStep(step);const next=(drumLaneState(s.machine,step,s.lane,s)+1)%3;
-    commitDrum(s.machine,step,s.lane,next);return true;
+    const step=row*8+col;selectStep(step);cycleDrum(s.machine,step,s.lane,s);return true;
   }
+  // The STATE card itself is now an explicit control as well. This removes any
+  // ambiguity about whether the selected step is OFF/HIT/ACC and makes touch use
+  // considerably easier than having to hit the small grid cell repeatedly.
+  if(y>=163&&y<=198&&x>=104&&x<164){cycleDrum(s.machine,s.selectedStep,s.lane,s);return true;}
   if(y>=163&&y<=198&&s.machine===3&&x>=164){wheelKnob('KNOB3',1,1);return true;}
   return false;
 }
@@ -112,7 +158,7 @@ function installCanvasEditing(canvas){canvas.addEventListener('pointerdown',e=>{
 function installQuickHelp(card){
   if(document.querySelector('#virtualDirectGuide'))return;
   const guide=document.createElement('article');guide.id='virtualDirectGuide';guide.className='card virtualDirectGuide';
-  guide.innerHTML=`<div class="eyebrow">REBIRTH-STYLE SEQUENCING</div><h3>Program the groovebox directly</h3><div class="virtualDirectGuideGrid"><div><strong>ACID A / B</strong><ol><li>Open <b>SEQ</b> and select one of 16 steps.</li><li>Choose one pitch from the single C…C keyboard.</li><li>Use <b>DOWN</b> or <b>UP</b> to transpose that step by one octave. Normal is neither.</li><li>Set NOTE/PAUSE, ACCENT and SLIDE.</li></ol><p>The TB-303/ReBirth register is DOWN / NORMAL / UP; there is no generic C1…C9 piano range.</p></div><div><strong>808 / 909</strong><ol><li>Open <b>ARP / DRUM</b>.</li><li>Click a drum lane.</li><li>Click steps to cycle OFF → HIT → ACCENT.</li><li>K1 changes lane, K2 changes state; 909 K3/K4 control flam.</li></ol></div><div><strong>Settings</strong><p>ACID, MIXER and FX LCD cards are directly clickable: left half decreases, right half increases. The physical K1–K4 knobs perform the same edits.</p><p><b>DISPLAY 2×</b> uses the same integrated LCD at 480 × 480 backing resolution.</p></div></div><p class="virtualDirectGuideNote">Virtual editing now uses the same underlying groovebox state as the hardware control path.</p>`;
+  guide.innerHTML=`<div class="eyebrow">REBIRTH-STYLE SEQUENCING</div><h3>Program the groovebox directly</h3><div class="virtualDirectGuideGrid"><div><strong>ACID A / B</strong><ol><li>Open <b>SEQ</b> and select one of 16 steps.</li><li>Choose one pitch from the single C…C keyboard.</li><li>Use <b>DOWN</b> or <b>UP</b> to transpose that step by one octave. Normal is neither.</li><li>Set NOTE/PAUSE, ACCENT and SLIDE.</li></ol><p>The TB-303/ReBirth register is DOWN / NORMAL / UP; there is no generic C1…C9 piano range.</p></div><div><strong>808 / 909</strong><ol><li>Open <b>ARP / DRUM</b>.</li><li>Click a drum lane.</li><li>Click steps or the STATE card to cycle OFF → HIT → ACCENT → OFF.</li><li>K1 changes lane, K2 changes state; 909 K3/K4 control flam.</li></ol></div><div><strong>Settings</strong><p>ACID, MIXER and FX LCD cards are directly clickable: left half decreases, right half increases. The physical K1–K4 knobs perform the same edits.</p><p><b>DISPLAY 2×</b> uses the same integrated LCD at 480 × 480 backing resolution.</p></div></div><p class="virtualDirectGuideNote">Virtual editing now uses the same underlying groovebox state as the hardware control path.</p>`;
   card.insertAdjacentElement('afterend',guide);
 }
 
