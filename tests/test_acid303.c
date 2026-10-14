@@ -15,6 +15,47 @@ static void test_equal_tempered_pitch(void) {
     /* A4=440 Hz at 44.1 kHz => phase increment about 42,852,288. */
     assert(a4>42850000u&&a4<42855000u);
 }
+
+/* This deliberately measures the final acid303_process() waveform, rather than
+   trusting only the DDS increment. A pitch-table bug can therefore not remain
+   hidden behind otherwise-green arithmetic tests. With a square source,
+   resonance off and the cutoff fully open, the conditioned 303 output must
+   retain one positive zero crossing per oscillator period. */
+static uint32_t rendered_positive_crossings(uint8_t note) {
+    acid303_t s;
+    int32_t prev;
+    uint32_t count=0u;
+    acid303_init(&s);
+    s.square=1u;
+    s.cutoff=32767u;
+    s.resonance=0u;
+    s.env_mod=0u;
+    s.accent=0u;
+    s.drive=0u;
+    s.tune=0;
+    acid303_set_note(&s,note,0u,0u);
+    for(uint32_t i=0u;i<4096u;++i)(void)acid303_process(&s);
+    prev=acid303_process(&s);
+    for(uint32_t i=0u;i<22050u;++i){
+        int32_t y=acid303_process(&s);
+        if(prev<=0&&y>0)++count;
+        prev=y;
+    }
+    return count;
+}
+static void test_rendered_pitch_end_to_end(void) {
+    uint32_t c2=rendered_positive_crossings(36u);
+    uint32_t c3=rendered_positive_crossings(48u);
+    uint32_t c4=rendered_positive_crossings(60u);
+    printf("rendered 303 pitch crossings/0.5s: C2=%u C3=%u C4=%u\n",c2,c3,c4);
+    /* Expected counts for 65.4, 130.8 and 261.6 Hz over half a second.
+       Allow margin for the analog-conditioning/filter path around zero. */
+    assert(c2>=29u&&c2<=37u);
+    assert(c3>=61u&&c3<=70u);
+    assert(c4>=126u&&c4<=136u);
+    assert(c3>c2*18u/10u&&c3<c2*22u/10u);
+    assert(c4>c3*18u/10u&&c4<c3*22u/10u);
+}
 static void test_tune_control(void) {
     uint32_t base = acid303_note_to_phase_inc(48);
     assert(acid303_apply_tune(base, -12) == base/2u);
@@ -42,4 +83,4 @@ static void test_saw_and_303_square_are_different(void) { acid303_t a,b; acid303
 static void test_lfo_runs_all_shapes(void) { acid303_t s;acid303_init(&s);s.lfo_amount=90u;int changed=0;for(uint8_t shape=0;shape<4u;++shape){s.lfo_shape=shape;s.lfo_phase=0u;int16_t first=acid303_lfo_value(&s);for(int i=0;i<4096;++i)acid303_process(&s);int16_t later=acid303_lfo_value(&s);if(later!=first)changed++;}assert(changed==4); }
 static uint64_t render_shape_hash(uint8_t shape){acid303_t s;acid303_init(&s);s.lfo_shape=shape;s.lfo_amount=110u;s.lfo_rate=90u;acid303_set_note(&s,48,0,0);uint64_t h=1469598103934665603ull;for(int i=0;i<12000;++i){uint16_t y=(uint16_t)acid303_process(&s);h^=(uint8_t)y;h*=1099511628211ull;h^=(uint8_t)(y>>8);h*=1099511628211ull;}return h;}
 static void test_lfo_shapes_change_audio(void){uint64_t h[4];for(uint8_t i=0;i<4u;++i)h[i]=render_shape_hash(i);for(unsigned i=0;i<4u;++i)for(unsigned j=i+1u;j<4u;++j)assert(h[i]!=h[j]);}
-int main(void){test_note_order();test_equal_tempered_pitch();test_tune_control();test_output_is_bounded();test_stock_mode_has_no_lfo();test_measured_cutoff_mapping();test_slide_is_legato_and_converges();test_stock_slide_time_constant();test_slide_updates_accent_without_retrigger();test_note_off_closes_vca();test_accent_release_is_longer();test_accent_vca_is_materially_stronger();test_idle_only_resets_analog_path();test_open303_rc_paths();test_saw_and_303_square_are_different();test_lfo_runs_all_shapes();test_lfo_shapes_change_audio();puts("acid303 circuit-model tests: ok");return 0;}
+int main(void){test_note_order();test_equal_tempered_pitch();test_rendered_pitch_end_to_end();test_tune_control();test_output_is_bounded();test_stock_mode_has_no_lfo();test_measured_cutoff_mapping();test_slide_is_legato_and_converges();test_stock_slide_time_constant();test_slide_updates_accent_without_retrigger();test_note_off_closes_vca();test_accent_release_is_longer();test_accent_vca_is_materially_stronger();test_idle_only_resets_analog_path();test_open303_rc_paths();test_saw_and_303_square_are_different();test_lfo_runs_all_shapes();test_lfo_shapes_change_audio();puts("acid303 circuit-model tests: ok");return 0;}
