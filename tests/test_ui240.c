@@ -33,10 +33,22 @@ int main(void)
     ui240_set_page(&ui, UI240_ACID_STEP);
     ui240_snapshot(&ui, &g, &v);
     assert(v.step_type == UI240_STEP_NOTE && v.accent && v.slide);
+    /* Shared K1 editing must use the corrected ReBirth/TB-303 register:
+       DOWN 48..60, NORMAL 60..72, UP 72..84. */
     ui240_edit_acid_step(&ui, &g, 0u, 1);
-    assert(g.acid_seq[1].step[5].note == 24u);
+    assert(g.acid_seq[1].step[5].note == 60u);
     ui240_edit_acid_step(&ui, &g, 0u, 1);
-    assert(g.acid_seq[1].step[5].note == 25u);
+    assert(g.acid_seq[1].step[5].note == 61u);
+    g.acid_seq[1].step[5].note = 48u;
+    g.acid_seq[1].step[5].flags |= SEQ16_DOWN;
+    ui240_edit_acid_step(&ui, &g, 0u, 1);
+    assert(g.acid_seq[1].step[5].note == 49u);
+    g.acid_seq[1].step[5].flags &= (uint8_t)~SEQ16_DOWN;
+    g.acid_seq[1].step[5].flags |= SEQ16_UP;
+    g.acid_seq[1].step[5].note = 72u;
+    ui240_edit_acid_step(&ui, &g, 0u, 1);
+    assert(g.acid_seq[1].step[5].note == 73u);
+    g.acid_seq[1].step[5].flags &= (uint8_t)~SEQ16_UP;
     ui240_edit_acid_step(&ui, &g, 3u, -1);
     assert(g.acid_seq[1].step[5].probability == 95u);
     ui240_set_acid_step_type(&ui, &g, UI240_STEP_TIE);
@@ -46,10 +58,13 @@ int main(void)
     ui240_set_machine(&ui, UI240_MACHINE_808);
     ui.selected_lane = DRUM_BD;
     ui.selected_step = 0u;
-    ui240_edit_drum(&ui, &g, 1u, 1);
+    ui240_edit_drum(&ui, &g, 0u, 1); /* K1 lane */
+    assert(ui.selected_lane == DRUM_SD);
+    ui.selected_lane = DRUM_BD;
+    ui240_edit_drum(&ui, &g, 1u, 1); /* K2 OFF -> HIT */
     ui240_snapshot(&ui, &g, &v);
     assert(v.drum_state == 1u && (v.drum_hits & (1u << DRUM_BD)));
-    ui240_edit_drum(&ui, &g, 1u, 1);
+    ui240_edit_drum(&ui, &g, 1u, 1); /* K2 HIT -> ACCENT */
     ui240_snapshot(&ui, &g, &v);
     assert(v.drum_state == 2u && (v.drum_accents & (1u << DRUM_BD)));
 
@@ -57,35 +72,44 @@ int main(void)
     ui.selected_lane = DRUM_SD;
     ui.selected_step = 2u;
     ui240_edit_drum(&ui, &g, 1u, 1); /* LOW hit */
-    ui240_edit_drum(&ui, &g, 2u, 1); /* FLAM */
+    ui240_edit_drum(&ui, &g, 2u, 1); /* K3 FLAM */
     ui240_snapshot(&ui, &g, &v);
     assert(v.drum_state == 1u);
-    assert(v.drum_flam == 1u); /* p2 alias on DRUM page */
+    assert(v.drum_flam == 1u);
     {
         uint16_t before = g.flam_width_samples;
-        ui240_edit_drum(&ui, &g, 3u, 1);
+        ui240_edit_drum(&ui, &g, 3u, 1); /* K4 flam width */
         assert(g.flam_width_samples > before);
         ui240_snapshot(&ui, &g, &v);
-        assert(v.flam_width_pct > 0u); /* p3 alias */
+        assert(v.flam_width_pct > 0u);
     }
-    ui240_edit_drum(&ui, &g, 1u, -1); /* LOW -> OFF clears flam */
+    ui240_edit_drum(&ui, &g, 1u, -1);
     ui240_snapshot(&ui, &g, &v);
     assert(v.drum_state == 0u && v.drum_flam == 0u);
 
     ui240_set_page(&ui, UI240_MIXER);
     {
-        int16_t before = g.mixer.track[3].level;
+        int16_t level = g.mixer.track[3].level;
+        int16_t pan = g.mixer.track[3].pan;
+        uint8_t delay = g.mixer.track[3].delay_send;
+        uint8_t reverb = g.mixer.track[3].reverb_send;
         ui240_edit_mixer(&ui, &g, 0u, -1);
-        assert(g.mixer.track[3].level < before);
+        ui240_edit_mixer(&ui, &g, 1u, 1);
         ui240_edit_mixer(&ui, &g, 2u, 1);
-        assert(g.mixer.track[3].delay_send > 0u);
+        ui240_edit_mixer(&ui, &g, 3u, 1);
+        assert(g.mixer.track[3].level < level);
+        assert(g.mixer.track[3].pan > pan);
+        assert(g.mixer.track[3].delay_send > delay);
+        assert(g.mixer.track[3].reverb_send > reverb);
     }
 
     ui240_set_page(&ui, UI240_FX);
     assert(ui.fx_section == UI240_FX_PCF);
     { int16_t before=g.mixer.filter_cutoff; ui240_edit_fx(&ui,&g,0u,1); assert(g.mixer.filter_cutoff>before); }
     ui240_cycle_fx_section(&ui,1); assert(ui.fx_section==UI240_FX_DELAY);
+    { uint16_t before=g.mixer.delay_len; ui240_edit_fx(&ui,&g,0u,1); assert(g.mixer.delay_len>before); }
     { int16_t before=g.mixer.delay_feedback; ui240_edit_fx(&ui,&g,2u,1); assert(g.mixer.delay_feedback>before); }
+    { int16_t before=g.mixer.delay_mix; ui240_edit_fx(&ui,&g,3u,1); assert(g.mixer.delay_mix>before); }
     ui240_cycle_fx_section(&ui,1); assert(ui.fx_section==UI240_FX_DIST);
     { int16_t before=g.mixer.drive; ui240_edit_fx(&ui,&g,0u,1); assert(g.mixer.drive>before); }
     ui240_cycle_fx_section(&ui,1); assert(ui.fx_section==UI240_FX_COMP);
