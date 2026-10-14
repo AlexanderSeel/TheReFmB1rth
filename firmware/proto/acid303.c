@@ -22,6 +22,7 @@
 #define Q15_ONE 32767
 #define Q20_ONE 1048576ll
 #define COEFF_PERIOD 32u
+#define ACID_OVERSAMPLE 4u
 
 static int32_t clamp32(int64_t x, int32_t lo, int32_t hi) {
     if (x < lo) return lo;
@@ -30,8 +31,7 @@ static int32_t clamp32(int64_t x, int32_t lo, int32_t hi) {
 }
 
 /* Equal-tempered DDS increments at 44.1 kHz for MIDI notes 0..11
-   (C-1..B-1, A4=440 Hz). The previous table was about five times too low,
-   which made the entire acid engine sound almost 28 semitones flat. */
+   (C-1..B-1, A4=440 Hz). */
 static const uint32_t semitone_inc[12] = {
     796254u, 843601u, 893765u, 946911u, 1003217u, 1062871u,
     1126073u, 1193033u, 1263974u, 1339134u, 1418763u, 1503127u
@@ -47,8 +47,7 @@ uint32_t acid303_note_to_phase_inc(uint8_t note) {
     return inc;
 }
 
-/* ReBirth's Tune control is +/- one octave in semitone steps. Keep that
-   musical contract rather than the former tiny linear pitch offset. */
+/* ReBirth's Tune control is +/- one octave in semitone steps. */
 uint32_t acid303_apply_tune(uint32_t phase_inc, int8_t tune) {
     static const uint32_t up_q16[13] = {
         65536u,69433u,73562u,77936u,82570u,87480u,92682u,
@@ -125,12 +124,13 @@ static int32_t resonance_skew_q15(uint16_t resonance) {
     return (int32_t)lut[i] + (int32_t)(((int64_t)((int32_t)lut[i + 1u] - lut[i]) * frac) >> 15);
 }
 
-/* Open303 TB_303 coefficient formulas evaluated for our 2x (88.2 kHz) ladder. */
+/* Open303 TB_303 coefficient formulas evaluated at the same 4x (176.4 kHz)
+   oscillator/filter rate used by Open303. */
 static int32_t tb_b0_q15(uint32_t hz) {
     if (hz < 200u) hz = 200u;
     if (hz > 20000u) hz = 20000u;
     {
-        int64_t fx = ((int64_t)hz << 20) / 124734ll;
+        int64_t fx = ((int64_t)hz << 20) / 249468ll;
         int64_t fx2 = (fx * fx) >> 20;
         int64_t num = 477ll + ((6493013ll * fx) >> 20);
         int64_t den = Q20_ONE + ((12958674ll * fx) >> 20) + ((4630128ll * fx2) >> 20);
@@ -143,7 +143,7 @@ static int32_t tb_kbase_q12(uint32_t hz) {
     if (hz < 200u) hz = 200u;
     if (hz > 20000u) hz = 20000u;
     {
-        int64_t x = ((int64_t)hz << 20) / 124734ll;
+        int64_t x = ((int64_t)hz << 20) / 249468ll;
         int64_t y = 4096ll;
         y = 29485874ll + ((y * x) >> 20);
         y = -23911595ll + ((y * x) >> 20);
@@ -174,15 +174,19 @@ static void reset_analog_path(acid303_t *s) {
 
 void acid303_init(acid303_t *s) {
     memset(s, 0, sizeof(*s));
-    s->cutoff = 10500u;
-    s->resonance = 19000u;
-    s->env_mod = 23500u;
-    s->decay = 12500u;
-    s->accent = 21000u;
+    /* Reference-like neutral startup, close to Open303's defaults. The old
+       startup was much darker: ~560 Hz cutoff, ~58% resonance and ~72% env
+       modulation, which made the voice sound like sub-bass rumble before the
+       user had touched a control. */
+    s->cutoff = 18688u;      /* ~1000 Hz nominal cutoff */
+    s->resonance = 0u;
+    s->env_mod = 8192u;      /* 25% */
+    s->decay = 14563u;       /* ~1000 ms in the stock 200..2000 ms range */
+    s->accent = 0u;
     s->drive = 0u;
     s->tune = 0;
-    s->amp_sustain = 127u;
-    s->amp_release = 110u;
+    s->amp_sustain = 0u;
+    s->amp_release = 0u;
     s->lfo_rate = 35u;
     s->lfo_amount = 0u;
     s->lfo_shape = ACID_LFO_SINE;
@@ -193,8 +197,6 @@ void acid303_init(acid303_t *s) {
 void acid303_set_note(acid303_t *s, uint8_t note, uint8_t accent, uint8_t slide) {
     uint32_t inc = acid303_apply_tune(acid303_note_to_phase_inc(note), s->tune);
     if (slide && s->gate) {
-        /* Open303 slideToNote changes only pitch target + accent/release mode;
-           the main filter/VCA envelopes are deliberately not retriggered. */
         s->slide_target_inc = inc;
         s->sliding = 1u;
         s->accented = accent ? 1u : 0u;
@@ -299,15 +301,11 @@ static void slide_step(acid303_t *s) {
 
 static void envelope_step(acid303_t *s) {
     decay_env(&s->env, decay_tau_samples(s->decay, s->accented));
-
-    /* Open303 default rc1 is effectively direct; rc2 is a 15 ms leaky
-       integrator driven only while accentGain is non-zero. */
     s->env_rc = s->env;
     {
         int32_t accent_target = (s->accented && s->accent) ? s->env : 0;
         s->accent_env += (int32_t)(((int64_t)(accent_target - s->accent_env) * 50) >> 15);
     }
-
     if (s->gate) decay_env(&s->amp, (SR * 1230u) / 1000u);
     else decay_env(&s->amp, (SR * (s->accented ? 50u : 1u)) / 1000u);
     if (!s->amp) {
@@ -317,34 +315,32 @@ static void envelope_step(acid303_t *s) {
 }
 
 static int32_t feedback_highpass(acid303_t *s, int32_t x) {
+    /* 150 Hz feedback HP at the 176.4 kHz ladder rate. */
     int32_t d = x - s->resonance_hp_lp;
-    s->resonance_hp_lp += (int32_t)(((int64_t)d * 346) >> 15);
+    s->resonance_hp_lp += (int32_t)(((int64_t)d * 175) >> 15);
     return x - s->resonance_hp_lp;
 }
 
 static int32_t pre_ladder_highpass(acid303_t *s, int32_t x) {
-    /* Open303 OnePoleFilter HIGHPASS at 44.486 Hz / 88.2 kHz. */
+    /* Standard one-pole HP: y[n] = alpha * (y[n-1] + x[n] - x[n-1]).
+       Open303 uses 44.486 Hz before the ladder at the oversampled rate. */
     int32_t diff = x - s->output_hp_x;
-    int32_t y = (int32_t)(((int64_t)diff * 32716) >> 15) +
-                (int32_t)(((int64_t)s->output_hp_y * 32664) >> 15);
+    int32_t y = (int32_t)(((int64_t)(s->output_hp_y + diff) * 32716) >> 15);
     s->output_hp_x = x;
     s->output_hp_y = y;
     return y;
 }
 
 static int32_t post_ladder_highpass(acid303_t *s, int32_t x) {
-    /* Open303 OnePoleFilter HIGHPASS at 24.167 Hz / 44.1 kHz. */
+    /* Open303's 24.167 Hz output HP at 44.1 kHz. */
     int32_t diff = x - s->post_hp_x;
-    int32_t y = (int32_t)(((int64_t)diff * 32712) >> 15) +
-                (int32_t)(((int64_t)s->post_hp_y * 32655) >> 15);
+    int32_t y = (int32_t)(((int64_t)(s->post_hp_y + diff) * 32655) >> 15);
     s->post_hp_x = x;
     s->post_hp_y = y;
     return y;
 }
 
 static int32_t declick_gain(acid303_t *s, int32_t target) {
-    /* Two cascaded ~200 Hz one-poles approximate Open303's 12 dB low-pass.
-       Its configured gain is sqrt(0.5), so preserve that level relationship. */
     s->gain_smooth1 += (int32_t)(((int64_t)(target - s->gain_smooth1) * 920) >> 15);
     s->gain_smooth2 += (int32_t)(((int64_t)(s->gain_smooth1 - s->gain_smooth2) * 920) >> 15);
     return (int32_t)(((int64_t)s->gain_smooth2 * 23170) >> 15);
@@ -379,8 +375,6 @@ static void advance_filter_coeffs(acid303_t *s) {
 }
 
 static int32_t teebee_ladder_substep(acid303_t *s, int32_t in) {
-    /* Open303's current TB_303 path uses linear y4 feedback here; the cubic
-       shaper is deliberately not active in this mode. */
     int32_t fb = clamp32(((int64_t)s->lp4 * s->coeff_k) >> 15, -262144, 262144);
     int32_t y0 = clamp32((int64_t)in - feedback_highpass(s, fb), -196608, 196608);
     int32_t d1 = clamp32((int64_t)y0 - s->lp1 + s->lp2, -262144, 262144);
@@ -400,8 +394,6 @@ static int32_t teebee_ladder_substep(acid303_t *s, int32_t in) {
     return clamp32(((int64_t)2 * s->coeff_g * s->lp4) >> 15, -131072, 131072);
 }
 
-/* Q15 approximation of 2^x for x in roughly -2..5 octaves. The polynomial is
-   evaluated only at control rate, avoiding libm and large lookup tables. */
 static int32_t exp2_q15(int32_t x_q15) {
     int32_t ip;
     int32_t frac;
@@ -423,10 +415,6 @@ static int32_t exp2_q15(int32_t x_q15) {
 }
 
 static uint32_t measured_env_cutoff(acid303_t *s) {
-    /* Direct fixed-point translation of Open303's measured mapping:
-       tmp1 = envScaler * (mainEnv - envOffset)
-       tmp2 = accentGain * rc2(mainEnv)
-       cutoff = nominalCutoff * 2^(tmp1 + tmp2) */
     int32_t c = s->cutoff > 32767u ? 32767 : (int32_t)s->cutoff;
     int32_t e = s->env_mod > 32767u ? 32767 : (int32_t)s->env_mod;
     int32_t s_lo = 24149 + (int32_t)(((int64_t)123666 * e) >> 15);
@@ -466,18 +454,23 @@ int32_t acid303_process(acid303_t *s) {
     }
 
     {
-        uint32_t sub_inc = s->phase_inc >> 1;
-        int32_t y0, y1, y, gain;
+        uint32_t sub_inc = s->phase_inc >> 2;
+        int32_t y0, y1, y2, y3, y, gain;
         if (!sub_inc && s->phase_inc) sub_inc = 1u;
 
-        /* Open303 negates the oscillator before the pre-filter HPF. */
+        /* Match Open303's 4x oscillator/filter processing rate. The generated
+           source tables are already band-limited to the final 44.1 kHz output
+           Nyquist, so averaging the four ladder samples is a conservative
+           embedded downsampler without reintroducing ultrasonic aliases. */
         y0 = teebee_ladder_substep(s, pre_ladder_highpass(s, -oscillator_substep(s, sub_inc)));
         y1 = teebee_ladder_substep(s, pre_ladder_highpass(s, -oscillator_substep(s, sub_inc)));
-        y = post_ladder_highpass(s, (y0 + y1) / 2);
+        y2 = teebee_ladder_substep(s, pre_ladder_highpass(s, -oscillator_substep(s, sub_inc)));
+        y3 = teebee_ladder_substep(s, pre_ladder_highpass(s, -oscillator_substep(s, sub_inc)));
+        y = post_ladder_highpass(s, (y0 + y1 + y2 + y3) / 4);
 
         gain = s->amp;
         if (s->gate) {
-            gain += (int32_t)(((int64_t)s->env * 14746) >> 15); /* ~= 0.45 */
+            gain += (int32_t)(((int64_t)s->env * 14746) >> 15);
             if (s->accented && s->accent) {
                 int32_t accent_gain = (int32_t)(((int64_t)s->env * s->accent) >> 15);
                 gain = clamp32((int64_t)gain + 4ll * accent_gain, 0, 196608);
