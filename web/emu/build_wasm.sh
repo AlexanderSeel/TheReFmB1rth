@@ -109,7 +109,7 @@ grep -q 'focus=!!v(34)' "$OUT/app/rb240_renderer_v2.js"
 grep -q 'Array.from({length:16}' "$OUT/app/rb240_renderer_v2.js"
 grep -q 'window.refmRB240State=s' "$OUT/app/rb240_renderer_v2.js"
 grep -q '480 × 480' "$OUT/app/virtual_usability.js"
-grep -q 'SEQ/DRUM LCD is directly clickable' "$OUT/app/virtual_usability.js"
+grep -q 'SEQ, DRUM, ACID, MIXER and FX are directly editable' "$OUT/app/virtual_usability.js"
 grep -q 'field >= 36u && field < 52u' "$ROOT/web/emu/refm_wasm_performance.inc"
 test -s "$OUT/wasm-channel.json"
 
