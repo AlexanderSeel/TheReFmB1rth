@@ -1,105 +1,48 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
-"""Generate compact Open303-shaped band-limited Q15 oscillator tables.
+"""Generate high-resolution Open303-derived target oscillator mipmaps.
 
-This generator keeps the FM-1-friendly precomputed-table architecture, but the
-prototype shapes now follow Open303's SAW303/SQUARE303 construction instead of
-a generic Fourier saw and arbitrary pulse. Open303 uses a 2048-sample prototype
-and 12 mip levels; this embedded adaptation uses 512-sample tables and ten pitch
-bands to balance fidelity and XIP cost.
+The FM-1 bank is precomputed from the full 2048-sample Open303 SAW303 and
+SQUARE303 prototypes, then stored as 1024-sample Q15 tables.  Twelve pitch
+bands cover the complete supported MIDI range.  Adjacent bands have a two
+semitone crossfade region so a slide cannot hard-switch spectra mid-waveform.
 
-The 303 square is derived from the 303 saw by Open303's tanh shaping constants
-(36.9 dB drive, +4.37 offset), inverted, shifted by 180 degrees, and rendered
-at half the saw level as Open303's BlendOscillator does.
-
-Open303 keeps floating-point headroom through the filter/VCA. The FM-1 path is
-Q15 and ultimately has to hand a bounded sample to the mixer, so the source
-bank deliberately carries 6 dB of embedded headroom. This prevents strong
-accent/resonance combinations from reaching a hard numerical rail before the
-mixer can attenuate them; it does not alter pitch, cutoff, resonance or envelope
-laws.
+A small Nyquist guard band is intentional: the embedded path has only a compact
+4x decimator, so retaining partials exactly at 22.05 kHz is more likely to fold
+interpolation/filter products back into the audible band.  The guard does not
+change oscillator pitch.
 """
 from __future__ import annotations
+
 import argparse
-import cmath
 import math
 from pathlib import Path
 
-BAND_NOTES = [24, 32, 40, 48, 56, 64, 72, 80, 88, 96]
-SIZE = 512
-BITS = 9
-OUT_SR = 44100.0
-BANDLIMIT_HZ = OUT_SR * 0.5
+from acid303_wavetable_common import (
+    OUT_SR,
+    harmonic_budget,
+    open303_prototypes,
+    phase_inc,
+    positive_spectrum,
+    q15_stats,
+    render_band,
+)
+
+SIZE = 1024
+BITS = 10
+BAND_CENTERS = [24, 33, 42, 51, 60, 69, 78, 87, 96, 105, 114, 123]
+CROSSFADE_SEMITONES = 2
+BANDLIMIT_HZ = OUT_SR * 0.45
 SAW_SCALE = 16384.0
 SQUARE_SCALE = SAW_SCALE * 0.5
-TANH_DRIVE_DB = 36.9
-TANH_OFFSET = 4.37
-SQUARE_PHASE_DEG = 180.0
 
 
-def hz(note: int) -> float:
-    return 440.0 * 2.0 ** ((note - 69) / 12.0)
+def threshold_notes() -> list[int]:
+    return [math.floor((a + b) * 0.5 + 0.5) for a, b in zip(BAND_CENTERS, BAND_CENTERS[1:])]
 
 
-def phase_inc(note: int) -> int:
-    return round((2.0**32) * hz(note) / OUT_SR)
-
-
-def open303_saw_prototype() -> list[float]:
-    # Matches rosic_MipMappedWaveTable::fillWithSaw303(): rise 0..1 over
-    # the first half, discontinuity, then rise -1..0 over the second half.
-    n = SIZE
-    n1 = max(1, min(n - 1, round(0.5 * (n - 1))))
-    n2 = n - n1
-    s1 = 1.0 / (n1 - 1)
-    s2 = 1.0 / n2
-    out = []
-    for i in range(n):
-        out.append(s1 * i if i < n1 else -1.0 + s2 * (i - n1))
-    return out
-
-
-def open303_square_prototype(saw: list[float]) -> list[float]:
-    # Open303 defaults from MipMappedWaveTable ctor.
-    shaper = 10.0 ** (TANH_DRIVE_DB / 20.0)
-    shaped = [-math.tanh(shaper * x + TANH_OFFSET) for x in saw]
-    shift = round(SIZE * SQUARE_PHASE_DEG / 360.0) % SIZE
-    if shift:
-        shaped = shaped[-shift:] + shaped[:-shift]
-    return shaped
-
-
-def spectrum(proto: list[float]) -> list[complex]:
-    # Positive-frequency DFT coefficients. Open303's mipmap explicitly removes
-    # DC and Nyquist, so we do the same and reconstruct only harmonics 1..N/2-1.
-    n = len(proto)
-    coeff = [0j] * (n // 2)
-    for k in range(1, n // 2):
-        acc = 0j
-        for i, x in enumerate(proto):
-            acc += x * cmath.exp(-2j * math.pi * k * i / n)
-        coeff[k] = acc / n
-    return coeff
-
-
-def bandlimited(coeff: list[complex], harmonics: int, scale: float) -> list[int]:
-    n = SIZE
-    hmax = max(1, min(harmonics, n // 2 - 1))
-    out: list[int] = []
-    for i in range(n):
-        z = 0j
-        phase = 2j * math.pi * i / n
-        for k in range(1, hmax + 1):
-            z += coeff[k] * cmath.exp(phase * k)
-        # Positive + mirrored negative spectrum.
-        v = 2.0 * z.real
-        out.append(max(-32768, min(32767, round(v * scale))))
-    return out
-
-
-def band_upper_notes() -> list[int]:
-    mids = [(BAND_NOTES[i] + BAND_NOTES[i + 1]) // 2 for i in range(len(BAND_NOTES) - 1)]
-    return mids + [104]
+def upper_notes() -> list[int]:
+    return threshold_notes() + [127]
 
 
 def c_array(name: str, values: list[int]) -> str:
@@ -110,30 +53,41 @@ def c_array(name: str, values: list[int]) -> str:
 
 
 def generate() -> str:
-    saw_proto = open303_saw_prototype()
-    square_proto = open303_square_prototype(saw_proto)
-    saw_spec = spectrum(saw_proto)
-    square_spec = spectrum(square_proto)
-    uppers = band_upper_notes()
-    tables = []
-    harmonic_counts = []
+    saw_proto, square_proto = open303_prototypes()
+    max_h = SIZE // 2 - 1
+    saw_spec = positive_spectrum(saw_proto, max_h)
+    square_spec = positive_spectrum(square_proto, max_h)
+    uppers = upper_notes()
+    thresholds_notes = threshold_notes()
+    thresholds = [phase_inc(n) for n in thresholds_notes]
+    xfade_starts = [phase_inc(max(0, n - CROSSFADE_SEMITONES)) for n in thresholds_notes]
+
+    tables: list[tuple[list[int], list[int]]] = []
+    harmonic_counts: list[int] = []
     for upper_note in uppers:
-        harmonics = min(SIZE // 2 - 1, max(1, int(BANDLIMIT_HZ // hz(upper_note))))
-        tables.append((bandlimited(saw_spec, harmonics, SAW_SCALE),
-                       bandlimited(square_spec, harmonics, SQUARE_SCALE)))
+        harmonics = harmonic_budget(upper_note, SIZE, BANDLIMIT_HZ)
+        saw = render_band(saw_spec, SIZE, harmonics, SAW_SCALE)
+        square = render_band(square_spec, SIZE, harmonics, SQUARE_SCALE)
+        if q15_stats(saw)[0] >= 32767 or q15_stats(square)[0] >= 32767:
+            raise RuntimeError("303 source table lost fixed-point headroom")
+        tables.append((saw, square))
         harmonic_counts.append(harmonics)
-    mids = [(BAND_NOTES[i] + BAND_NOTES[i + 1]) // 2 for i in range(len(BAND_NOTES) - 1)]
-    thresholds = [phase_inc(note) for note in mids]
+
+    if any(b > a for a, b in zip(harmonic_counts, harmonic_counts[1:])):
+        raise RuntimeError("303 harmonic budgets must decrease with pitch")
+
     out = [
         "// SPDX-License-Identifier: GPL-3.0-only\n",
         "/* Generated by tools/generate_303_wavetables.py. Do not hand-edit. */\n",
         "#ifndef REFM_ACID303_WAVETABLE_H\n#define REFM_ACID303_WAVETABLE_H\n#include <stdint.h>\n",
-        f"#define REFM_ACID_WT_BANDS {len(BAND_NOTES)}u\n",
+        f"#define REFM_ACID_WT_BANDS {len(BAND_CENTERS)}u\n",
         f"#define REFM_ACID_WT_BITS {BITS}u\n",
         f"#define REFM_ACID_WT_SIZE {SIZE}u\n",
         f"#define REFM_ACID_WT_MASK {SIZE - 1}u\n",
         "static const uint32_t refm_acid_wt_threshold_inc[REFM_ACID_WT_BANDS-1u] = {\n    "
         + ", ".join(f"{v}u" for v in thresholds) + "\n};\n",
+        "static const uint32_t refm_acid_wt_xfade_start_inc[REFM_ACID_WT_BANDS-1u] = {\n    "
+        + ", ".join(f"{v}u" for v in xfade_starts) + "\n};\n",
         "static const uint16_t refm_acid_wt_harmonics[REFM_ACID_WT_BANDS] = {\n    "
         + ", ".join(str(v) for v in harmonic_counts) + "\n};\n",
     ]
@@ -160,11 +114,11 @@ def main() -> int:
     if args.check:
         if not args.output.exists() or args.output.read_text() != text:
             raise SystemExit(f"wavetable is stale: run {Path(__file__).as_posix()}")
-        print(f"303 wavetable ok: {len(BAND_NOTES)} bands x {SIZE} x 2 Q15")
+        print(f"303 wavetable ok: {len(BAND_CENTERS)} bands x {SIZE} x 2 Q15 (Open303 prototype)")
         return 0
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(text)
-    print(f"wrote {args.output}: {len(BAND_NOTES)} bands x {SIZE} x 2 Q15")
+    print(f"wrote {args.output}: {len(BAND_CENTERS)} bands x {SIZE} x 2 Q15")
     return 0
 
 

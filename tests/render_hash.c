@@ -3,11 +3,12 @@
 #include <stdio.h>
 #include "../firmware/proto/groovebox.h"
 
-/* beta.8 clean-audio fingerprint. This intentional change combines the
-   analogue-range 808/909 fallback, transparent four-track master headroom and
-   Open303 60 ms slide correction. Pitch, clipping, individual drum tuning and
-   mixer linearity are independently guarded by behavioral tests. */
-#define EXPECTED_RENDER_HASH 0x72807c8acccc8563ull
+/* beta.9 oscillator fingerprint. The intentional audio change is confined to
+   the ACID source path: 1024-sample Open303-derived SAW/SQUARE mipmaps, twelve
+   full-range pitch bands, a small final-Nyquist guard and phase-aligned
+   adjacent-band crossfades. Pitch, headroom, filter/envelope laws, mixer and
+   drum behavior remain independently guarded by behavioral tests. */
+#define EXPECTED_RENDER_HASH 0xfc95a3f20ce36f5bull
 
 static uint64_t fnv1a_u16(uint64_t h, uint16_t v) {
     h ^= (uint8_t)v; h *= 1099511628211ull;

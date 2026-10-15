@@ -17,72 +17,70 @@ No Roland/Propellerhead/ReBirth artwork, logos, proprietary source, ROMs, or non
 
 ---
 
-# Current checkpoint — beta.8 clean-audio correction, 2026-10-15
+# Current checkpoint — beta.9 303 oscillator refinement, 2026-10-15
 
-The physical beta.7 listening pass failed the audio-quality gate. Reported symptoms were global overload/distortion, a thin metallic 303 square, apparently drifting/detuned pitch and harsh overloaded drums. These are treated as implementation defects, not as a request for more distortion or “analog character”.
+Beta.8 corrected the global physical audio path: exact live pitch routing, stable DDS pitch, true 60 ms slide, clean four-track summing, unity target output after the physical MASTER control, and rebuilt synthesized 808/909 voices.
 
-The next requested immutable hardware-test prerelease is **`v0.1.0-beta.8`**. Existing beta tags must not be overwritten or repointed.
+The remaining physical concern is specifically the 303 source timbre, especially SQUARE sounding thin/metallic. Beta.9 therefore isolates and improves **wavetable generation and mip selection** without changing the already-validated filter, resonance, envelope, accent or mixer laws.
 
-## Root causes found
+The next requested immutable hardware-test prerelease is **`v0.1.0-beta.9`**. Existing beta tags must not be overwritten or repointed.
 
-- [x] Live ACID MIDI/physical notes were passed through an editor clamp ending at MIDI 60, so every live key above C4 became C4.
-- [x] ACID slide claimed the Open303 60 ms behavior but used a ~12 ms per-sample slew divisor.
-- [x] Upper MIDI DDS conversion capped the octave calculation and could fold high notes.
-- [x] The four-track mixer could narrow/clip the summed bus even with DIST=0.
-- [x] Fresh projects still passed through PCF math rather than an explicit fully-open bypass.
-- [x] The target stack applied an additional fixed post-master attenuation even after shared mixer headroom was introduced.
-- [x] The synthetic 808 kick fundamental was around 390 Hz with an extremely short decay instead of a bass-drum fundamental.
-- [x] Several synthetic drum voices were similarly pitched too high.
-- [x] Closed/open hats used signed bitwise XOR as an audio-combination operation, producing digital metallic artefacts.
+## beta.9 wavetable findings
 
-## beta.8 corrective implementation
+- [x] Beta.8 target tables were only 512 samples per band.
+- [x] Beta.8 changed complete mip tables abruptly at pitch thresholds; adjacent bands have different upper partials, so a slide could change spectrum discontinuously.
+- [x] Target and Virtual did not use exactly the same source model: target SQUARE was Open303-shaped while the HQ/browser generator used a more ideal square construction.
+- [x] The old 10-band target bank did not describe the complete MIDI register as explicitly as the new full-range scheme.
 
-### ACID pitch / 303 behavior
+## beta.9 implementation
 
-- [x] Live MIDI/physical note entry reaches `acid303_set_note()` unchanged.
-- [x] Programmed-step editing remains independently constrained to its intended C1..C6 editor range.
-- [x] DDS remains monotonic through the upper MIDI range instead of folding at an octave cap.
-- [x] A4=440 Hz and the TB-303 low-A service anchor near 110 Hz remain explicit tests.
-- [x] End-to-end rendered C2/C3/C4 pitch remains guarded.
-- [x] A one-second no-slide/no-LFO test proves `phase_inc` and LFO phase remain static: no hidden pitch drift is introduced.
-- [x] Stock slide now uses a real 60 ms time constant at 44.1 kHz (`2646` samples per e-fold).
-- [x] Existing Open303/TeeBee cutoff, Env Mod, resonance, accent and AC-coupling laws are retained rather than randomly retuned.
-- [x] Per-ACID drive remains optional and starts at zero.
+### Shared SAW303 / SQUARE303 source
 
-### Mixer / clean signal path
+- [x] Add one shared generator module for target and Virtual.
+- [x] Start from a **2048-sample Open303-style SAW303 prototype**.
+- [x] Derive SQUARE303 from that saw using the Open303-style 36.9 dB tanh drive, +4.37 offset, polarity inversion and 180° phase shift.
+- [x] Preserve Open303's half-square raw amplitude convention.
+- [x] Preserve the existing 6 dB fixed-point source headroom.
+- [x] Preserve the existing zero-mean periodic spectral reconstruction so this beta does not also change oscillator DC/ladder bias.
+- [x] Remove the different ideal-square HQ/browser construction.
 
-- [x] All four track faders start at unity.
-- [x] One explicit -12 dB master summing stage provides enough headroom for four full-scale tracks.
-- [x] Master DIST starts at zero and is mathematically neutral at zero.
-- [x] COMP starts transparent.
-- [x] PCF starts fully open and bypasses the one-pole coloration at its maximum setting.
-- [x] Four simultaneous hot tracks are regression-tested to remain off the numerical rails.
-- [x] Physical MASTER remains active after the ReFm render.
-- [x] The obsolete second fixed target attenuation is removed; shared mixer headroom is the single owner of fixed summing attenuation.
+### Target table quality
 
-### 808 / 909 baseline
+- [x] Increase physical FM-1 tables from **512 to 1024 samples**.
+- [x] Increase from 10 to **12 pitch bands**.
+- [x] Cover the supported MIDI range through note 127.
+- [x] Reconstruct each target band from coefficients measured from the full 2048-sample reference prototype rather than from a reduced prototype.
+- [x] Apply a **19.845 kHz** final-output harmonic guard below 22.05 kHz Nyquist.
+- [x] Verify harmonic budgets decrease monotonically as pitch rises.
+- [x] Keep source peaks away from Q15 rails.
 
-- [x] 808 kick fundamental corrected to ~55 Hz.
-- [x] 909 kick fundamental corrected to ~60 Hz.
-- [x] Kick decay extended so it has a body rather than a short high-pitched click.
-- [x] 808/909 snare shell modes moved to approximately 180/200 Hz plus noise.
-- [x] Low/mid/high tom fundamentals moved into musically useful ranges.
-- [x] Hats use bipolar ring multiplication instead of signed bitwise XOR.
-- [x] Cymbal/ride synthesis uses ring/square/noise partials without the old XOR artefact.
-- [x] Drum-machine output reserves transient headroom before returning int16.
-- [x] Kick+snare+hat simultaneous-hit regression test rejects rail clipping.
-- [x] Optional sample routing remains available, but firmware synthesis remains the guaranteed no-sample fallback.
+### Smooth mip transitions
 
-## What is deliberately *not* being done in beta.8
+- [x] Generate explicit transition-start increments for every adjacent band.
+- [x] Start the next band's contribution two semitones before each threshold.
+- [x] Read both mip tables at the same oscillator phase.
+- [x] Q15-crossfade current→next band through the transition region.
+- [x] Use only one lookup when outside a crossfade region.
+- [x] Preserve phase increment/pitch; spectral interpolation must not become pitch modulation.
+
+### Virtual parity
+
+- [x] Keep Virtual table lookup resolution at 2048 samples.
+- [x] Use the same source prototype, band thresholds, harmonic budgets, source headroom and SAW/SQUARE level relation as hardware.
+- [x] Extra Virtual table samples improve interpolation resolution only; they do not add harmonics unavailable on the physical target.
+
+## What beta.9 deliberately does not change
 
 - no random oscillator drift;
-- no “analog detune” modulation;
+- no analog-detune modulation;
+- no arbitrary EQ;
 - no always-on distortion;
-- no resonance-dependent generic waveshaper;
-- no arbitrary EQ to hide gain errors;
-- no further square-wave redesign until the corrected physical signal path is heard on hardware.
-
-If the square still sounds metallic after beta.8, the next investigation must isolate oscillator prototype vs ladder behavior on the physical target rather than compensate blindly.
+- no resonance retuning;
+- no Env Mod retuning;
+- no accent retuning;
+- no oscillator DC/ladder-bias change;
+- no change to the true 60 ms slide law;
+- no change to the beta.8 clean mixer/drum baseline.
 
 ---
 
@@ -153,7 +151,7 @@ If the square still sounds metallic after beta.8, the next investigation must is
 
 ## ACID A / ACID B
 
-- [x] saw + 303-square;
+- [x] saw + Open303-derived 303-square;
 - [x] tune/pitch;
 - [x] cutoff/resonance/Env Mod/decay/accent;
 - [x] slide + tie/rest/note sequencing;
@@ -166,8 +164,13 @@ If the square still sounds metallic after beta.8, the next investigation must is
 - [x] static-pitch-without-modulation regression test;
 - [x] correct 60 ms slide regression test;
 - [x] aggressive fixed-point headroom regression test;
-- [ ] physical square/saw timbre approval on beta.8;
-- [ ] physical cutoff/resonance/env-mod listening calibration;
+- [x] shared 2048-sample source-model generator;
+- [x] 1024-sample / 12-band physical mip bank;
+- [x] final-Nyquist harmonic guard;
+- [x] phase-aligned two-semitone mip crossfade;
+- [x] target/Virtual oscillator spectrum parity;
+- [ ] physical SAW/SQUARE timbre approval on beta.9;
+- [ ] physical cutoff/resonance/env-mod listening calibration.
 
 ## 808 / 909
 
@@ -179,7 +182,7 @@ If the square still sounds metallic after beta.8, the next investigation must is
 - [x] direct runtime drum audition;
 - [x] synthesized fallback audibility test with no samples;
 - [x] drum tuning/headroom regression tests;
-- [ ] physical listening approval on beta.8;
+- [ ] physical listening approval;
 - [ ] physical lane/edit workflow approval.
 
 ## Sequencer / song / mixer / FX
@@ -198,49 +201,51 @@ If the square still sounds metallic after beta.8, the next investigation must is
 
 ---
 
-# Validation gates for beta.8
+# Validation gates for beta.9
 
 The exact candidate commit must pass all of the following before publication:
 
-1. [x] host DSP/integration suite on the corrected branch candidate;
-2. [x] A4=440 + low-A ~110 Hz + octave-ratio pitch tests;
-3. [x] static live-pitch/no-hidden-drift test;
-4. [x] 60 ms slide law test;
-5. [x] end-to-end rendered C2/C3/C4 pitch tests;
-6. [x] four-track clean-mixer no-rail test;
-7. [x] 808/909 fundamental/decay/hat/headroom tests;
-8. [x] deterministic whole-groovebox render fingerprint updated only after the behavioral tests passed;
-9. [ ] exact final-candidate WASM/HQ build and browser smoke tests;
-10. [ ] exact final-candidate pinned Felucca overlay verification;
-11. [ ] exact final-candidate real JieLi FM-1 compile/link/package build;
-12. [ ] exact final-candidate target ROM-reference and memory gates;
-13. [ ] exact final-candidate release manifest/checksum verification;
-14. [ ] exact final `main` Build-all green after squashing the validated tree;
-15. [ ] publish `v0.1.0-beta.8` only from that exact successful `main` commit.
+1. [x] generated target wavetable freshness check;
+2. [x] shared-source spectral/generator regression tests;
+3. [x] 1024-sample target / 12-band / full-MIDI coverage tests;
+4. [x] harmonic-budget and 19.845 kHz guard tests;
+5. [x] SQUARE fundamental/body regression against the shared Open303-style source;
+6. [x] two-semitone transition metadata tests;
+7. [x] A4=440 + low-A ~110 Hz + octave-ratio pitch tests;
+8. [x] static live-pitch/no-hidden-drift test;
+9. [x] 60 ms slide law test;
+10. [x] end-to-end rendered C2/C3/C4 pitch tests;
+11. [x] source/headroom/rail tests;
+12. [x] deterministic whole-groovebox render fingerprint updated only after behavioral tests passed;
+13. [x] stale CI target-output assertion updated to the beta.8 unity-output/shared-headroom contract;
+14. [ ] final exact `main` CI overlay/link test green;
+15. [ ] final exact `main` WASM/HQ build and browser smoke tests green;
+16. [ ] final exact `main` pinned Felucca overlay verification green;
+17. [ ] final exact `main` real JieLi FM-1 compile/link/package build green;
+18. [ ] final target ROM-reference and memory gates green with safe XIP headroom after larger wavetable bank;
+19. [ ] release manifest/checksum verification green;
+20. [ ] publish `v0.1.0-beta.9` only from that exact successful `main` commit.
 
 Existing beta tags remain immutable.
 
 ---
 
-# Physical beta.8 test order
+# Physical beta.9 test order
 
-Test at low external/headphone volume first. This pass is about correctness and cleanliness before fine timbre matching.
+Test at low external/headphone volume first. This pass is specifically for oscillator character and smoothness.
 
-1. [ ] STOP is silent.
-2. [ ] MASTER minimum is effectively silent and scales smoothly upward.
-3. [ ] Play single live ACID notes across the physical keyboard; every key must produce its own stable pitch, including notes above C4.
-4. [ ] Hold one note for several seconds with LFO/slide off; pitch must not wander or continuously retune.
-5. [ ] Compare octave-spaced notes for exact octave relationships.
-6. [ ] Audition SAW with resonance/Env Mod low; confirm it is clean rather than globally overdriven.
-7. [ ] Audition SQUARE with resonance/Env Mod low; note whether any metallic/thin character remains after the gain-path fix.
-8. [ ] Increase resonance and Env Mod progressively; verify harshness appears only as an intentional parameter result, not at neutral settings.
-9. [ ] Test a programmed slide and confirm it is smooth rather than a rapid pitch smear.
-10. [ ] Audition 808 BD alone: it should have a low bass body rather than a high metallic click.
-11. [ ] Audition 909 BD and SD alone.
-12. [ ] Audition CH/OH; they should be bipolar metallic/noisy hats rather than digital XOR buzz.
-13. [ ] Play kick+snare+hat together and then a mixed ACID+drum pattern; no global overloaded sound should appear at neutral DIST/COMP/PCF settings.
-14. [ ] Verify DIST can deliberately add coloration when increased and returns to clean behavior at zero.
-15. [ ] Capture runtime diagnostics if any warble/dropout remains; then investigate DMA/CPU underrun rather than changing oscillator pitch math.
+1. [ ] Hold one SAW note for several seconds with LFO/slide off: pitch must be completely stable.
+2. [ ] Hold the same note on SQUARE: pitch must remain identical and stable.
+3. [ ] Compare SAW vs SQUARE with resonance, Env Mod, accent and drive low/neutral; SQUARE should no longer present as a thin digital/metallic substitute waveform.
+4. [ ] Test low, middle and high keyboard registers and listen for sudden spectral jumps between neighboring notes.
+5. [ ] Slowly play chromatic notes across mip-band boundaries; no step-like timbre switch should be obvious.
+6. [ ] Program slow slides spanning several semitones and an octave; listen specifically for metallic spectral clicks/changes during the glide.
+7. [ ] Repeat the slides with SQUARE and SAW separately.
+8. [ ] Raise cutoff while resonance remains low to expose oscillator upper harmonics; check that high notes do not alias into unrelated lower tones.
+9. [ ] Raise resonance gradually and verify any metallic component follows the intended ladder resonance rather than appearing in the raw square source.
+10. [ ] Compare Virtual and physical at matched note/waveform/settings; their basic SAW/SQUARE spectral identity should now be recognizably the same.
+11. [ ] Confirm beta.8 drum and clean-mixer behavior did not regress.
+12. [ ] Capture runtime diagnostics if physical pitch/timbre still warbles under sustained four-machine load; then investigate underrun/CPU rather than adding oscillator drift.
 
 ---
 
@@ -279,15 +284,15 @@ No custom firmware has a zero-brick guarantee.
 - [x] publisher requires the exact successful `main` Build-all commit;
 - [x] publication is skipped when the requested tag already exists;
 - [x] existing betas are immutable;
-- [ ] beta.8 publish only after exact candidate commit is green;
-- [ ] physical validation after beta.8 remains required before treating it as stable.
+- [ ] beta.9 publish only after exact candidate commit is green;
+- [ ] physical validation after beta.9 remains required before treating it as stable.
 
 ---
 
-# Immediate next tasks after beta.8
+# Immediate next tasks after beta.9
 
-1. Perform the physical clean-audio test order above.
-2. If pitch still warbles with slide/LFO off, capture runtime DMA/CPU diagnostics before changing synthesis math again.
-3. If pitch is stable but SQUARE remains too metallic, isolate oscillator prototype versus ladder/filter behavior using matched SAW/SQUARE single-note captures.
-4. Refine 808/909 envelopes/spectral character only after their fundamental tuning and clean headroom are confirmed on hardware.
-5. Resume broader workflow/UI features only after the audio baseline is physically acceptable.
+1. Perform the physical oscillator-focused beta.9 test order above.
+2. If raw SQUARE remains too metallic with neutral filter settings, compare a captured physical single-note spectrum against the shared generated reference before changing the ladder.
+3. If the source is correct but resonance introduces the unwanted character, isolate fixed-point ladder state saturation/coefficient quantization next.
+4. If timbre changes only during slides, capture which pitch boundary is audible and inspect crossfade/target CPU behavior.
+5. Resume broader workflow/UI features only after the physical audio baseline is acceptable.

@@ -34,13 +34,15 @@ jobs:
           test -s .upstream/felucca/.refm-ui-overlay
           test -s .upstream/felucca/.refm-runtime-diag
           test -s .upstream/felucca/.refm-hardware-rework
+          test -s .upstream/felucca/.refm-hardware-clean-output
           grep -q 'no-legacy-graph-strip' .upstream/felucca/.refm-ui-overlay
           grep -q 'protocol=2' .upstream/felucca/.refm-runtime-diag
           grep -q 'keyboard=audio-isr-direct-note-edges' .upstream/felucca/.refm-hardware-rework
           grep -q 'master=felucca-physical-pot-restored' .upstream/felucca/.refm-hardware-rework
           grep -q 'lcd=dirty-region-no-page-rebuild-on-knob' .upstream/felucca/.refm-hardware-rework
           grep -q 'refm_hw_keyboard_scan();' .upstream/felucca/firmware/src/audio.c
-          grep -q 'REFM_HW_HEADROOM_Q15 16384' .upstream/felucca/firmware/src/audio.c
+          grep -q 'REFM_HW_HEADROOM_Q15 32767' .upstream/felucca/firmware/src/audio.c
+          grep -q 'target-output-headroom=unity' .upstream/felucca/.refm-hardware-clean-output
           grep -q 'song.master_q12' .upstream/felucca/firmware/src/audio.c
           grep -q 'refm_hw_output_gain(out, n);' .upstream/felucca/firmware/src/audio.c
           grep -q 'struct rb5_cache' .upstream/felucca/firmware/src/ui_draw.c
