@@ -413,14 +413,34 @@ static void set_filter_coeff_target(acid303_t *s, uint32_t cutoff_hz) {
     g = 32768 + mul_q15(gbase - 32768, r);
     g = mul_q15(g, 32768 + r);
 
-    s->coeff_b0 = b0;
-    s->coeff_k = k;
-    s->coeff_g = g;
-    s->coeff_b0_step = 0;
-    s->coeff_k_step = 0;
-    s->coeff_g_step = 0;
-    s->coeff_valid = 1u;
+    if (!s->coeff_valid) {
+        /* First note starts on the requested coefficient set immediately. */
+        s->coeff_b0 = b0;
+        s->coeff_k = k;
+        s->coeff_g = g;
+        s->coeff_valid = 1u;
+    }
+    /* Reuse the legacy *_step fields as exact interpolation targets. This
+       avoids extra per-voice state while still guaranteeing exact landing. */
+    s->coeff_b0_step = b0;
+    s->coeff_k_step = k;
+    s->coeff_g_step = g;
     s->coeff_countdown = COEFF_PERIOD;
+}
+
+static void advance_filter_coeffs(acid303_t *s) {
+    int32_t n;
+    if (!s->coeff_countdown) return;
+    n = (int32_t)s->coeff_countdown;
+    s->coeff_b0 += (s->coeff_b0_step - s->coeff_b0) / n;
+    s->coeff_k += (s->coeff_k_step - s->coeff_k) / n;
+    s->coeff_g += (s->coeff_g_step - s->coeff_g) / n;
+    --s->coeff_countdown;
+    if (!s->coeff_countdown) {
+        s->coeff_b0 = s->coeff_b0_step;
+        s->coeff_k = s->coeff_k_step;
+        s->coeff_g = s->coeff_g_step;
+    }
 }
 
 static int32_t teebee_ladder_substep(acid303_t *s, int32_t in) {
@@ -493,7 +513,7 @@ int32_t acid303_process(acid303_t *s) {
 
     fc = modulated_cutoff(s);
     if (!s->coeff_countdown) set_filter_coeff_target(s, fc);
-    else --s->coeff_countdown;
+    advance_filter_coeffs(s);
 
     sub_inc = s->phase_inc >> 2;
     if (!sub_inc && s->phase_inc) sub_inc = 1u;
