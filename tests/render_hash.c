@@ -3,12 +3,12 @@
 #include <stdio.h>
 #include "../firmware/proto/groovebox.h"
 
-/* Physical-feedback 303 fingerprint. The beta.15 candidate replaces the old
-   Q15/wavetable ladder with the FM-1-oriented x0x/Open303-style signal path:
-   compact polyBLEP oscillator, TeeBee filter coefficients and 4-sample
-   interpolation. All pitch, articulation, circuit-model and integration tests
-   must pass before this deterministic full-groove fingerprint is accepted. */
-#define EXPECTED_RENDER_HASH 0x85ad0668b05058efull
+/* Physical-feedback 303/factory-mixer fingerprint. The beta.16 candidate keeps
+   the beta.15 x0x/Open303-style 303 core and intentionally adds audible default
+   delay/reverb sends plus the new factory live-set defaults. All pitch,
+   articulation, circuit-model, target-ABI and integration tests must pass before
+   this deterministic full-groove fingerprint is accepted. */
+#define EXPECTED_RENDER_HASH 0x8cae3fc00d61d3cbull
 
 static uint64_t fnv1a_u16(uint64_t h, uint16_t v) {
     h ^= (uint8_t)v; h *= 1099511628211ull;
