@@ -10,7 +10,8 @@ adjust presentation without replacing that proven hardware contract.
 
 Compatibility contract markers retained for tests/documentation:
 compact-rebirth-inspired, rb240-beta3-approved, direct-step-navigation,
-exact-pattern-readback, physical-lcd-cleanup, no-legacy-graph-strip.
+exact-pattern-readback, physical-lcd-cleanup, no-legacy-graph-strip,
+dedicated RB-240.
 """
 from __future__ import annotations
 import argparse, hashlib, subprocess, sys
