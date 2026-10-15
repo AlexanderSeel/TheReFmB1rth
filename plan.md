@@ -17,74 +17,92 @@ No Roland/Propellerhead/ReBirth artwork, logos, proprietary source, ROMs, or non
 
 ---
 
-# Current checkpoint — beta.11 direct physical audio-path probe, 2026-10-15
+# Current checkpoint — beta.12 staged DSP isolation, 2026-10-15
 
-## Why beta.11 exists
+## Physical beta.11 result
 
-Physical beta.9/10 feedback describes one shared high, scratchy/digital overlay on both 303 and 808/909 output. The intended bass/drum signal remains audible underneath, while cutoff, resonance, Env Mod and decay appear to affect mainly that quieter underlying signal.
+The direct beta.11 ~1 kHz target-boundary startup tone was reported **clean** on physical hardware.
 
-Because independent sound engines share the artifact, beta.11 must answer one question before any further synthesis tuning:
+Normal audio still has a clearly audible additional/doubled high component:
 
-**Does the artifact already exist after bypassing the entire ReFm DSP/groovebox/mixer?**
+- 808/909 remain far from the intended character and carry the strange added sound;
+- 303 carries the same effect, especially obvious on low notes such as C2 but still present on C4;
+- cutoff now has more audible influence, but the doubled/incorrect component remains.
 
-The next immutable test prerelease is `v0.1.0-beta.11`. beta.10 and all older releases remain untouched.
+This substantially reduces the likelihood that the core problem is Felucca's final Q15→24-bit conversion, I²S word format, DAC path or a basic DMA/output-buffer problem.
 
-## beta.11 diagnostic implementation
+The pinned Felucca source was rechecked as part of this decision: native `events_block()` and synth rendering are inside Felucca's `mix_block()`, and the ReFm physical overlay replaces that `mix_block()` audio call. A simultaneously rendered native Felucca synth is therefore not the leading explanation for physical-key playback.
 
-- [x] Add a physical-target-only boot audio probe guarded by `REFM_FELUCCA_PLATFORM`.
-- [x] Generate a direct ~1 kHz Q15 test tone at the `refm_target_render_q15()` boundary.
-- [x] Keep probe level near quarter-scale (~-12 dBFS) for conservative first listening.
-- [x] Output identical left/right samples.
-- [x] Bypass ACID A/B, 808/909, groovebox transport rendering, mixer and FX while the probe is active.
-- [x] Run probe for exactly 3 seconds / 132300 frames at 44.1 kHz.
-- [x] Return automatically to normal beta.10 rendering when the frame counter reaches zero.
-- [x] Do not enable the probe in normal host or Virtual/WASM builds.
-- [x] Add a dedicated host compile/test with `-DREFM_FELUCCA_PLATFORM=1`.
-- [x] Verify probe stereo equality, amplitude bounds, frame countdown and automatic return to stopped-groovebox silence.
+## beta.12 diagnostic goal
 
-The diagnostic oscillator uses bounded signed-32 arithmetic; it does not introduce a new `int64_t` realtime path.
+Do not retune 303 or drums yet. First determine whether the unwanted component is introduced:
 
-## beta.11 physical decision tree
+- inside `drum_machine_process()`;
+- inside the active 303 oscillator/ladder path;
+- or only after either engine enters the shared ReFm mixer/FX path.
+
+The next immutable test prerelease is `v0.1.0-beta.12`. beta.11 and all older releases remain untouched.
+
+## beta.12 implementation
+
+Physical-target-only startup sequence, five stages × two seconds = ten seconds total:
+
+1. [x] **0–2 s direct 1 kHz reference** at the target boundary; all ReFm engines/mixer bypassed.
+2. [x] **2–4 s direct 808 BD** from `drum_machine_process()`; mixer/FX bypassed; retrigger every 0.5 s.
+3. [x] **4–6 s mixed 808 BD** with the same engine setup routed through `mixer_fx_process()`.
+4. [x] **6–8 s direct 303 C2 SAW** after the complete active 303 oscillator/ladder; mixer/FX bypassed; retrigger every second.
+5. [x] **8–10 s mixed 303 C2 SAW** with the same 303 setup routed through `mixer_fx_process()`.
+6. [x] Scale direct engine stages to the same approximate -12 dB reference used by the mixer master headroom so comparisons are about timbre/artifact, not loudness.
+7. [x] Reinitialize a fresh stopped groovebox after the diagnostic sequence so temporary diagnostic state cannot leak into normal playback.
+8. [x] Keep the staged probe behind `REFM_FELUCCA_PLATFORM`; host and Virtual/WASM behavior remains normal.
+9. [x] Extend physical-define host regression to cover all five stages, frame accounting, output bounds and return-to-silence.
+10. [x] Extend Felucca bridge tests to settle the full ten-second physical diagnostic before normal transport/audio assertions.
+
+## beta.12 physical decision tree
 
 Use low external/headphone volume before power-on.
 
-1. [ ] Power-cycle the FM-1 with beta.11.
-2. [ ] Listen only to the first ~3 seconds.
-3. [ ] Classify the direct 1 kHz probe:
-   - **CLEAN** — no high scratch / octave-like overlay;
-   - **CONTAMINATED** — same scratch/overlay as 303/drums.
-4. [ ] After the probe ends, confirm stopped output becomes silent.
-5. [ ] Press PLAY and compare 808/909-only output.
-6. [ ] Compare one ACID SAW note, then SQUARE.
-7. [ ] Sweep cutoff full-range.
-8. [ ] Raise resonance independently.
-9. [ ] Raise Env Mod independently.
-10. [ ] Change decay across a wide range.
-11. [ ] Test ACID + drums together.
+- [ ] Stage 1 / 0–2 s: reference tone remains clean.
+- [ ] Stage 2 / 2–4 s: classify direct 808 BD as clean or contaminated.
+- [ ] Stage 3 / 4–6 s: compare the same 808 BD through the shared mixer.
+- [ ] Stage 4 / 6–8 s: classify direct post-ladder 303 C2 as clean or contaminated.
+- [ ] Stage 5 / 8–10 s: compare the same 303 C2 through the shared mixer.
 
-### If the direct boot probe is contaminated
+### Interpretation
 
-Do **not** retune oscillator/filter/drums. Next investigation is entirely downstream of ReFm synthesis:
+- **2 clean, 3 contaminated** → mixer/FX path introduces the drum artifact.
+- **2 contaminated** → synthetic drum engine itself is wrong; stop mixer work for the drum branch and rebuild/replace the synthetic 808/909 models.
+- **4 clean, 5 contaminated** → mixer/FX path introduces the 303 artifact.
+- **4 contaminated** → active 303 oscillator/ladder/fixed-point path is wrong; next diagnostic split must be raw wavetable/pre-ladder vs post-ladder.
+- **2 and 4 clean, 3 and 5 clean, but normal playback later contaminated** → investigate groovebox routing/event scheduling/full-load behavior and target runtime timing counters.
+- **2 and 4 both contaminated** → likely two engine-level issues or a lower-level compiler/fixed-point primitive shared conceptually but not by the mixer; inspect drum oscillator arithmetic and 303 target `int64_t` lowering separately.
 
-- [ ] inspect Felucca post-render `audio.c` path after the ReFm callback;
-- [ ] inspect Q15 → 24-bit conversion and sign extension on the actual target compiler;
-- [ ] inspect interleaved stereo layout and I²S/DAC word format;
-- [ ] capture/check DMA half-buffer timing and repeated/stale samples;
-- [ ] compare USB audio vs physical DAC output if possible;
-- [ ] add a deterministic alternating/impulse pattern if needed to detect word alignment or channel stride errors.
+## Next actions after beta.12 feedback
 
-### If the direct boot probe is clean but normal engine audio is contaminated
+### If mixer is implicated
 
-The fault is inside ReFm rendering. Next diagnostic build should provide isolated stems:
+- [ ] add direct A/B host+target probe around track level/pan and master stage;
+- [ ] bypass delay/reverb state even with zero sends to exclude state corruption;
+- [ ] bypass PCF/DIST/COMP independently;
+- [ ] inspect signed 32-bit multiply/right-shift behavior on pi32v2;
+- [ ] compare raw mixer input sample to final Q15 output on target.
 
-- [ ] direct 808 output bypassing mixer/FX;
-- [ ] direct 909 output bypassing mixer/FX;
-- [ ] ACID oscillator/pre-ladder output;
-- [ ] ACID post-ladder/pre-mixer output;
-- [ ] normal post-mixer output;
-- [ ] target runtime `late`/render-time diagnostics for each path.
+### If 303 direct output is implicated
 
-Only after those comparisons should 303 ladder Q-format, 4× decimation or drum synthesis be changed again.
+- [ ] add raw 303 wavetable/pre-ladder probe;
+- [ ] compare pre-ladder vs each ladder stage/post-ladder;
+- [ ] inspect all active-path signed `int64_t` multiplies/divides on the JieLi compiler;
+- [ ] inspect 4× oversampling/phase increment and decimation;
+- [ ] inspect ladder state rail/clamp occupancy;
+- [ ] keep beta.9 wavetable tables unchanged until raw wavetable hardware output is proven wrong.
+
+### If direct 808 is implicated
+
+- [ ] stop incremental timbre tweaks and rebuild the synthetic 808/909 voice models from reference architecture;
+- [ ] verify kick pitch-envelope arithmetic separately from steady-state oscillator;
+- [ ] verify snare/noise and metallic voice paths independently;
+- [ ] compare direct BD-only hardware output against deterministic host render;
+- [ ] keep 808 and 909 implementations distinct rather than applying shared pitch multipliers.
 
 ---
 
@@ -119,18 +137,18 @@ Only after those comparisons should 303 ladder Q-format, 4× decimation or drum 
 
 - [x] Felucca's final Q15 → 24-bit `<< 7` conversion still occurs after ReFm render;
 - [x] replacing `mix_block()` did not remove the later UAC/DAC path;
-- [x] target fixed attenuation remains unity after shared mixer headroom;
+- [x] beta.11 direct target-boundary tone is physically clean;
 - [x] no duplicate guessed output shift or attenuation is added.
 
 ---
 
-# Validation gates for beta.11
+# Validation gates for beta.12
 
 The exact release commit must pass:
 
 1. [ ] normal host DSP/unit/integration tests;
-2. [ ] physical-define host target probe regression;
-3. [ ] deterministic audio hash for normal nonphysical rendering unchanged unless a justified shared-DSP change occurs;
+2. [ ] physical-define five-stage target probe regression;
+3. [ ] deterministic audio hash for normal nonphysical rendering unchanged;
 4. [ ] browser/JS syntax and sample-manifest checks;
 5. [ ] pinned Felucca integration-anchor checks;
 6. [ ] deterministic overlay application;
@@ -142,7 +160,7 @@ The exact release commit must pass:
 12. [ ] release manifest + checksums;
 13. [ ] sample link-size experiment;
 14. [ ] guarded publisher on exact successful Build-all commit;
-15. [ ] publish `v0.1.0-beta.11` without modifying any earlier beta tag.
+15. [ ] publish `v0.1.0-beta.12` without modifying any earlier beta tag.
 
 ---
 
@@ -162,7 +180,8 @@ The exact release commit must pass:
 - [x] smooth two-semitone mip transitions;
 - [x] idle-voice fast path;
 - [ ] physical clean-audio approval;
-- [ ] final physical cutoff/resonance/env-mod calibration after shared artifact is resolved.
+- [ ] beta.12 direct post-ladder classification;
+- [ ] final physical cutoff/resonance/env-mod calibration after artifact is resolved.
 
 ## 808 / 909
 
@@ -174,7 +193,8 @@ The exact release commit must pass:
 - [x] synthetic fallback without licensed samples;
 - [x] signed-32 synthetic target hot path;
 - [ ] physical clean-audio approval;
-- [ ] final physical timbre calibration.
+- [ ] beta.12 direct BD classification;
+- [ ] final physical model redesign/calibration after artifact isolation.
 
 ## Sequencer / mixer / FX
 
@@ -188,6 +208,7 @@ The exact release commit must pass:
 - [x] clean startup gain contract outside diagnostic probe;
 - [x] versioned project save/load;
 - [x] signed-32 shared mixer hot path;
+- [ ] beta.12 direct-vs-mixed hardware classification;
 - [ ] longer patterns/ratchets/automation deferred until physical audio baseline is reliable.
 
 ---
@@ -241,7 +262,8 @@ The exact release commit must pass:
 
 Still required physically:
 
-- [ ] beta.11 boot-probe classification;
+- [x] beta.11 direct boot-tone classification: clean;
+- [ ] beta.12 staged direct-vs-mixed classification;
 - [ ] factory-pattern runtime capture;
 - [ ] worst-case four-machine stress capture;
 - [ ] `late == 0` under mixed load;

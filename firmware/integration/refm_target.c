@@ -3,10 +3,10 @@
 #include "../proto/groovebox_midi.h"
 #include <string.h>
 
-/* Physical beta.11 diagnostic oscillator.
- * This intentionally mirrors the bounded signed-32 sine approximation already
- * used by the drum engine, but it is generated directly at the target boundary
- * so it bypasses groovebox, 303, drums, mixer and FX completely. */
+#ifdef REFM_FELUCCA_PLATFORM
+/* Physical beta.12 diagnostic oscillator.
+ * It is generated directly at the target boundary and therefore bypasses the
+ * groovebox, 303, drums, mixer and FX completely. */
 static int32_t diag_tri(uint32_t p) {
     uint32_t q = p >> 16;
     return q < 32768u ? (int32_t)q * 2 - 32768 : 98302 - (int32_t)q * 2;
@@ -17,6 +17,7 @@ static int32_t diag_sineish(uint32_t p) {
     int32_t a = t < 0 ? -t : t;
     return (t * (49152 - (a >> 1))) >> 15;
 }
+#endif
 
 static uint8_t channel_data_len(uint8_t status) {
     switch (status & 0xF0u) {
@@ -34,14 +35,130 @@ static uint8_t channel_data_len(uint8_t status) {
     }
 }
 
+#ifdef REFM_FELUCCA_PLATFORM
+static void diag_prepare_stage(refm_target_t *target) {
+    groovebox_t *g = &target->groovebox;
+    target->diag_phase = 0u;
+    switch (target->diag_stage) {
+    case 0u:
+        /* Direct output-boundary reference tone. */
+        break;
+    case 1u:
+        /* 808 BD direct from drum engine, mixer bypassed. */
+        drum_machine_init(&g->drum[0], DRUM_MODEL_808);
+        break;
+    case 2u:
+        /* Identical 808 BD path, now through the shared mixer. */
+        drum_machine_init(&g->drum[0], DRUM_MODEL_808);
+        mixer_fx_init(&g->mixer);
+        break;
+    case 3u:
+        /* C2 SAW after the complete 303 engine/ladder, mixer bypassed. */
+        acid303_init(&g->acid[0]);
+        g->acid[0].cutoff = 32767u;
+        g->acid[0].resonance = 0u;
+        g->acid[0].env_mod = 0u;
+        g->acid[0].drive = 0u;
+        g->acid[0].square = 0u;
+        break;
+    case 4u:
+        /* Same C2 SAW engine output through the shared mixer. */
+        acid303_init(&g->acid[0]);
+        g->acid[0].cutoff = 32767u;
+        g->acid[0].resonance = 0u;
+        g->acid[0].env_mod = 0u;
+        g->acid[0].drive = 0u;
+        g->acid[0].square = 0u;
+        mixer_fx_init(&g->mixer);
+        break;
+    default:
+        break;
+    }
+}
+
+static void diag_finish(refm_target_t *target) {
+    groovebox_init(&target->groovebox, target->diag_bpm);
+    groovebox_midi_init(&target->midi);
+    target->midi_status = 0u;
+    target->midi_needed = 0u;
+    target->midi_have = 0u;
+}
+
+static void diag_render(refm_target_t *target, int32_t *left, int32_t *right) {
+    const uint32_t tone_inc = 97391549u; /* 1 kHz Q32 phase increment at 44.1 kHz */
+    const uint32_t half_second = REFM_TARGET_SAMPLE_RATE / 2u;
+    groovebox_t *g = &target->groovebox;
+    int32_t l = 0, r = 0;
+
+    if (target->diag_stage_frame == 0u)
+        diag_prepare_stage(target);
+
+    switch (target->diag_stage) {
+    case 0u:
+        target->diag_phase += tone_inc;
+        l = r = diag_sineish(target->diag_phase) >> 2; /* ~-12 dBFS */
+        break;
+    case 1u: {
+        int32_t s;
+        if ((target->diag_stage_frame % half_second) == 0u)
+            drum_machine_trigger(&g->drum[0], DRUM_BD, 112u);
+        s = drum_machine_process(&g->drum[0]);
+        l = r = s >> 2; /* match mixer's -12 dB summing reference */
+        break;
+    }
+    case 2u: {
+        int16_t in[MIX_TRACKS] = {0, 0, 0, 0};
+        int16_t ml = 0, mr = 0;
+        if ((target->diag_stage_frame % half_second) == 0u)
+            drum_machine_trigger(&g->drum[0], DRUM_BD, 112u);
+        in[2] = drum_machine_process(&g->drum[0]);
+        mixer_fx_process(&g->mixer, in, &ml, &mr);
+        l = ml; r = mr;
+        break;
+    }
+    case 3u: {
+        int32_t s;
+        if ((target->diag_stage_frame % REFM_TARGET_SAMPLE_RATE) == 0u)
+            acid303_set_note(&g->acid[0], 36u, 0u, 0u); /* C2 */
+        s = acid303_process(&g->acid[0]);
+        l = r = s >> 2; /* match mixer's -12 dB summing reference */
+        break;
+    }
+    case 4u: {
+        int16_t in[MIX_TRACKS] = {0, 0, 0, 0};
+        int16_t ml = 0, mr = 0;
+        if ((target->diag_stage_frame % REFM_TARGET_SAMPLE_RATE) == 0u)
+            acid303_set_note(&g->acid[0], 36u, 0u, 0u); /* C2 */
+        in[0] = (int16_t)acid303_process(&g->acid[0]);
+        mixer_fx_process(&g->mixer, in, &ml, &mr);
+        l = ml; r = mr;
+        break;
+    }
+    default:
+        break;
+    }
+
+    *left = l;
+    *right = r;
+
+    target->diag_stage_frame++;
+    target->diag_frames_remaining--;
+    if (target->diag_stage_frame >= REFM_DIAG_STAGE_FRAMES) {
+        target->diag_stage_frame = 0u;
+        target->diag_stage++;
+        if (!target->diag_frames_remaining)
+            diag_finish(target);
+    }
+}
+#endif
+
 void refm_target_init(refm_target_t *target, uint16_t bpm) {
     memset(target, 0, sizeof(*target));
     groovebox_init(&target->groovebox, bpm);
     groovebox_midi_init(&target->midi);
 #ifdef REFM_FELUCCA_PLATFORM
-    /* Three seconds is long enough to hear reliably after boot, but short
-     * enough that normal beta.10 operation follows automatically. */
-    target->diag_frames_remaining = REFM_BOOT_PROBE_FRAMES;
+    target->diag_bpm = bpm;
+    target->diag_frames_remaining = REFM_DIAG_TOTAL_FRAMES;
 #endif
 }
 
@@ -50,18 +167,17 @@ void refm_target_set_external_clock(refm_target_t *target, uint8_t external) {
 }
 
 void refm_target_render_q15(refm_target_t *target, int32_t *interleaved_stereo, uint32_t frames) {
-    /* 1 kHz Q32 phase increment at 44.1 kHz. The diagnostic tone is kept near
-     * -12 dBFS (quarter-scale) so first-boot listening is conservative. */
-    const uint32_t diag_inc = 97391549u;
     for (uint32_t i = 0; i < frames; ++i) {
+#ifdef REFM_FELUCCA_PLATFORM
         if (target->diag_frames_remaining) {
-            int32_t s;
-            target->diag_phase += diag_inc;
-            s = diag_sineish(target->diag_phase) >> 2;
-            interleaved_stereo[2u * i] = s;
-            interleaved_stereo[2u * i + 1u] = s;
-            target->diag_frames_remaining--;
-        } else {
+            int32_t l = 0, r = 0;
+            diag_render(target, &l, &r);
+            interleaved_stereo[2u * i] = l;
+            interleaved_stereo[2u * i + 1u] = r;
+            continue;
+        }
+#endif
+        {
             int16_t l = 0, r = 0;
             groovebox_process(&target->groovebox, &l, &r);
             interleaved_stereo[2u * i] = l;
