@@ -23,6 +23,7 @@
 #define Q20_ONE 1048576ll
 #define COEFF_PERIOD 32u
 #define ACID_OVERSAMPLE 4u
+#define SLIDE_TAU_SAMPLES ((SR * 60u) / 1000u)
 
 static int32_t clamp32(int64_t x, int32_t lo, int32_t hi) {
     if (x < lo) return lo;
@@ -39,12 +40,12 @@ static const uint32_t semitone_inc[12] = {
 
 uint32_t acid303_note_to_phase_inc(uint8_t note) {
     uint32_t octave = note / 12u;
-    uint32_t inc = semitone_inc[note % 12u];
-    if (octave > 0u) {
-        if (octave >= 8u) octave = 7u;
-        inc <<= octave;
-    }
-    return inc;
+    uint64_t inc = (uint64_t)semitone_inc[note % 12u] << octave;
+    /* MIDI 0..127 only needs shifts up to octave 10 and remains within Q32 at
+       44.1 kHz. Keep the saturation anyway so this helper is well defined for
+       every uint8_t input instead of folding all notes >=96 onto one octave. */
+    if (inc > 0xffffffffull) inc = 0xffffffffull;
+    return (uint32_t)inc;
 }
 
 /* ReBirth's Tune control is +/- one octave in semitone steps. */
@@ -292,7 +293,9 @@ static void slide_step(acid303_t *s) {
     if (!s->sliding) return;
     {
         int64_t d = (int64_t)s->slide_target_inc - (int64_t)s->phase_inc;
-        int64_t step = d / 529;
+        /* Open303's stock pitch-slew time constant is 60 ms. This function is
+           called at the 44.1-kHz output rate, so one e-fold is 2646 samples. */
+        int64_t step = d / (int64_t)SLIDE_TAU_SAMPLES;
         if (!step && d) step = d > 0 ? 1 : -1;
         s->phase_inc = (uint32_t)((int64_t)s->phase_inc + step);
         if (d < 3 && d > -3) { s->phase_inc = s->slide_target_inc; s->sliding = 0u; }
