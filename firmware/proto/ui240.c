@@ -146,30 +146,31 @@ void ui240_snapshot(const ui240_state_t *ui, const groovebox_t *g, ui240_view_t 
         out->mute = t->mute;
         out->solo = t->solo;
     } else if (ui->page == UI240_FX) {
+        /* Physical RB-240 renders p0..p3 as Q15 percentages. Keep the FX
+         * snapshot in that same contract instead of returning already-scaled
+         * 0..100 values and accidentally scaling them a second time. */
         switch (out->fx_section) {
         case UI240_FX_PCF:
             out->p0 = (uint16_t)g->mixer.filter_cutoff;
             out->p1 = 0u;
-            out->p2 = 100u;
-            out->p3 = 50u;
+            out->p2 = 0u;
+            out->p3 = 0u;
             break;
         case UI240_FX_DELAY:
-            out->p0 = (uint16_t)(((uint32_t)g->mixer.delay_len * 16u + MIX_DELAY_MAX - 1u) / MIX_DELAY_MAX);
-            if (out->p0 < 1u) out->p0 = 1u;
-            if (out->p0 > 16u) out->p0 = 16u;
-            out->p1 = 50u;
-            out->p2 = (uint16_t)(((uint32_t)g->mixer.delay_feedback * 100u) / 31000u);
-            out->p3 = (uint16_t)(((uint32_t)g->mixer.delay_mix * 100u) / 32767u);
+            out->p0 = (uint16_t)(((uint32_t)g->mixer.delay_len * 32767u) / MIX_DELAY_MAX);
+            out->p1 = 0u;
+            out->p2 = (uint16_t)(((uint32_t)g->mixer.delay_feedback * 32767u) / 31000u);
+            out->p3 = (uint16_t)g->mixer.delay_mix;
             break;
         case UI240_FX_DIST:
-            out->p0 = (uint16_t)(((uint32_t)g->mixer.drive * 100u) / 32767u);
-            out->p1 = 50u;
+            out->p0 = (uint16_t)g->mixer.drive;
+            out->p1 = 0u;
             out->p2 = 0u;
             out->p3 = 0u;
             break;
         default:
-            out->p0 = (uint16_t)(100u - ((uint32_t)g->mixer.compressor_threshold * 100u) / 32767u);
-            out->p1 = 4u;
+            out->p0 = (uint16_t)(32767u - (uint16_t)g->mixer.compressor_threshold);
+            out->p1 = 0u;
             out->p2 = 0u;
             out->p3 = 0u;
             break;
