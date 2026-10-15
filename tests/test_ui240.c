@@ -105,7 +105,15 @@ int main(void)
 
     ui240_set_page(&ui, UI240_FX);
     assert(ui.fx_section == UI240_FX_PCF);
-    { int16_t before=g.mixer.filter_cutoff; ui240_edit_fx(&ui,&g,0u,1); assert(g.mixer.filter_cutoff>before); }
+    {
+        /* Clean startup leaves PCF fully open. Verify it can close and reopen
+           instead of requiring hidden filtering merely to make +1 observable. */
+        int16_t open=g.mixer.filter_cutoff;
+        ui240_edit_fx(&ui,&g,0u,-1);
+        assert(g.mixer.filter_cutoff<open);
+        ui240_edit_fx(&ui,&g,0u,1);
+        assert(g.mixer.filter_cutoff==open);
+    }
     ui240_cycle_fx_section(&ui,1); assert(ui.fx_section==UI240_FX_DELAY);
     { uint16_t before=g.mixer.delay_len; ui240_edit_fx(&ui,&g,0u,1); assert(g.mixer.delay_len>before); }
     { int16_t before=g.mixer.delay_feedback; ui240_edit_fx(&ui,&g,2u,1); assert(g.mixer.delay_feedback>before); }
