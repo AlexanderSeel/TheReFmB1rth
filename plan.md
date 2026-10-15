@@ -41,6 +41,7 @@ The next requested immutable hardware-test prerelease is **`v0.1.0-beta.9`**. Ex
 - [x] Derive SQUARE303 from that saw using the Open303-style 36.9 dB tanh drive, +4.37 offset, polarity inversion and 180° phase shift.
 - [x] Preserve Open303's half-square raw amplitude convention.
 - [x] Preserve the existing 6 dB fixed-point source headroom.
+- [x] Preserve the existing zero-mean periodic spectral reconstruction so this beta does not also change oscillator DC/ladder bias.
 - [x] Remove the different ideal-square HQ/browser construction.
 
 ### Target table quality
@@ -77,6 +78,7 @@ The next requested immutable hardware-test prerelease is **`v0.1.0-beta.9`**. Ex
 - no resonance retuning;
 - no Env Mod retuning;
 - no accent retuning;
+- no oscillator DC/ladder-bias change;
 - no change to the true 60 ms slide law;
 - no change to the beta.8 clean mixer/drum baseline.
 
@@ -215,13 +217,14 @@ The exact candidate commit must pass all of the following before publication:
 10. [x] end-to-end rendered C2/C3/C4 pitch tests;
 11. [x] source/headroom/rail tests;
 12. [x] deterministic whole-groovebox render fingerprint updated only after behavioral tests passed;
-13. [ ] final exact `main` CI overlay/link test green;
-14. [ ] final exact `main` WASM/HQ build and browser smoke tests green;
-15. [ ] final exact `main` pinned Felucca overlay verification green;
-16. [ ] final exact `main` real JieLi FM-1 compile/link/package build green;
-17. [ ] final target ROM-reference and memory gates green with safe XIP headroom after larger wavetable bank;
-18. [ ] release manifest/checksum verification green;
-19. [ ] publish `v0.1.0-beta.9` only from that exact successful `main` commit.
+13. [x] stale CI target-output assertion updated to the beta.8 unity-output/shared-headroom contract;
+14. [ ] final exact `main` CI overlay/link test green;
+15. [ ] final exact `main` WASM/HQ build and browser smoke tests green;
+16. [ ] final exact `main` pinned Felucca overlay verification green;
+17. [ ] final exact `main` real JieLi FM-1 compile/link/package build green;
+18. [ ] final target ROM-reference and memory gates green with safe XIP headroom after larger wavetable bank;
+19. [ ] release manifest/checksum verification green;
+20. [ ] publish `v0.1.0-beta.9` only from that exact successful `main` commit.
 
 Existing beta tags remain immutable.
 

@@ -48,7 +48,8 @@ Both the target and Virtual generators now start from the same **2048-sample ref
 - SAW303 uses Open303's split rising-saw construction;
 - SQUARE303 is derived from that exact saw via the Open303-style tanh shaper at **36.9 dB**, offset **+4.37**, followed by polarity inversion and a **180° phase shift**;
 - the square table keeps the Open303 BlendOscillator convention of half the raw saw-table amplitude;
-- source headroom remains 6 dB below full Q15 so the ladder/accent path has fixed-point room.
+- source headroom remains 6 dB below full Q15 so the ladder/accent path has fixed-point room;
+- the periodic mip reconstruction retains the existing zero-mean spectral-table convention, so beta.9 does **not** alter oscillator DC or the ladder operating point while evaluating the interpolation/band-limiting changes.
 
 This removes the previous mismatch where the FM-1 used the Open303-shaped square while the browser/HQ generator used a more ideal odd-harmonic square. Hardware and Virtual can now be compared meaningfully.
 
@@ -59,7 +60,7 @@ The FM-1 bank is now:
 - **1024 samples per table** instead of 512;
 - **12 pitch bands** instead of 10;
 - bands span the supported MIDI register through note 127;
-- each band is reconstructed from the Fourier coefficients of the full 2048-sample source prototype rather than first reducing the prototype itself.
+- each band is reconstructed from the positive-frequency Fourier coefficients of the full 2048-sample source prototype rather than first reducing the prototype itself.
 
 Virtual keeps 2048 lookup samples per table but uses the same audible harmonic budget as the target. Its extra samples improve interpolation resolution only; they do not give Virtual a different oscillator spectrum.
 
