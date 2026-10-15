@@ -3,16 +3,9 @@
 """Shared Open303-derived wavetable construction helpers.
 
 The target and browser/HQ generators both start from the same 2048-sample
-SAW303/SQUARE303 prototypes used by Open303. Only storage resolution and the
-number of pitch bands differ. Keeping this in one module prevents hardware and
+SAW303/SQUARE303 prototypes used by Open303.  Only storage resolution and the
+number of pitch bands differ.  Keeping this in one module prevents hardware and
 Virtual from drifting into different oscillator models.
-
-For each mip level we retain exactly the harmonic bins permitted by the target
-final-audio bandwidth, then reconstruct a periodic table. Unlike the earlier
-prototype this helper also preserves the source prototype's mean/DC component;
-that matters for faithful reproduction because Open303's SAW303/SQUARE303
-prototype shaping is intentionally asymmetric before the later AC-coupling
-stages remove the audible DC component.
 """
 from __future__ import annotations
 
@@ -50,16 +43,15 @@ def open303_prototypes(size: int = REFERENCE_SIZE) -> tuple[list[float], list[fl
     return saw, square
 
 
-def spectrum(proto: list[float], max_harmonics: int) -> tuple[float, list[complex]]:
-    """Return normalized DC plus positive-frequency DFT bins.
+def positive_spectrum(proto: list[float], max_harmonics: int) -> list[complex]:
+    """Normalized positive-frequency DFT bins, excluding DC/Nyquist.
 
-    Only bins that a generated table can actually reproduce are evaluated. A
+    Only bins that a generated table can actually reproduce are evaluated.  A
     1024-sample target therefore still derives its first 511 harmonics from the
     full 2048-sample Open303 prototype instead of from a coarsened prototype.
     """
     n = len(proto)
     hmax = min(max_harmonics, n // 2 - 1)
-    dc = sum(proto) / n
     coeff = [0j] * (hmax + 1)
     for k in range(1, hmax + 1):
         step = cmath.exp(-2j * math.pi * k / n)
@@ -69,21 +61,10 @@ def spectrum(proto: list[float], max_harmonics: int) -> tuple[float, list[comple
             acc += x * ph
             ph *= step
         coeff[k] = acc / n
-    return dc, coeff
+    return coeff
 
 
-def positive_spectrum(proto: list[float], max_harmonics: int) -> list[complex]:
-    """Compatibility helper returning only positive-frequency bins."""
-    return spectrum(proto, max_harmonics)[1]
-
-
-def render_band(
-    coeff: list[complex],
-    size: int,
-    harmonics: int,
-    scale: float,
-    dc: float = 0.0,
-) -> list[int]:
+def render_band(coeff: list[complex], size: int, harmonics: int, scale: float) -> list[int]:
     """Render one periodic Q15 table from a truncated Open303 spectrum."""
     hmax = max(1, min(harmonics, len(coeff) - 1, size // 2 - 1))
     out: list[int] = []
@@ -94,7 +75,7 @@ def render_band(
         for k in range(1, hmax + 1):
             z += coeff[k] * ph
             ph *= step
-        v = dc + 2.0 * z.real
+        v = 2.0 * z.real
         out.append(max(-32768, min(32767, round(v * scale))))
     return out
 
