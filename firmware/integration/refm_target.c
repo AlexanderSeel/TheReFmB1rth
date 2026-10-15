@@ -4,9 +4,8 @@
 #include <string.h>
 
 #ifdef REFM_FELUCCA_PLATFORM
-/* Physical beta.12 diagnostic oscillator.
- * It is generated directly at the target boundary and therefore bypasses the
- * groovebox, 303, drums, mixer and FX completely. */
+/* Physical startup diagnostics. Keep every stage useful as a signal-path A/B,
+ * but make the ten-second sequence musical enough to hear on every boot. */
 static int32_t diag_tri(uint32_t p) {
     uint32_t q = p >> 16;
     return q < 32768u ? (int32_t)q * 2 - 32768 : 98302 - (int32_t)q * 2;
@@ -58,23 +57,23 @@ static void diag_prepare_stage(refm_target_t *target) {
     target->diag_phase = 0u;
     switch (target->diag_stage) {
     case 0u:
-        /* Direct output-boundary reference tone. */
+        /* Direct output-boundary four-note chime. */
         break;
     case 1u:
-        /* 808 BD direct from drum engine, mixer bypassed. */
+        /* Small 808 groove direct from drum engine, mixer bypassed. */
         drum_machine_init(&g->drum[0], DRUM_MODEL_808);
         break;
     case 2u:
-        /* Identical 808 BD path, now through the shared mixer. */
+        /* Identical 808 groove through the shared mixer. */
         drum_machine_init(&g->drum[0], DRUM_MODEL_808);
         mixer_fx_init(&g->mixer);
         break;
     case 3u:
-        /* C2 SAW after the complete 303 engine/ladder, mixer bypassed. */
+        /* Short bass phrase after complete 303 engine/ladder, mixer bypassed. */
         diag_prepare_acid(&g->acid[0]);
         break;
     case 4u:
-        /* Same C2 SAW engine output through the shared mixer. */
+        /* Identical 303 bass phrase through the shared mixer. */
         diag_prepare_acid(&g->acid[0]);
         mixer_fx_init(&g->mixer);
         break;
@@ -105,8 +104,30 @@ static void diag_finish(refm_target_t *target) {
     target->midi_have = 0u;
 }
 
+static void diag_trigger_drum_phrase(drum_machine_t *drum, uint32_t frame) {
+    const uint32_t tick = REFM_TARGET_SAMPLE_RATE / 4u;
+    uint32_t step;
+    if (frame % tick) return;
+    step = (frame / tick) & 7u;
+    /* Hat pulse establishes timing; kick/snare make direct-vs-mixed A/B easy. */
+    drum_machine_trigger(drum, DRUM_CH, (step & 1u) ? 72u : 88u);
+    if (step == 0u || step == 4u || step == 7u)
+        drum_machine_trigger(drum, DRUM_BD, step == 0u ? 120u : 108u);
+    if (step == 2u || step == 6u)
+        drum_machine_trigger(drum, DRUM_SD, 104u);
+}
+
+static void diag_trigger_acid_phrase(acid303_t *acid, uint32_t frame) {
+    static const uint8_t notes[8] = {36u, 39u, 43u, 46u, 43u, 39u, 34u, 31u};
+    const uint32_t tick = REFM_TARGET_SAMPLE_RATE / 4u;
+    uint32_t step;
+    if (frame % tick) return;
+    step = (frame / tick) & 7u;
+    acid303_set_note(acid, notes[step], (uint8_t)(step == 3u || step == 7u), 0u);
+}
+
 static void diag_render(refm_target_t *target, int32_t *left, int32_t *right) {
-    const uint32_t tone_inc = 97391549u; /* 1 kHz Q32 phase increment at 44.1 kHz */
+    static const uint8_t chime_notes[4] = {72u, 76u, 79u, 84u};
     const uint32_t half_second = REFM_TARGET_SAMPLE_RATE / 2u;
     groovebox_t *g = &target->groovebox;
     int32_t l = 0, r = 0;
@@ -115,14 +136,20 @@ static void diag_render(refm_target_t *target, int32_t *left, int32_t *right) {
         diag_prepare_stage(target);
 
     switch (target->diag_stage) {
-    case 0u:
+    case 0u: {
+        uint32_t note_index = target->diag_stage_frame / half_second;
+        uint32_t tone_inc;
+        if (note_index > 3u) note_index = 3u;
+        tone_inc = acid303_note_to_phase_inc(chime_notes[note_index]);
+        if ((target->diag_stage_frame % half_second) == 0u)
+            target->diag_phase = 0u;
         target->diag_phase += tone_inc;
         l = r = diag_sineish(target->diag_phase) >> 2; /* ~-12 dBFS */
         break;
+    }
     case 1u: {
         int32_t s;
-        if ((target->diag_stage_frame % half_second) == 0u)
-            drum_machine_trigger(&g->drum[0], DRUM_BD, 112u);
+        diag_trigger_drum_phrase(&g->drum[0], target->diag_stage_frame);
         s = drum_machine_process(&g->drum[0]);
         l = r = s >> 2; /* match mixer's -12 dB summing reference */
         break;
@@ -130,8 +157,7 @@ static void diag_render(refm_target_t *target, int32_t *left, int32_t *right) {
     case 2u: {
         int16_t in[MIX_TRACKS] = {0, 0, 0, 0};
         int16_t ml = 0, mr = 0;
-        if ((target->diag_stage_frame % half_second) == 0u)
-            drum_machine_trigger(&g->drum[0], DRUM_BD, 112u);
+        diag_trigger_drum_phrase(&g->drum[0], target->diag_stage_frame);
         in[2] = drum_machine_process(&g->drum[0]);
         mixer_fx_process(&g->mixer, in, &ml, &mr);
         l = ml; r = mr;
@@ -139,8 +165,7 @@ static void diag_render(refm_target_t *target, int32_t *left, int32_t *right) {
     }
     case 3u: {
         int32_t s;
-        if ((target->diag_stage_frame % REFM_TARGET_SAMPLE_RATE) == 0u)
-            acid303_set_note(&g->acid[0], 36u, 0u, 0u); /* C2 */
+        diag_trigger_acid_phrase(&g->acid[0], target->diag_stage_frame);
         s = acid303_process(&g->acid[0]);
         l = r = s >> 2; /* match mixer's -12 dB summing reference */
         break;
@@ -148,8 +173,7 @@ static void diag_render(refm_target_t *target, int32_t *left, int32_t *right) {
     case 4u: {
         int16_t in[MIX_TRACKS] = {0, 0, 0, 0};
         int16_t ml = 0, mr = 0;
-        if ((target->diag_stage_frame % REFM_TARGET_SAMPLE_RATE) == 0u)
-            acid303_set_note(&g->acid[0], 36u, 0u, 0u); /* C2 */
+        diag_trigger_acid_phrase(&g->acid[0], target->diag_stage_frame);
         in[0] = (int16_t)acid303_process(&g->acid[0]);
         mixer_fx_process(&g->mixer, in, &ml, &mr);
         l = ml; r = mr;
