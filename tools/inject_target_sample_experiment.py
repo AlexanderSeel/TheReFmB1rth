@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
-"""Inject generated sample assets into an already-applied Felucca overlay.
+"""Inject and enable bundled drum samples in the FM-1 target tree.
 
-The target build links the selected PCM assets and enables them in the ReFm
-808/909 drum machines. Lanes without bundled samples continue to use the
-synthesized fallback, so the target remains a hybrid engine.
+The workflow builds a baseline target first for an explicit size comparison,
+then builds this sample-enabled tree.  This helper turns the latter into the
+actual release payload after its own target-memory check passes, avoiding the
+old bug where the sample build was measured but the sample-disabled baseline
+was still published.
 """
 from __future__ import annotations
 import argparse, shutil
@@ -45,8 +47,7 @@ def main() -> int:
     injected = "    refm_sources.append('generated/refm_sample_assets.c')\n    refm_objs = []\n"
     if text.count(anchor) != 1:
         raise SystemExit("Felucca overlay build anchor changed")
-    text = text.replace(anchor, injected, 1)
-    build.write_text(text)
+    build.write_text(text.replace(anchor, injected, 1))
 
     # Enable the generated sample table only in this target tree. The normal
     # host/WASM build keeps its existing explicit sample controls.
@@ -70,7 +71,38 @@ def main() -> int:
     )
     replace_once(groovebox, old_init, new_init)
 
-    print("target bundled samples injected and playback enabled; unbundled lanes use synthesis fallback")
+    # Felucca's build.sh ends in an exec. Replace it so a successful sample
+    # target build performs its own memory gate, then atomically promotes that
+    # exact FWSC/app/loader into build/target and regenerates verification data.
+    # The baseline target-memory report is retained for size-delta diagnostics.
+    build_sh = dst / "build.sh"
+    promote = r'''"$PY" tools/build.py "$@"
+ROOT="$(cd ../.. && pwd)"
+TARGET="$ROOT/build/target"
+mkdir -p "$TARGET"
+if [ -f "$TARGET/target-memory.json" ] && [ ! -f "$TARGET/baseline-target-memory.json" ]; then
+    cp "$TARGET/target-memory.json" "$TARGET/baseline-target-memory.json"
+fi
+"$JIELI_TOOLCHAIN/common/bin/objdump" -t build/felucca.elf > "$TARGET/felucca-sample-experiment.syms"
+"$PY" "$ROOT/tools/check_target_budget.py" build/felucca.bin "$TARGET/felucca-sample-experiment.syms" --output "$TARGET/sample-experiment-memory.json"
+cp "$TARGET/sample-experiment-memory.json" "$TARGET/target-memory.json"
+cp build/felucca.fwsc "$TARGET/TheReFmB1rth-experimental.fwsc"
+cp build/felucca.bin "$TARGET/TheReFmB1rth-app.bin"
+cp build/loader/ota.bin "$TARGET/ota.bin"
+cp .refm-overlay "$TARGET/refm-overlay.txt"
+cp .refm-ui-overlay "$TARGET/refm-ui-overlay.txt"
+"$PY" "$ROOT/tools/release_manifest.py" "$TARGET/TheReFmB1rth-experimental.fwsc" --commit "${GITHUB_SHA:-local}" --output "$TARGET/manifest.json"
+"$PY" "$ROOT/tools/release_manifest.py" "$TARGET/TheReFmB1rth-experimental.fwsc" --verify "$TARGET/manifest.json"
+(
+    cd "$TARGET"
+    sha256sum TheReFmB1rth-experimental.fwsc TheReFmB1rth-app.bin ota.bin > SHA256SUMS
+    sha256sum -c SHA256SUMS
+)
+echo "sample-enabled FM-1 target promoted to release payload"
+'''
+    replace_once(build_sh, 'exec "$PY" tools/build.py "$@"\n', promote)
+
+    print("target bundled samples injected, enabled, memory-gated and configured for release promotion")
     return 0
 
 
