@@ -109,6 +109,8 @@ int main(void)
         /* Clean startup leaves PCF fully open. Verify it can close and reopen
            instead of requiring hidden filtering merely to make +1 observable. */
         int16_t open=g.mixer.filter_cutoff;
+        ui240_snapshot(&ui,&g,&v);
+        assert(v.p0==(uint16_t)open);
         ui240_edit_fx(&ui,&g,0u,-1);
         assert(g.mixer.filter_cutoff<open);
         ui240_edit_fx(&ui,&g,0u,1);
@@ -118,10 +120,16 @@ int main(void)
     { uint16_t before=g.mixer.delay_len; ui240_edit_fx(&ui,&g,0u,1); assert(g.mixer.delay_len>before); }
     { int16_t before=g.mixer.delay_feedback; ui240_edit_fx(&ui,&g,2u,1); assert(g.mixer.delay_feedback>before); }
     { int16_t before=g.mixer.delay_mix; ui240_edit_fx(&ui,&g,3u,1); assert(g.mixer.delay_mix>before); }
+    ui240_snapshot(&ui,&g,&v);
+    assert(v.p0>0u&&v.p0<=32767u);
+    assert(v.p2>1000u);
+    assert(v.p3==(uint16_t)g.mixer.delay_mix);
     ui240_cycle_fx_section(&ui,1); assert(ui.fx_section==UI240_FX_DIST);
     { int16_t before=g.mixer.drive; ui240_edit_fx(&ui,&g,0u,1); assert(g.mixer.drive>before); }
+    ui240_snapshot(&ui,&g,&v); assert(v.p0==(uint16_t)g.mixer.drive&&v.p0>100u);
     ui240_cycle_fx_section(&ui,1); assert(ui.fx_section==UI240_FX_COMP);
     { int16_t before=g.mixer.compressor_threshold; ui240_edit_fx(&ui,&g,0u,1); assert(g.mixer.compressor_threshold<before); }
+    ui240_snapshot(&ui,&g,&v); assert(v.p0>100u);
 
     ui240_set_page(&ui,UI240_PROJECT);ui240_select_project(&ui,1);ui240_snapshot(&ui,&g,&v);assert(v.project_slot==1u);
     ui240_set_page(&ui,UI240_HOME);ui240_next_page(&ui,-1);assert(ui.page==UI240_EXT);
