@@ -3,12 +3,13 @@
 #include <stdio.h>
 #include "../firmware/proto/groovebox.h"
 
-/* beta.9 oscillator fingerprint. The intentional audio change is confined to
-   the ACID source path: 1024-sample Open303-derived SAW/SQUARE mipmaps, twelve
-   full-range pitch bands, a small final-Nyquist guard and phase-aligned
-   adjacent-band crossfades. Pitch, headroom, filter/envelope laws, mixer and
-   drum behavior remain independently guarded by behavioral tests. */
-#define EXPECTED_RENDER_HASH 0xfc95a3f20ce36f5bull
+/* beta.13 deterministic audio fingerprint. The intentional audio change is
+   confined to the ACID target-DSP correction: the Open303-derived source
+   mipmaps and measured knob laws are retained, while filter coefficient lookup,
+   ladder/VCA arithmetic and control-rate coefficient landing now use bounded
+   32-bit fixed point. Pitch, headroom, mixer and drum behavior remain guarded
+   independently by behavioral tests. */
+#define EXPECTED_RENDER_HASH 0x53406763c892a3c7ull
 
 static uint64_t fnv1a_u16(uint64_t h, uint16_t v) {
     h ^= (uint8_t)v; h *= 1099511628211ull;
