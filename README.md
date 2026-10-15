@@ -16,30 +16,34 @@ Experimental replacement firmware for the M-VAVE FM-1: a compact four-machine ac
 
 See [`plan.md`](plan.md), [`docs/TB303_MODEL.md`](docs/TB303_MODEL.md), [`docs/FLASH_SAFETY.md`](docs/FLASH_SAFETY.md) and [`docs/PHYSICAL_BETA2_VALIDATION.md`](docs/PHYSICAL_BETA2_VALIDATION.md).
 
-## Current status — beta.7 calibration candidate
+## Current status — beta.8 clean-audio candidate
 
-`main` is being prepared for **`v0.1.0-beta.7`** as the next immutable hardware-test prerelease. Earlier betas are not overwritten or repointed.
+The physical beta.7 listening pass exposed a real audio-path failure: the overall result sounded overloaded, the 303 square was thin/metallic, pitch felt unstable, and the synthesized drums were unusably harsh. Beta.8 treats that report as a correctness problem rather than adding more coloration.
 
-The beta.7 batch combines the latest physical FM-1 corrections with a focused TB-303 calibration pass:
+The corrective batch includes:
 
-- physical FM-1 musical keys now preserve their real chromatic pitch when writing ACID steps;
-- the physical keyboard no longer inherits the Virtual/ReBirth C…C step-key remapping;
-- `OCT-` / `OCT+` shift the physical keyboard register on ACID STEP, while `K1` remains the fine semitone editor for the stored note;
-- the default master path starts transparent instead of applying always-on distortion/compression coloration;
-- 808/909 have synthesized fallback voices and therefore do not depend on external sample files to be audible;
-- the 303 pitch model is explicitly checked against A4=440 and the original TB-303 service-calibration low-A anchor near 110 Hz;
-- Open303/TeeBee cutoff, resonance, envelope, slide and accent equations were rechecked rather than arbitrarily retuned;
-- the fixed-point oscillator banks reserve **6 dB source headroom** before the ladder/VCA, preventing strong low-register resonance/accent peaks from living on the Q15 rails;
-- target and Virtual reference generators use the same headroom policy;
-- an aggressive resonant/accented low-register render is now a regression test for sustained hard clipping.
+- live ACID notes now preserve the exact incoming MIDI/physical-key pitch instead of clamping every note above MIDI 60/C4 down to C4;
+- programmed ACID steps keep the extended C1..C6 editor range independently from live keyboard routing;
+- the DDS has explicit upper-MIDI monotonicity tests and remains numerically static for a full second whenever slide and LFO are off;
+- stock slide now uses the documented Open303 **60 ms** slew time constant instead of the previous ~12 ms implementation;
+- all four mixer channel faders start at unity, with one explicit **-12 dB master summing headroom** stage before optional nonlinear processing;
+- DIST starts at zero, COMP is transparent and PCF starts fully open/bypassed, so a fresh project has no hidden saturation, compression or low-pass coloration;
+- the physical MASTER pot remains active, while the older duplicate fixed target attenuation is removed because summing headroom now has one clear owner;
+- the synthetic 808 kick is moved from the erroneous ~390 Hz range to ~55 Hz and the 909 kick to ~60 Hz, with substantially longer analogue-style body decays;
+- snare/tom fundamentals are moved into musically appropriate ranges;
+- hats/cymbals use bipolar ring multiplication instead of signed bitwise XOR, which had been producing digital metallic artefacts;
+- the drum bus reserves its own transient headroom so kick/snare/hat combinations do not rail-clip;
+- samples remain optional: the corrected synthesized engines are the guaranteed firmware fallback.
 
-The 6 dB oscillator headroom is a numerical implementation detail, not a pitch or filter-law change. Open303 can temporarily exceed normalized ±1 internally because its signal path is floating point; the FM-1 path ultimately must fit a bounded fixed-point mixer. See [`docs/TB303_MODEL.md`](docs/TB303_MODEL.md) for the calibration details.
+This is software-validated but still requires a new physical FM-1 listening pass. Beta.8 must therefore be judged first on **clean pitch and clean gain structure**, before any further attempt to make the 303 more characterful.
 
 ## 303 reference points
 
 The stock-style ACID core currently uses:
 
 - equal temperament with A4=440 Hz at TUNE center;
+- explicit TB-303 low-A service anchor near 110 Hz;
+- stable DDS pitch with no hidden drift when slide/LFO are off;
 - 4x oscillator/filter processing at 176.4 kHz;
 - Open303-shaped SAW303/SQUARE303 source tables;
 - Open303's measured nominal cutoff range around 313.8–2394.4 Hz;
@@ -49,10 +53,10 @@ The stock-style ACID core currently uses:
 - ~1000 ms normal / ~200 ms accented main-envelope decay anchors;
 - raw main filter envelope plus ~15 ms smoothed accent contribution;
 - ~1230 ms amplitude decay and fast normal / ~50 ms accented release behavior;
-- nominal 60 ms slide represented by the same ~12 ms slew time constant used by Open303;
+- nominal **60 ms** slide time constant at the 44.1 kHz control/audio rate;
 - ~44.486 Hz pre-ladder and ~24.167 Hz post-ladder AC-coupling stages.
 
-The goal is a convincing hardware-safe TB-303 behavior, not source-level duplication of any commercial emulator.
+The goal is a convincing hardware-safe TB-303 behavior, not source-level duplication of any commercial emulator. The beta.8 pass deliberately does not add random pitch drift, detune or always-on distortion.
 
 ## Virtual FM-1
 
@@ -110,7 +114,7 @@ On **SEQ**:
 - `K3` → Accent/Slide combinations;
 - `K4` → probability.
 
-The hardware key scanner records note ownership at key-down, so octave/page changes cannot transform a later key-up into the wrong note. Machine/page changes remain panic-guarded against stuck notes.
+The hardware key scanner records note ownership at key-down, so octave/page changes cannot transform a later key-up into the wrong note. Machine/page changes remain panic-guarded against stuck notes. Live notes are no longer constrained by the step-editor pitch clamp.
 
 ### Physical 808 / 909 programming
 
@@ -124,20 +128,22 @@ On **DRUM**:
 - 909 `K3` → FLAM;
 - 909 `K4` → flam width.
 
-808 and 909 use different lane maps/workflows; they are not two labels over one identical drum map.
+808 and 909 use different model-specific oscillator tunings/workflows; they are not two labels over one identical drum map.
 
 ## Audio and mixer behavior
 
 Four machine channels feed level/pan/mute/solo plus delay/reverb sends. Master performance processing is Dist → Comp → PCF.
 
-For hardware safety and useful listening tests:
+The clean startup contract for beta.8 is explicit:
 
+- all four track faders start at unity;
+- a single -12 dB master summing stage provides four-track headroom before nonlinear processing;
 - master DIST starts at zero;
 - compressor threshold starts effectively transparent;
+- PCF starts fully open and bypasses its one-pole coloration at the top setting;
 - the physical MASTER pot is applied after the ReFm render;
-- the target output retains conservative final headroom before DAC/UAC handoff;
-- ACID oscillator source headroom prevents clipping **before** later mixer attenuation can help;
-- drums remain audible without sample assets because synthesized fallback voices are part of the firmware.
+- no second fixed target attenuation is stacked after that pot;
+- individual drum synthesis and the combined drum bus both retain headroom rather than relying on final hard clipping.
 
 Initial hardware listening tests should still start at low external/headphone volume.
 
@@ -190,7 +196,7 @@ sh web/emu/build_wasm.sh
 
 Published betas are immutable. The requested beta is cut only from an exact `main` commit after Host, WASM and FM-1 target-package jobs are green for that commit. The release marker is versioned; an existing tag is never overwritten.
 
-For beta.7 specifically, the expected tag is **`v0.1.0-beta.7`**. `v0.1.0-beta.2` and every other existing beta remain untouched.
+For this corrective batch, the expected next tag is **`v0.1.0-beta.8`**. `v0.1.0-beta.7`, `v0.1.0-beta.2` and every other existing beta remain untouched.
 
 ## Sample policy
 
