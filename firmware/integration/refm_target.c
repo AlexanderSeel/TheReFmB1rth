@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "refm_target.h"
 #include "../proto/groovebox_midi.h"
+#include "../proto/groovebox_pattern.h"
 #include <string.h>
 
 #ifdef REFM_FELUCCA_PLATFORM
-/* Physical startup diagnostics. Keep every stage useful as a signal-path A/B,
- * but make the ten-second sequence musical enough to hear on every boot. */
+/* Physical startup diagnostics. Keep each signal-path A/B, but keep the whole
+ * sequence short enough that it feels like a boot motif instead of a test song. */
 static int32_t diag_tri(uint32_t p) {
     uint32_t q = p >> 16;
     return q < 32768u ? (int32_t)q * 2 - 32768 : 98302 - (int32_t)q * 2;
@@ -42,6 +43,14 @@ static uint8_t channel_data_len(uint8_t status) {
     }
 }
 
+static void load_factory_live_set(refm_target_t *target) {
+    /* pattern_bank_init() owns the original A-H factory set. Make A active so
+     * PLAY is immediately useful and switching to B cannot overwrite A with an
+     * empty editor buffer. ACID B starts on the warmer square voice. */
+    groovebox_pattern_load(&target->groovebox.patterns, &target->groovebox, 0u);
+    target->groovebox.acid[1].square = 1u;
+}
+
 #ifdef REFM_FELUCCA_PLATFORM
 static void diag_prepare_acid(acid303_t *acid) {
     acid303_init(acid);
@@ -57,37 +66,25 @@ static void diag_prepare_stage(refm_target_t *target) {
     target->diag_phase = 0u;
     switch (target->diag_stage) {
     case 0u:
-        /* Direct output-boundary four-note chime. */
         break;
     case 1u:
-        /* Small 808 groove direct from drum engine, mixer bypassed. */
         drum_machine_init(&g->drum[0], DRUM_MODEL_808);
         break;
     case 2u:
-        /* Identical 808 groove through the shared mixer. */
         drum_machine_init(&g->drum[0], DRUM_MODEL_808);
         mixer_fx_init(&g->mixer);
         break;
     case 3u:
-        /* Short bass phrase after complete 303 engine/ladder, mixer bypassed. */
         diag_prepare_acid(&g->acid[0]);
         break;
     case 4u:
-        /* Identical 303 bass phrase through the shared mixer. */
         diag_prepare_acid(&g->acid[0]);
         mixer_fx_init(&g->mixer);
         break;
 #if REFM_DIAG_EXTENDED_303
     case 5u:
-        /* Internal tap: pre-ladder high-pass state after a normal 303 process. */
-        diag_prepare_acid(&g->acid[0]);
-        break;
     case 6u:
-        /* Internal tap: fourth ladder state after a normal 303 process. */
-        diag_prepare_acid(&g->acid[0]);
-        break;
     case 7u:
-        /* Internal tap: post-ladder high-pass state before VCA/drive. */
         diag_prepare_acid(&g->acid[0]);
         break;
 #endif
@@ -98,6 +95,7 @@ static void diag_prepare_stage(refm_target_t *target) {
 
 static void diag_finish(refm_target_t *target) {
     groovebox_init(&target->groovebox, target->diag_bpm);
+    load_factory_live_set(target);
     groovebox_midi_init(&target->midi);
     target->midi_status = 0u;
     target->midi_needed = 0u;
@@ -108,27 +106,26 @@ static void diag_trigger_drum_phrase(drum_machine_t *drum, uint32_t frame) {
     const uint32_t tick = REFM_TARGET_SAMPLE_RATE / 4u;
     uint32_t step;
     if (frame % tick) return;
-    step = (frame / tick) & 7u;
-    /* Hat pulse establishes timing; kick/snare make direct-vs-mixed A/B easy. */
+    step = (frame / tick) & 3u;
     drum_machine_trigger(drum, DRUM_CH, (step & 1u) ? 72u : 88u);
-    if (step == 0u || step == 4u || step == 7u)
+    if (step == 0u || step == 3u)
         drum_machine_trigger(drum, DRUM_BD, step == 0u ? 120u : 108u);
-    if (step == 2u || step == 6u)
+    if (step == 2u)
         drum_machine_trigger(drum, DRUM_SD, 104u);
 }
 
 static void diag_trigger_acid_phrase(acid303_t *acid, uint32_t frame) {
-    static const uint8_t notes[8] = {36u, 39u, 43u, 46u, 43u, 39u, 34u, 31u};
+    static const uint8_t notes[4] = {36u, 39u, 43u, 46u};
     const uint32_t tick = REFM_TARGET_SAMPLE_RATE / 4u;
     uint32_t step;
     if (frame % tick) return;
-    step = (frame / tick) & 7u;
-    acid303_set_note(acid, notes[step], (uint8_t)(step == 3u || step == 7u), 0u);
+    step = (frame / tick) & 3u;
+    acid303_set_note(acid, notes[step], (uint8_t)(step == 3u), 0u);
 }
 
 static void diag_render(refm_target_t *target, int32_t *left, int32_t *right) {
     static const uint8_t chime_notes[4] = {72u, 76u, 79u, 84u};
-    const uint32_t half_second = REFM_TARGET_SAMPLE_RATE / 2u;
+    const uint32_t quarter_second = REFM_TARGET_SAMPLE_RATE / 4u;
     groovebox_t *g = &target->groovebox;
     int32_t l = 0, r = 0;
 
@@ -137,21 +134,21 @@ static void diag_render(refm_target_t *target, int32_t *left, int32_t *right) {
 
     switch (target->diag_stage) {
     case 0u: {
-        uint32_t note_index = target->diag_stage_frame / half_second;
+        uint32_t note_index = target->diag_stage_frame / quarter_second;
         uint32_t tone_inc;
         if (note_index > 3u) note_index = 3u;
         tone_inc = acid303_note_to_phase_inc(chime_notes[note_index]);
-        if ((target->diag_stage_frame % half_second) == 0u)
+        if ((target->diag_stage_frame % quarter_second) == 0u)
             target->diag_phase = 0u;
         target->diag_phase += tone_inc;
-        l = r = diag_sineish(target->diag_phase) >> 2; /* ~-12 dBFS */
+        l = r = diag_sineish(target->diag_phase) >> 2;
         break;
     }
     case 1u: {
         int32_t s;
         diag_trigger_drum_phrase(&g->drum[0], target->diag_stage_frame);
         s = drum_machine_process(&g->drum[0]);
-        l = r = s >> 2; /* match mixer's -12 dB summing reference */
+        l = r = s >> 2;
         break;
     }
     case 2u: {
@@ -167,7 +164,7 @@ static void diag_render(refm_target_t *target, int32_t *left, int32_t *right) {
         int32_t s;
         diag_trigger_acid_phrase(&g->acid[0], target->diag_stage_frame);
         s = acid303_process(&g->acid[0]);
-        l = r = s >> 2; /* match mixer's -12 dB summing reference */
+        l = r = s >> 2;
         break;
     }
     case 4u: {
@@ -220,6 +217,7 @@ static void diag_render(refm_target_t *target, int32_t *left, int32_t *right) {
 void refm_target_init(refm_target_t *target, uint16_t bpm) {
     memset(target, 0, sizeof(*target));
     groovebox_init(&target->groovebox, bpm);
+    load_factory_live_set(target);
     groovebox_midi_init(&target->midi);
 #ifdef REFM_FELUCCA_PLATFORM
     target->diag_bpm = bpm;
