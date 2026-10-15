@@ -3,12 +3,12 @@
 #include <stdio.h>
 #include "../firmware/proto/groovebox.h"
 
-/* Physical-feedback 303 fingerprint. The beta.13 all-32-bit target path is
-   retained, but control-rate ladder coefficients now interpolate to each exact
-   32-sample target instead of jumping there in one sample. This intentionally
-   reduces envelope-modulation zipper/harshness while preserving the measured
-   cutoff law, oscillator, pitch, mixer and drum contracts. */
-#define EXPECTED_RENDER_HASH 0xec9be17d3f9af807ull
+/* Physical-feedback 303 fingerprint. The beta.15 candidate replaces the old
+   Q15/wavetable ladder with the FM-1-oriented x0x/Open303-style signal path:
+   compact polyBLEP oscillator, TeeBee filter coefficients and 4-sample
+   interpolation. All pitch, articulation, circuit-model and integration tests
+   must pass before this deterministic full-groove fingerprint is accepted. */
+#define EXPECTED_RENDER_HASH 0x85ad0668b05058efull
 
 static uint64_t fnv1a_u16(uint64_t h, uint16_t v) {
     h ^= (uint8_t)v; h *= 1099511628211ull;
