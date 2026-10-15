@@ -2,7 +2,7 @@
 
 ## Goal
 
-Build a GPL-compatible, original replacement firmware for the M-VAVE FM-1 on the pinned Felucca hardware foundation:
+Build a GPL-compatible original replacement firmware for the M-VAVE FM-1 on the pinned Felucca hardware foundation:
 
 - ACID A / ACID B — two independent 303-inspired mono synths;
 - 808 / 909 — distinct drum-machine workflows;
@@ -17,150 +17,109 @@ No Roland/Propellerhead/ReBirth artwork, logos, proprietary source, ROMs, or non
 
 ---
 
-# Current checkpoint — beta.12 staged DSP isolation, 2026-10-15
+# Current checkpoint — beta.13 303 target-DSP correction, 2026-10-15
 
-## Physical beta.11 result
+## Physical beta.12 result
 
-The direct beta.11 ~1 kHz target-boundary startup tone was reported **clean** on physical hardware.
+The important physical result has changed the debugging priority:
 
-Normal audio still has a clearly audible additional/doubled high component:
+- [x] beta.11 direct ~1 kHz target-boundary reference tone was clean;
+- [x] after the latest physical install the former added/doubled/scratch-like sound is reported gone;
+- [x] overall output now sounds clean;
+- [ ] 303 still sounds too close to a clean sine/fundamental;
+- [ ] physical 303 Cutoff/Resonance/Env Mod response is missing or far too weak.
 
-- 808/909 remain far from the intended character and carry the strange added sound;
-- 303 carries the same effect, especially obvious on low notes such as C2 but still present on C4;
-- cutoff now has more audible influence, but the doubled/incorrect component remains.
+The UI/control routing was rechecked:
 
-This substantially reduces the likelihood that the core problem is Felucca's final Q15→24-bit conversion, I²S word format, DAC path or a basic DMA/output-buffer problem.
+- physical `K1/K2/K3/K4` on `UI240_ACID_MAIN` directly writes `cutoff/resonance/env_mod/decay`;
+- browser/MIDI `CC74/71/1/73` writes the same `acid303_t` fields;
+- note events do not reset those controls.
 
-The pinned Felucca source was rechecked as part of this decision: native `events_block()` and synth rendering are inside Felucca's `mix_block()`, and the ReFm physical overlay replaces that `mix_block()` audio call. A simultaneously rendered native Felucca synth is therefore not the leading explanation for physical-key playback.
+Therefore beta.13 targets the active 303 DSP, not the UI and not the shared mixer.
 
-## beta.12 diagnostic goal
+## Root-cause work for beta.13
 
-Do not retune 303 or drums yet. First determine whether the unwanted component is introduced:
+The beta.12 303 path still contained many signed `int64_t` operations in the physical realtime path even after the drum/mixer target path had been converted to bounded 32-bit arithmetic. This included:
 
-- inside `drum_machine_process()`;
-- inside the active 303 oscillator/ladder path;
-- or only after either engine enters the shared ReFm mixer/FX path.
+- wavetable interpolation/crossfade;
+- pre/post/feedback high-pass;
+- ladder feedback and four stage updates;
+- Open303 coefficient polynomial/rational math;
+- Env Mod/exponential cutoff mapping;
+- VCA/declick/accent calculations.
 
-The next immutable test prerelease is `v0.1.0-beta.12`. beta.11 and all older releases remain untouched.
+The host formulas are numerically plausible and structurally match Open303's TB_303 branch, so beta.13 preserves the model while replacing target-hostile arithmetic rather than retuning by ear.
 
-## beta.12 implementation
+A second concrete bug exists in coefficient smoothing: `(target-current)/32` can truncate to zero when the remaining delta is smaller than 32, so a coefficient can remain permanently short of its target. That behavior is unnecessary because 32 output samples are already less than one millisecond.
 
-Physical-target-only startup sequence, five stages × two seconds = ten seconds total:
+## beta.13 implementation
 
-1. [x] **0–2 s direct 1 kHz reference** at the target boundary; all ReFm engines/mixer bypassed.
-2. [x] **2–4 s direct 808 BD** from `drum_machine_process()`; mixer/FX bypassed; retrigger every 0.5 s.
-3. [x] **4–6 s mixed 808 BD** with the same engine setup routed through `mixer_fx_process()`.
-4. [x] **6–8 s direct 303 C2 SAW** after the complete active 303 oscillator/ladder; mixer/FX bypassed; retrigger every second.
-5. [x] **8–10 s mixed 303 C2 SAW** with the same 303 setup routed through `mixer_fx_process()`.
-6. [x] Scale direct engine stages to the same approximate -12 dB reference used by the mixer master headroom so comparisons are about timbre/artifact, not loudness.
-7. [x] Reinitialize a fresh stopped groovebox after the diagnostic sequence so temporary diagnostic state cannot leak into normal playback.
-8. [x] Keep the staged probe behind `REFM_FELUCCA_PLATFORM`; host and Virtual/WASM behavior remains normal.
-9. [x] Extend physical-define host regression to cover all five stages, frame accounting, output bounds and return-to-silence.
-10. [x] Extend Felucca bridge tests to settle the full ten-second physical diagnostic before normal transport/audio assertions.
+- [x] keep the measured ~314–2394 Hz nominal Cutoff law;
+- [x] keep 4× active oscillator/ladder processing at 176.4 kHz;
+- [x] keep the beta.9 Open303-derived 12×1024 target wavetable bank;
+- [x] replace realtime Open303 coefficient polynomial/division with a compact 65-point 200–20,000 Hz LUT;
+- [x] derive the LUT from the beta.12 fixed-point coefficient law, including its conservative high-resonance bound;
+- [x] use bounded signed 32-bit Q15 arithmetic for ladder/state multiplications that would overflow a direct 32-bit `a*b`;
+- [x] remove `int64_t`/`uint64_t` from `acid303.c`;
+- [x] remove 64-bit arithmetic from wavetable interpolation/crossfade;
+- [x] remove 64-bit arithmetic from HPF, Env Mod, VCA, accent, LFO and slide hot paths;
+- [x] change coefficient updates to exact 32-sample control-rate targets instead of truncating integer slew steps;
+- [x] preserve physical MIDI/UI parameter contracts;
+- [x] add a rendered-audio regression requiring a material Cutoff MIN→MAX change;
+- [x] add live same-note Cutoff-change regression so the filter must respond without a note retrigger;
+- [x] add a material Resonance-response regression;
+- [x] add a harmonic/edge-motion regression that prevents the open-cutoff C2 SAW from collapsing toward the closed-filter/fundamental-only character;
+- [x] add a source regression that rejects 64-bit integer types in `acid303.c`.
 
-## beta.12 physical decision tree
+## beta.13 validation/release gate
 
-Use low external/headphone volume before power-on.
+Before publishing `v0.1.0-beta.13`, the exact final `main` SHA must pass:
 
-- [ ] Stage 1 / 0–2 s: reference tone remains clean.
-- [ ] Stage 2 / 2–4 s: classify direct 808 BD as clean or contaminated.
-- [ ] Stage 3 / 4–6 s: compare the same 808 BD through the shared mixer.
-- [ ] Stage 4 / 6–8 s: classify direct post-ladder 303 C2 as clean or contaminated.
-- [ ] Stage 5 / 8–10 s: compare the same 303 C2 through the shared mixer.
-
-### Interpretation
-
-- **2 clean, 3 contaminated** → mixer/FX path introduces the drum artifact.
-- **2 contaminated** → synthetic drum engine itself is wrong; stop mixer work for the drum branch and rebuild/replace the synthetic 808/909 models.
-- **4 clean, 5 contaminated** → mixer/FX path introduces the 303 artifact.
-- **4 contaminated** → active 303 oscillator/ladder/fixed-point path is wrong; next diagnostic split must be raw wavetable/pre-ladder vs post-ladder.
-- **2 and 4 clean, 3 and 5 clean, but normal playback later contaminated** → investigate groovebox routing/event scheduling/full-load behavior and target runtime timing counters.
-- **2 and 4 both contaminated** → likely two engine-level issues or a lower-level compiler/fixed-point primitive shared conceptually but not by the mixer; inspect drum oscillator arithmetic and 303 target `int64_t` lowering separately.
-
-## Next actions after beta.12 feedback
-
-### If mixer is implicated
-
-- [ ] add direct A/B host+target probe around track level/pan and master stage;
-- [ ] bypass delay/reverb state even with zero sends to exclude state corruption;
-- [ ] bypass PCF/DIST/COMP independently;
-- [ ] inspect signed 32-bit multiply/right-shift behavior on pi32v2;
-- [ ] compare raw mixer input sample to final Q15 output on target.
-
-### If 303 direct output is implicated
-
-- [ ] add raw 303 wavetable/pre-ladder probe;
-- [ ] compare pre-ladder vs each ladder stage/post-ladder;
-- [ ] inspect all active-path signed `int64_t` multiplies/divides on the JieLi compiler;
-- [ ] inspect 4× oversampling/phase increment and decimation;
-- [ ] inspect ladder state rail/clamp occupancy;
-- [ ] keep beta.9 wavetable tables unchanged until raw wavetable hardware output is proven wrong.
-
-### If direct 808 is implicated
-
-- [ ] stop incremental timbre tweaks and rebuild the synthetic 808/909 voice models from reference architecture;
-- [ ] verify kick pitch-envelope arithmetic separately from steady-state oscillator;
-- [ ] verify snare/noise and metallic voice paths independently;
-- [ ] compare direct BD-only hardware output against deterministic host render;
-- [ ] keep 808 and 909 implementations distinct rather than applying shared pitch multipliers.
-
----
-
-# beta.10 shared realtime correction retained
-
-## Shared mixer target arithmetic
-
-- [x] bounded signed-32 fixed-point track level/pan;
-- [x] bounded delay/reverb sends and feedback;
-- [x] DIST=0 neutral;
-- [x] COMP startup transparent;
-- [x] PCF-open bypass behavior preserved;
-- [x] -12 dB shared master summing stage preserved;
-- [x] pre-master clamp keeps final Q15 multiply below `INT32_MAX`;
-- [x] full-scale polarity/full-send/full-FX regression coverage.
-
-## Drum hot path
-
-- [x] remove unnecessary signed-64 per-sample oscillator/ring operations;
-- [x] preserve 808/909 model frequencies and decays;
-- [x] preserve bipolar ring/noise behavior;
-- [x] keep sample-rate conversion setup outside normal synthetic hot path.
-
-## Idle 303 fast path
-
-- [x] fully released/gate-off `ACID_ENV_OFF` voice returns exact zero;
-- [x] do not run oscillator + 4× ladder for an idle voice;
-- [x] active voice DSP remains unchanged;
-- [x] drum-only playback no longer spends target CPU on two silent 303 ladders.
-
-## Output facts already verified
-
-- [x] Felucca's final Q15 → 24-bit `<< 7` conversion still occurs after ReFm render;
-- [x] replacing `mix_block()` did not remove the later UAC/DAC path;
-- [x] beta.11 direct target-boundary tone is physically clean;
-- [x] no duplicate guessed output shift or attenuation is added.
-
----
-
-# Validation gates for beta.12
-
-The exact release commit must pass:
-
-1. [ ] normal host DSP/unit/integration tests;
-2. [ ] physical-define five-stage target probe regression;
-3. [ ] deterministic audio hash for normal nonphysical rendering unchanged;
-4. [ ] browser/JS syntax and sample-manifest checks;
-5. [ ] pinned Felucca integration-anchor checks;
-6. [ ] deterministic overlay application;
-7. [ ] copied ReFm target source compile/link;
-8. [ ] WASM build + browser smoke test;
-9. [ ] real JieLi pi32v2 app/loader/FWSC build;
+1. [ ] normal host DSP/unit/integration suite;
+2. [ ] new 303 cutoff/resonance/harmonic-response regression;
+3. [ ] existing wavetable + PolyBLEP 303 suites;
+4. [ ] physical-define target bridge tests;
+5. [ ] browser/JS syntax checks;
+6. [ ] deterministic Felucca overlay checks;
+7. [ ] shared WASM build + browser smoke;
+8. [ ] real JieLi pi32v2 app compile/link;
+9. [ ] real FM-1 loader/FWSC package;
 10. [ ] target XIP/RAM/pool budgets;
 11. [ ] ROM-reference safety gate;
-12. [ ] release manifest + checksums;
-13. [ ] sample link-size experiment;
-14. [ ] guarded publisher on exact successful Build-all commit;
-15. [ ] publish `v0.1.0-beta.12` without modifying any earlier beta tag.
+12. [ ] manifest + SHA verification;
+13. [ ] guarded publisher against the exact successful Build-all SHA;
+14. [ ] publish new immutable `v0.1.0-beta.13`; never move beta.12 or earlier tags.
+
+## beta.13 physical acceptance
+
+After the retained beta.12 ten-second startup isolation sequence:
+
+- [ ] former scratch/double component remains absent;
+- [ ] C2 SAW is clearly harmonically richer than a clean sine;
+- [ ] C2/C3/C4 Cutoff sweep is unmistakable from minimum to maximum;
+- [ ] Resonance materially changes the response at medium/high Cutoff;
+- [ ] Env Mod materially changes the transient filter sweep;
+- [ ] SAW and SQUARE remain audibly distinct;
+- [ ] no new aliasing/digital scratch is introduced;
+- [ ] capture runtime diagnostics after a sustained ACID pattern.
+
+If the physical filter remains static after this all-32-bit path, beta.14 should stop retuning and instead expose selectable raw-wavetable → pre-HP → ladder → post-HP stages for direct hardware comparison.
+
+---
+
+# beta.12 staged DSP isolation — retained for comparison
+
+Physical-only startup sequence:
+
+1. [x] 0–2 s direct 1 kHz reference;
+2. [x] 2–4 s direct 808 BD;
+3. [x] 4–6 s mixed 808 BD;
+4. [x] 6–8 s direct complete 303 C2 SAW;
+5. [x] 8–10 s mixed complete 303 C2 SAW;
+6. [x] fresh stopped groovebox after diagnostics;
+7. [x] Host/Virtual unaffected.
+
+The probe remains in beta.13 for one controlled A/B physical comparison. It should be removed or made explicitly selectable once the 303 target path is physically approved.
 
 ---
 
@@ -168,20 +127,20 @@ The exact release commit must pass:
 
 ## ACID A / ACID B
 
+- [x] two independent mono instances;
 - [x] saw + Open303-derived 303 square;
-- [x] A4=440 equal-temperament pitch regression;
+- [x] A4=440 equal temperament;
 - [x] true physical chromatic keyboard mapping;
 - [x] nominal 60 ms slide;
-- [x] cutoff/resonance/Env Mod/decay/accent;
-- [x] dual independent instances;
-- [x] 4× active oscillator/filter processing;
-- [x] 12-band × 1024-sample target mip bank;
-- [x] shared target/Virtual source model;
+- [x] Cutoff/Resonance/Env Mod/Decay/Accent controls;
+- [x] 4× oscillator/filter processing;
+- [x] 12-band ×1024 target mip bank;
 - [x] smooth two-semitone mip transitions;
 - [x] idle-voice fast path;
-- [ ] physical clean-audio approval;
-- [ ] beta.12 direct post-ladder classification;
-- [ ] final physical cutoff/resonance/env-mod calibration after artifact is resolved.
+- [x] beta.13 bounded 32-bit active DSP;
+- [x] beta.13 exact control-rate coefficient update;
+- [ ] physical beta.13 filter approval;
+- [ ] final physical calibration only after functional filter response is proven.
 
 ## 808 / 909
 
@@ -192,9 +151,7 @@ The exact release commit must pass:
 - [x] direct hardware audition/programming;
 - [x] synthetic fallback without licensed samples;
 - [x] signed-32 synthetic target hot path;
-- [ ] physical clean-audio approval;
-- [ ] beta.12 direct BD classification;
-- [ ] final physical model redesign/calibration after artifact isolation.
+- [ ] final physical model/timbre redesign remains open.
 
 ## Sequencer / mixer / FX
 
@@ -205,35 +162,42 @@ The exact release commit must pass:
 - [x] mixer level/pan/mute/solo;
 - [x] per-track delay/reverb sends;
 - [x] separate PCF / Delay / Dist / Comp performance sections;
-- [x] clean startup gain contract outside diagnostic probe;
-- [x] versioned project save/load;
+- [x] neutral startup gain contract;
 - [x] signed-32 shared mixer hot path;
-- [ ] beta.12 direct-vs-mixed hardware classification;
+- [x] versioned project save/load;
 - [ ] longer patterns/ratchets/automation deferred until physical audio baseline is reliable.
 
 ---
 
 # Physical UI / keyboard contract
 
-## ACID
+## ACID main
 
 1. `ENV` → ACID A.
 2. `LFO` → ACID B.
-3. `SEQ` → selected ACID step editor.
-4. `PRESET` → step 1–16.
-5. Musical key → chromatic note entry/audition.
-6. `OCT- / OCT+` → keyboard register.
-7. `K1` → stored-note semitone edit.
-8. `K2` → REST / NOTE / TIE.
-9. `K3` → Accent/Slide state.
-10. `K4` → probability.
+3. `K1` → Cutoff.
+4. `K2` → Resonance.
+5. `K3` → Env Mod.
+6. `K4` → Decay.
+7. Musical keys → direct chromatic live play.
+
+## ACID step
+
+1. `SEQ` → selected ACID step editor.
+2. `PRESET` → step 1–16.
+3. Musical key → chromatic note entry/audition.
+4. `OCT- / OCT+` → register.
+5. `K1` → stored-note semitone.
+6. `K2` → REST / NOTE / TIE.
+7. `K3` → Accent/Slide.
+8. `K4` → probability.
 
 ## DRUM
 
-1. `ARP` → drum programmer.
+1. `ARP` → 808/909 programmer.
 2. Contextual/repeated selection switches 808/909.
 3. `PRESET` → step 1–16.
-4. `K1` or `OCT- / OCT+` → lane selection.
+4. `K1` or `OCT- / OCT+` → lane.
 5. `K2` → OFF / HIT / ACCENT.
 6. Musical key → mapped drum select/program/audition.
 7. 909 `K3` → FLAM.
@@ -242,11 +206,42 @@ The exact release commit must pass:
 ## RB-240
 
 - [x] compact page-specific physical renderer;
-- [x] exact ACID/drum step readback;
 - [x] selected step vs playhead distinction;
 - [x] FOCUS location indicator;
 - [x] dirty-region redraw;
-- [ ] physical zero-flash/stale-pixel/label-overlap validation remains open.
+- [ ] physical zero-flash/stale-pixel/label-overlap validation.
+
+---
+
+# Shared realtime corrections retained
+
+## Mixer/drums
+
+- [x] bounded signed-32 track level/pan;
+- [x] bounded delay/reverb send/feedback;
+- [x] DIST=0 neutral startup;
+- [x] transparent compressor startup;
+- [x] PCF-open bypass;
+- [x] -12 dB shared master summing headroom;
+- [x] synthetic drum hot path without unnecessary signed-64 operations.
+
+## Output facts
+
+- [x] Felucca's final Q15→24-bit `<<7` conversion remains after ReFm render;
+- [x] beta.11 direct target-boundary tone physically clean;
+- [x] latest physical result reports former doubled/scratch artifact gone;
+- [x] no duplicate output shift/EQ/limiter workaround added.
+
+---
+
+# Browser/release infrastructure
+
+- [x] browser installer/editor/Virtual FM-1;
+- [x] CORS-safe firmware channel;
+- [x] exact-tag GitHub release verification instead of relying on release-list ordering;
+- [x] `.fwsc` asset-name + SHA-256 verification;
+- [x] guarded one-shot beta publisher;
+- [x] immutable beta tags.
 
 ---
 
@@ -257,23 +252,21 @@ The exact release commit must pass:
 - [x] package identity/SHA/memory gates;
 - [x] ROM-reference safety gate;
 - [x] runtime CPU/DMA/user-stack/supervisor-stack instrumentation;
-- [x] guarded one-shot beta publisher;
+- [x] verified official V15 recovery workflow available;
 - [x] immutable beta policy.
 
 Still required physically:
 
-- [x] beta.11 direct boot-tone classification: clean;
-- [ ] beta.12 staged direct-vs-mixed classification;
+- [ ] beta.13 303 cutoff/resonance/env-mod acceptance;
 - [ ] factory-pattern runtime capture;
 - [ ] worst-case four-machine stress capture;
 - [ ] `late == 0` under mixed load;
-- [ ] sustained audio CPU <= 75%;
-- [ ] peak render <= 82% of DMA-half deadline;
-- [ ] user-stack free >= 4096 bytes;
-- [ ] supervisor/ISR-stack free >= 1024 bytes;
+- [ ] sustained audio CPU <=75%;
+- [ ] peak render <=82% of DMA-half deadline;
+- [ ] user-stack free >=4096 bytes;
+- [ ] supervisor/ISR-stack free >=1024 bytes;
 - [ ] USB MIDI/TRS MIDI/USB audio under load;
 - [ ] save/load + power-cycle behavior;
-- [ ] official/Felucca recovery verification;
 - [ ] repeated update/rollback cycle.
 
 No custom firmware has a zero-brick guarantee.

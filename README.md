@@ -14,50 +14,45 @@ Experimental replacement firmware for the M-VAVE FM-1: a compact four-machine ac
 
 See [`plan.md`](plan.md), [`docs/TB303_MODEL.md`](docs/TB303_MODEL.md), [`docs/FLASH_SAFETY.md`](docs/FLASH_SAFETY.md) and [`docs/PHYSICAL_BETA2_VALIDATION.md`](docs/PHYSICAL_BETA2_VALIDATION.md).
 
-## Current status — beta.12 staged DSP isolation
+## Current status — beta.13 303 target-DSP correction
 
-Physical beta.11 produced the decisive first result: its direct ~1 kHz startup tone was **clean**, while normal 303 and 808/909 audio still contained the strange added/doubled high component. That makes Felucca's final Q15→24-bit conversion, I²S/DAC formatting and the basic physical output chain unlikely to be the source of the artifact.
+The physical beta.12 pass produced an important improvement: the previous added/doubled/scratch-like component is now reported **gone** and the hardware output sounds clean. The remaining fault is much narrower:
 
-beta.12 therefore does not retune the 303 or drums. On the **physical FM-1 target only**, the first ten seconds after ReFm initialization run five two-second diagnostic stages:
+- the 303 sounds too close to a clean sine/fundamental;
+- Cutoff/Resonance/Env Mod changes have little or no audible effect on the physical unit;
+- the physical/UI and MIDI control paths do update the actual `acid303_t` parameters, so the leading fault is inside the active 303 target DSP rather than the control routing.
 
-1. **0–2 s — direct 1 kHz reference tone**: bypasses all ReFm engines and mixer.
-2. **2–4 s — direct 808 kick**: synthetic 808 BD directly from `drum_machine_process()`, mixer/FX bypassed; four hits at 0.5 s spacing.
-3. **4–6 s — mixed 808 kick**: the same BD engine routed through the normal ReFm mixer.
-4. **6–8 s — direct 303 C2 SAW**: complete 303 oscillator + ladder output, mixer/FX bypassed; C2 is retriggered once per second.
-5. **8–10 s — mixed 303 C2 SAW**: the same 303 setup routed through the normal ReFm mixer.
+beta.13 therefore does **not** widen or retune the measured TB-303 knob law. It keeps the Open303-derived oscillator tables and nominal ~314–2394 Hz cutoff mapping, but removes the remaining signed-64-bit arithmetic from the active 303 realtime path.
 
-After ten seconds the diagnostic state is discarded, a fresh stopped groovebox is initialized, and normal operation begins. Host and Virtual/WASM builds do **not** run the startup sequence.
+### beta.13 303 changes
 
-This provides a short decision tree:
+- Open303/TeeBee filter coefficient formulas are represented by a compact 65-point target LUT spanning 200–20,000 Hz at the 176.4 kHz ladder rate.
+- Coefficients are interpolated with bounded 32-bit arithmetic; the beta.12 coefficient law and conservative high-resonance bound are retained.
+- The active ladder, feedback/pre/post high-pass filters, VCA, Env Mod path, wavetable interpolation/crossfade, slide and LFO path no longer require `int64_t`/`uint64_t`.
+- A bounded decomposed Q15 multiply handles large ladder state × coefficient products without overflowing signed 32 bit.
+- Filter coefficient control updates now land on the exact target every 32 samples instead of `(target-current)/32` integer stepping. The old stepping could truncate a small remaining delta to zero indefinitely and create control dead-zones.
+- New host regression renders a real C2 SAW and requires Cutoff MIN→MAX to cause a material coefficient and audio change. It also verifies a material resonance response and that the open-cutoff SAW retains more edge/harmonic motion than the closed-filter case.
+- The regression rejects reintroduction of 64-bit integer types in `acid303.c`.
 
-- **stage 2 clean, stage 3 contaminated** → shared mixer/FX path is the source for the drum artifact;
-- **stage 2 already contaminated** → the synthetic drum engine itself is producing the unwanted component;
-- **stage 4 clean, stage 5 contaminated** → shared mixer/FX path is the source for the 303 artifact;
-- **stage 4 already contaminated** → the fault is inside the active 303 oscillator/ladder/fixed-point path;
-- **stages 2 and 4 both clean but normal playback later contaminates** → investigate groovebox event/routing/load behavior rather than the individual engines or mixer.
+The beta.9 12×1024 Open303-derived physical wavetable bank is intentionally retained. The physical feedback did not justify regenerating the source tables before fixing the target ladder/control arithmetic.
 
-Use low external/headphone volume before power-on because the diagnostic sequence begins automatically.
+## beta.12 physical isolation retained
 
-## beta.11 finding retained
+For this corrective pass the physical-only ten-second startup probe is retained so the same hardware can be compared against beta.12 under identical conditions:
 
-beta.11's clean direct startup tone is now a known physical fact for this hardware test path. The pinned Felucca output still performs its original final Q15 → 24-bit `<< 7` conversion after the ReFm render. beta.12 does not add another output shift, EQ, limiter or guessed attenuation workaround.
+1. **0–2 s — direct 1 kHz reference tone**
+2. **2–4 s — direct 808 kick**
+3. **4–6 s — mixed 808 kick**
+4. **6–8 s — direct 303 C2 SAW**
+5. **8–10 s — mixed 303 C2 SAW**
 
-The pinned Felucca source was also rechecked: its native `events_block()` and original synth rendering are called from `mix_block()`, and ReFm replaces that `mix_block()` call on the physical audio path. That makes a simultaneously rendered native Felucca synth less likely as the source of the physical-key artifact.
+After ten seconds a fresh stopped groovebox is initialized and normal operation begins. Host and Virtual/WASM do not run the probe.
 
-## beta.10 realtime correction retained
-
-beta.12 keeps all beta.10 target-realtime changes:
-
-- shared mixer hot path uses bounded signed 32-bit fixed-point arithmetic instead of repeated signed `int64_t` multiplies;
-- track level/pan, delay/reverb sends, PCF, Dist and -12 dB master summing remain bounded and regression-tested;
-- synthetic drum oscillator/ring paths avoid unnecessary signed-64 hot-path work;
-- a fully released/idle 303 returns exact zero instead of continuously running oscillator + 4× ladder;
-- active 303 oscillator/filter laws are unchanged;
-- beta.9's 12×1024 Open303-derived target wavetable bank and smooth mip crossfades remain unchanged.
+The known physical result before beta.13 is that the former added/doubled sound is gone. The next physical priority is normal 303 operation after the startup sequence: verify an obvious Cutoff sweep, Resonance response, Env Mod sweep and SAW/SQUARE distinction on C2–C4.
 
 ## 303 reference points
 
-The ACID engine currently uses:
+The ACID engine uses:
 
 - equal temperament with A4=440 Hz;
 - stable DDS pitch with no hidden drift when slide/LFO are off;
@@ -66,7 +61,7 @@ The ACID engine currently uses:
 - 12 precomputed pitch bands and 1024 samples per physical-target table;
 - phase-aligned two-semitone crossfades between adjacent mip bands;
 - ~19.845 kHz harmonic guard;
-- Open303/TeeBee-inspired cutoff, Env Mod and resonance mappings;
+- measured Open303/TeeBee-inspired Cutoff, Env Mod and Resonance mappings;
 - ~150 Hz feedback-loop high-pass;
 - ~1000 ms normal / ~200 ms accented main-envelope decay anchors;
 - nominal 60 ms slide time constant;
@@ -75,7 +70,7 @@ The ACID engine currently uses:
 
 ## Physical controls
 
-Primary pages remain page-first:
+Primary pages are page-first:
 
 - `ENV` → ACID A
 - `LFO` → ACID B
@@ -86,6 +81,15 @@ Primary pages remain page-first:
 - `SCL` → song/pattern
 - `SAVE` → project
 - `PLAY` → transport
+
+### ACID main page
+
+- `K1` → Cutoff
+- `K2` → Resonance
+- `K3` → Env Mod
+- `K4` → Decay
+
+The browser/MIDI editor uses the same engine fields (`CC74`, `CC71`, `CC1`, `CC73` respectively).
 
 ### ACID step entry
 
@@ -113,49 +117,53 @@ On `ARP` / DRUM:
 
 ## Clean audio contract
 
-Outside beta.12's ten-second startup diagnostics, startup mixer behavior remains neutral:
+Outside the physical diagnostic sequence:
 
-- four track faders at unity;
-- one -12 dB shared master summing stage for four-channel headroom;
+- four track faders start at unity;
+- one -12 dB shared master summing stage provides four-channel headroom;
 - DIST=0;
-- compressor effectively transparent;
-- PCF fully open/bypassed;
-- physical MASTER applied after the ReFm render;
-- Felucca's original Q15→24-bit DAC conversion remains after the ReFm callback.
+- compressor startup is effectively transparent;
+- PCF starts fully open/bypassed;
+- physical MASTER is applied after the ReFm render;
+- Felucca performs its original Q15→24-bit DAC conversion after the ReFm callback.
+
+The clean beta.11 direct tone and the cleaner beta.12 physical result mean no additional guessed output shift, EQ or attenuation workaround is being added.
 
 ## Virtual FM-1
 
-Virtual uses the same groovebox state model and audible 303 source spectrum as hardware. Its wavetable lookup uses 2048 samples rather than 1024, but source prototype, band boundaries, harmonic budgets, headroom and SAW/SQUARE balance are shared.
+Virtual uses the same groovebox state model and 303 source spectrum as hardware. Its wavetable lookup uses 2048 samples rather than the physical target's 1024-sample tables, while source prototype, pitch-band policy, harmonic guard and SAW/SQUARE balance remain shared.
 
-The beta.12 staged startup probe is intentionally physical-target-only because it exists to isolate target DSP sections. Virtual/WASM starts normally.
+## Browser installer
+
+The browser release loader reads the CORS-safe `firmware-channel/latest.json`, then verifies that exact tag through GitHub's `releases/tags/<tag>` endpoint, verifies the exact `.fwsc` asset name and SHA-256, and only then enables the package. It does not depend on GitHub's release-list ordering.
 
 ## Build and release safety
 
-`.github/workflows/build-all.yml` builds the exact commit for:
+`.github/workflows/build-all.yml` validates the exact `main` commit for:
 
-1. Host DSP/integration tests;
+1. host DSP/unit/integration tests;
 2. shared WASM runtime + browser smoke tests;
-3. real JieLi/FM-1 app, loader and experimental `.fwsc` package;
-4. target ROM/memory gates, manifest and SHA checks;
-5. a non-release sample link-size experiment.
+3. real JieLi/FM-1 app, loader and experimental `.fwsc`;
+4. target XIP/RAM/pool budgets;
+5. ROM-reference and manifest/checksum gates;
+6. sample link-size experiment.
 
 The FM-1 build uses pinned Felucca `3dd2b0852bc310a2c1bf00c2d443ac19202c2140`. GitHub Actions never connects to or flashes a physical unit.
 
-Published betas are immutable. A new beta is published only from the exact successful `main` Build-all commit; older tags are never moved or overwritten.
+Published betas are immutable. `v0.1.0-beta.12` and all earlier tags remain untouched. The next corrective prerelease is **`v0.1.0-beta.13`** and is published only from the exact successful Build-all commit.
 
-The next physical diagnostic prerelease is **`v0.1.0-beta.12`**. beta.11 and all earlier releases remain untouched.
+## beta.13 physical test priority
 
-## beta.12 physical test priority
+After the ten-second startup probe:
 
-Start with low headphone/external volume and simply classify the five startup stages:
+1. select ACID A and play C2, C3 and C4;
+2. sweep **Cutoff K1** from minimum to maximum — it should now be unmistakable rather than nearly static;
+3. with Cutoff around the middle/high range, sweep **Resonance K2**;
+4. sweep **Env Mod K3** and listen for the envelope opening/closing the ladder;
+5. compare SAW and SQUARE;
+6. confirm the former added/doubled scratch component remains absent.
 
-1. **0–2 s reference tone** — expected clean.
-2. **2–4 s direct 808 BD** — does the strange extra/high component already exist?
-3. **4–6 s mixed 808 BD** — is it materially different/worse than stage 2?
-4. **6–8 s direct 303 C2 SAW** — does the doubled/high component already exist?
-5. **8–10 s mixed 303 C2 SAW** — is it materially different/worse than stage 4?
-
-The most useful report is simply `1 clean/dirty, 2 clean/dirty, 3 clean/dirty, 4 clean/dirty, 5 clean/dirty`, plus whether 2→3 or 4→5 introduces the unwanted sound.
+Do not compensate a failed filter sweep with mixer EQ/PCF. If the physical filter is still static after beta.13, the next diagnostic will expose raw wavetable, pre-ladder and post-ladder stages separately.
 
 ## Sample policy
 
