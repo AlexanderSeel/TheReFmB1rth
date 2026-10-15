@@ -60,6 +60,15 @@ def main() -> int:
     subprocess.run([sys.executable, str(ROOT / "tools" / "apply_rb240_wasm_parity.py"), str(root)], check=True, cwd=ROOT)
     subprocess.run([sys.executable, str(ROOT / "tools" / "apply_rb240_full_parity.py"), str(root)], check=True, cwd=ROOT)
 
+    # The physical factory fallback starts at 136 BPM, but an explicit bridge
+    # initialization (host test, project restore, editor/runtime caller) must keep
+    # the caller-supplied tempo. The parity pass only changes the lazy fallback.
+    bridge = root / "firmware" / "refm" / "integration" / "refm_felucca_bridge.c"
+    bridge_text = bridge.read_text()
+    forced = "(void)bpm;\n    refm_target_init(&g_refm, 136u);"
+    if forced in bridge_text:
+        bridge.write_text(bridge_text.replace(forced, "refm_target_init(&g_refm, bpm);", 1))
+
     h = hashlib.sha256()
     for path in (
         graph,
