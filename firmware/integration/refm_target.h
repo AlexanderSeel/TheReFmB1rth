@@ -9,12 +9,10 @@
 
 #define REFM_TARGET_SAMPLE_RATE 44100u
 #define REFM_BOOT_PROBE_HZ 1000u
-#define REFM_DIAG_STAGE_FRAMES (REFM_TARGET_SAMPLE_RATE * 2u)
+/* Keep the direct/mixed signal-path A/B diagnostics, but make boot practical:
+ * five one-second stages instead of the previous ten-second sequence. */
+#define REFM_DIAG_STAGE_FRAMES REFM_TARGET_SAMPLE_RATE
 
-/* beta.13 keeps the original five-stage physical startup probe. An extended
- * 303 isolation probe is compiled only when explicitly requested, so normal
- * release behavior is unchanged while beta.14-style diagnostics can be built
- * and host-tested ahead of the next physical round. */
 #ifndef REFM_DIAG_EXTENDED_303
 #define REFM_DIAG_EXTENDED_303 0
 #endif
