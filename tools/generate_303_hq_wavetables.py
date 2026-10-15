@@ -1,127 +1,100 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
-"""Generate browser-only 2048x12 TB-303 reference mipmaps.
+"""Generate browser/WASM Open303-derived reference mipmaps.
 
-For the WASM reference path we deliberately use the spectral construction from
-js303 as a second benchmark beside Open303: all harmonics for saw, odd
-harmonics only for square, with a cosine-squared roll-off toward the highest
-retained partial. This produces a stable hollow/reedy square without the
-experimental pulse-width/memory model that drifted away from the reference.
-
-The emitted interface matches the compact firmware wavetable header. Both the
-browser and target oscillator banks reserve 6 dB of source headroom so the
-fixed-point 303 filter/VCA can reproduce high accent/resonance peaks without
-turning them into hard numerical clipping.
+Virtual uses the same Open303 SAW303/SQUARE303 prototype, pitch-band boundaries,
+harmonic budgets, 6 dB source headroom and square:saw balance as the FM-1.
+Only lookup-table resolution is doubled to 2048 samples for a cleaner reference.
 """
 from __future__ import annotations
-import argparse, math
+
+import argparse
+import math
 from pathlib import Path
 
-N=2048
-LEVELS=12
-OSC_HEADROOM=0.5
+from acid303_wavetable_common import (
+    OUT_SR,
+    harmonic_budget,
+    open303_prototypes,
+    phase_inc,
+    positive_spectrum,
+    render_band,
+)
+
+N = 2048
+TARGET_EQUIV_SIZE = 1024
+BITS = 11
+BAND_CENTERS = [24, 33, 42, 51, 60, 69, 78, 87, 96, 105, 114, 123]
+CROSSFADE_SEMITONES = 2
+BANDLIMIT_HZ = OUT_SR * 0.45
+SAW_SCALE = 16384.0
+SQUARE_SCALE = SAW_SCALE * 0.5
 
 
-def normalize_bank(tables:list[list[float]])->list[list[float]]:
-    peak=max(max(abs(v) for v in table) for table in tables)
-    if peak <= 0.0:
-        raise RuntimeError("wavetable bank is silent")
-    scale=1.0/peak
-    return [[v*scale for v in table] for table in tables]
+def threshold_notes() -> list[int]:
+    return [math.floor((a + b) * 0.5 + 0.5) for a, b in zip(BAND_CENTERS, BAND_CENTERS[1:])]
 
 
-def spectral_table(hmax:int, odd_only:bool)->list[float]:
-    """Render one js303-style band-limited waveform.
-
-    js303 weights harmonic j with
-      cos^2((j-1) * pi / (2*hmax)) / j
-    and keeps only odd j for square. We retain that spectral shape while using
-    our 2048-sample mipmapped representation instead of js303's per-MIDI-note
-    4096-sample table bank.
-    """
-    h=max(1,min(N//2-1,hmax))
-    out=[0.0]*N
-    for j in range(1,h+1):
-        if odd_only and not (j&1):
-            continue
-        taper=math.cos((j-1)*0.5*math.pi/h)
-        amp=(taper*taper)/j
-        for k in range(N):
-            out[k]+=amp*math.sin(2.0*math.pi*j*k/N)
-    return out
-
-
-def js303_mips(odd_only:bool)->list[list[float]]:
-    tables=[]
-    for level in range(LEVELS):
-        # Each successive mip retains roughly half the harmonics, matching the
-        # octave-spaced selection used by the HQ oscillator.
-        hmax=max(1,(N//2-1)//(1<<level))
-        tables.append(spectral_table(hmax,odd_only))
-    return normalize_bank(tables)
-
-
-def validate_mips(name:str,tables:list[list[float]])->None:
-    for i,table in enumerate(tables):
-        peak=max(abs(v) for v in table)
-        rms=math.sqrt(sum(v*v for v in table)/len(table))
-        if peak < 1e-5 or rms < 1e-6:
-            raise RuntimeError(f"{name} mip {i} is effectively silent: peak={peak} rms={rms}")
-
-
-def q15(v:float)->int:
-    return max(-32768,min(32767,round(v*32767.0*OSC_HEADROOM)))
-
-
-def emit_single(name:str,values:list[float])->str:
-    vals=[q15(v) for v in values]
-    out=[f"static const int16_t {name}[REFM_ACID_WT_SIZE] = {{\n"]
-    for i in range(0,N,16):
-        out.append("    "+", ".join(map(str,vals[i:i+16]))+",\n")
+def emit_single(name: str, values: list[int]) -> str:
+    out = [f"static const int16_t {name}[REFM_ACID_WT_SIZE] = {{\n"]
+    for i in range(0, N, 16):
+        out.append("    " + ", ".join(map(str, values[i:i+16])) + ",\n")
     out.append("};\n")
-    return ''.join(out)
+    return "".join(out)
 
 
-def generate()->str:
-    saw=js303_mips(False)
-    square=js303_mips(True)
-    validate_mips("SAW",saw)
-    validate_mips("SQUARE",square)
+def generate() -> str:
+    saw_proto, square_proto = open303_prototypes()
+    # Match the target's audible harmonic content; HQ improves only lookup
+    # resolution so browser tests cannot hide a different oscillator spectrum.
+    max_h = TARGET_EQUIV_SIZE // 2 - 1
+    saw_spec = positive_spectrum(saw_proto, max_h)
+    square_spec = positive_spectrum(square_proto, max_h)
+    thresholds_notes = threshold_notes()
+    uppers = thresholds_notes + [127]
+    thresholds = [phase_inc(n) for n in thresholds_notes]
+    xfade_starts = [phase_inc(max(0, n - CROSSFADE_SEMITONES)) for n in thresholds_notes]
+    harmonic_counts = [harmonic_budget(n, TARGET_EQUIV_SIZE, BANDLIMIT_HZ) for n in uppers]
 
-    # The HQ oscillator runs at 4x but represents pitch using the 44.1-kHz Q32
-    # phase increment. These octave thresholds retain the existing proven mip
-    # selection and avoid the high-note silence regression.
-    thresholds=[min(0xffffffff,1<<(22+i)) for i in range(LEVELS-1)]
-    out=[
+    saw = [render_band(saw_spec, N, h, SAW_SCALE) for h in harmonic_counts]
+    square = [render_band(square_spec, N, h, SQUARE_SCALE) for h in harmonic_counts]
+
+    out = [
         "// SPDX-License-Identifier: GPL-3.0-only\n",
         "/* Generated by tools/generate_303_hq_wavetables.py. Do not hand-edit. */\n",
         "#ifndef REFM_ACID303_WAVETABLE_H\n#define REFM_ACID303_WAVETABLE_H\n#include <stdint.h>\n",
-        f"#define REFM_ACID_WT_BANDS {LEVELS}u\n#define REFM_ACID_WT_BITS 11u\n#define REFM_ACID_WT_SIZE {N}u\n#define REFM_ACID_WT_MASK {N-1}u\n",
-        "static const uint32_t refm_acid_wt_threshold_inc[REFM_ACID_WT_BANDS-1u] = {\n    "+", ".join(f"{x}u" for x in thresholds)+"\n};\n"
+        f"#define REFM_ACID_WT_BANDS {len(BAND_CENTERS)}u\n#define REFM_ACID_WT_BITS {BITS}u\n#define REFM_ACID_WT_SIZE {N}u\n#define REFM_ACID_WT_MASK {N-1}u\n",
+        "static const uint32_t refm_acid_wt_threshold_inc[REFM_ACID_WT_BANDS-1u] = {\n    "
+        + ", ".join(f"{x}u" for x in thresholds) + "\n};\n",
+        "static const uint32_t refm_acid_wt_xfade_start_inc[REFM_ACID_WT_BANDS-1u] = {\n    "
+        + ", ".join(f"{x}u" for x in xfade_starts) + "\n};\n",
+        "static const uint16_t refm_acid_wt_harmonics[REFM_ACID_WT_BANDS] = {\n    "
+        + ", ".join(str(v) for v in harmonic_counts) + "\n};\n",
     ]
-    for i in range(LEVELS):
-        out.append(emit_single(f"refm_acid_wt_saw_{i}",saw[i]))
-        out.append(emit_single(f"refm_acid_wt_square_{i}",square[i]))
-    out.append("static const int16_t *const refm_acid_wt_saw[REFM_ACID_WT_BANDS] = {\n    "+", ".join(f"refm_acid_wt_saw_{i}" for i in range(LEVELS))+"\n};\n")
-    out.append("static const int16_t *const refm_acid_wt_square[REFM_ACID_WT_BANDS] = {\n    "+", ".join(f"refm_acid_wt_square_{i}" for i in range(LEVELS))+"\n};\n#endif\n")
-    return ''.join(out)
+    for i in range(len(BAND_CENTERS)):
+        out.append(emit_single(f"refm_acid_wt_saw_{i}", saw[i]))
+        out.append(emit_single(f"refm_acid_wt_square_{i}", square[i]))
+    out.append("static const int16_t *const refm_acid_wt_saw[REFM_ACID_WT_BANDS] = {\n    " + ", ".join(f"refm_acid_wt_saw_{i}" for i in range(len(BAND_CENTERS))) + "\n};\n")
+    out.append("static const int16_t *const refm_acid_wt_square[REFM_ACID_WT_BANDS] = {\n    " + ", ".join(f"refm_acid_wt_square_{i}" for i in range(len(BAND_CENTERS))) + "\n};\n#endif\n")
+    return "".join(out)
 
 
-def main()->int:
-    ap=argparse.ArgumentParser()
-    ap.add_argument("--output",type=Path,default=Path("build/wasm/acid303_hq_wavetable.h"))
-    ap.add_argument("--check",action="store_true")
-    args=ap.parse_args()
-    text=generate()
+def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--output", type=Path, default=Path("build/wasm/acid303_hq_wavetable.h"))
+    ap.add_argument("--check", action="store_true")
+    args = ap.parse_args()
+    text = generate()
     if args.check:
-        if not args.output.exists() or args.output.read_text()!=text:
+        if not args.output.exists() or args.output.read_text() != text:
             raise SystemExit("HQ wavetable is stale")
-        print(f"303 HQ wavetable ok: {LEVELS} x {N} x 2 Q15 (js303 spectral reference)")
+        print(f"303 HQ wavetable ok: {len(BAND_CENTERS)} x {N} x 2 Q15 (Open303 source parity)")
         return 0
-    args.output.parent.mkdir(parents=True,exist_ok=True)
+    args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(text)
-    print(f"wrote {args.output}: {LEVELS} x {N} x 2 Q15")
+    print(f"wrote {args.output}: {len(BAND_CENTERS)} x {N} x 2 Q15")
     return 0
 
-if __name__=='__main__':
+
+if __name__ == "__main__":
     raise SystemExit(main())
