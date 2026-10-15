@@ -3,9 +3,17 @@
 #include <string.h>
 
 #define MIX_MASTER_HEADROOM_Q15 8192 /* -12 dB: four full-scale tracks sum cleanly */
+/* Bound before the master-headroom multiply. 262140 * 8192 stays below
+ * INT32_MAX; anything above this would clamp to full Q15 after the -12 dB
+ * master stage anyway. */
+#define MIX_PREMASTER_LIMIT 262140
 
-static int32_t clamp32(int64_t v, int32_t lo, int32_t hi) { return v<lo?lo:v>hi?hi:(int32_t)v; }
+static int32_t clamp32(int32_t v, int32_t lo, int32_t hi) { return v<lo?lo:v>hi?hi:v; }
 static int16_t clip16(int32_t v) { return (int16_t)clamp32(v,-32768,32767); }
+/* All hot-path operands passed here are bounded to <= 65536 in magnitude.
+ * The worst product (65536 * 32767) remains inside signed 32 bit. This avoids
+ * target/compiler 64-bit arithmetic in the shared audio path. */
+static int32_t mul_q15_32(int32_t a, int32_t b) { return (a * b) >> 15; }
 
 void mixer_fx_init(mixer_fx_t *m) {
     memset(m, 0, sizeof(*m));
@@ -55,7 +63,8 @@ void mixer_fx_set_reverb(mixer_fx_t *m, int16_t feedback, int16_t mix, int16_t d
 
 static int32_t saturate(int32_t x, int16_t drive) {
     if (drive <= 0) return clamp32(x, -32768, 32767);
-    int64_t y = ((int64_t)x * (32768 + drive)) >> 15;
+    /* |x| <= 32768 and gain <= 65535 => product <= 2147450880. */
+    int32_t y = (x * (32768 + (int32_t)drive)) >> 15;
     int32_t v = clamp32(y, -65536, 65535);
     int32_t a = v < 0 ? -v : v;
     if (a > 24576) {
@@ -75,6 +84,9 @@ static int32_t compress(int32_t x, int16_t threshold) {
 void mixer_fx_process(mixer_fx_t *m, const int16_t input[MIX_TRACKS], int16_t *out_l, int16_t *out_r) {
     int any_solo = 0;
     uint16_t delay_len = m->delay_len;
+    int32_t left = 0, right = 0, delay_send_l = 0, delay_send_r = 0;
+    int32_t reverb_send_l = 0, reverb_send_r = 0;
+
     if (delay_len == 0u) delay_len = 1u;
     if (delay_len > MIX_DELAY_MAX) delay_len = MIX_DELAY_MAX;
     if (m->delay_len != delay_len) m->delay_len = delay_len;
@@ -84,35 +96,34 @@ void mixer_fx_process(mixer_fx_t *m, const int16_t input[MIX_TRACKS], int16_t *o
 
     for (unsigned i=0; i<MIX_TRACKS; ++i) if (m->track[i].solo) any_solo = 1;
 
-    int64_t left = 0, right = 0, delay_send_l = 0, delay_send_r = 0;
-    int64_t reverb_send_l = 0, reverb_send_r = 0;
     for (unsigned i=0; i<MIX_TRACKS; ++i) {
         const mixer_track_t *t = &m->track[i];
+        int32_t s, lg, rg, l, r;
         if (t->mute || (any_solo && !t->solo)) continue;
-        int32_t s = (int32_t)(((int64_t)input[i] * t->level) >> 15);
-        int32_t lg = t->pan > 0 ? 32767 - t->pan : 32767;
-        int32_t rg = t->pan < 0 ? 32767 + t->pan : 32767;
-        int32_t l = (int32_t)(((int64_t)s * lg) >> 15);
-        int32_t r = (int32_t)(((int64_t)s * rg) >> 15);
+        s = mul_q15_32((int32_t)input[i], t->level);
+        lg = t->pan > 0 ? 32767 - t->pan : 32767;
+        rg = t->pan < 0 ? 32767 + t->pan : 32767;
+        l = mul_q15_32(s, lg);
+        r = mul_q15_32(s, rg);
         left += l;
         right += r;
-        delay_send_l += ((int64_t)l * t->delay_send) / 127;
-        delay_send_r += ((int64_t)r * t->delay_send) / 127;
-        reverb_send_l += ((int64_t)l * t->reverb_send) / 127;
-        reverb_send_r += ((int64_t)r * t->reverb_send) / 127;
+        delay_send_l += (l * (int32_t)t->delay_send) / 127;
+        delay_send_r += (r * (int32_t)t->delay_send) / 127;
+        reverb_send_l += (l * (int32_t)t->reverb_send) / 127;
+        reverb_send_r += (r * (int32_t)t->reverb_send) / 127;
     }
 
     {
         int16_t dl = m->delay_l[m->delay_pos];
         int16_t dr = m->delay_r[m->delay_pos];
-        int32_t write_l = (int32_t)delay_send_l + (int32_t)(((int64_t)dl * m->delay_feedback) >> 15);
-        int32_t write_r = (int32_t)delay_send_r + (int32_t)(((int64_t)dr * m->delay_feedback) >> 15);
+        int32_t write_l = delay_send_l + mul_q15_32(dl, m->delay_feedback);
+        int32_t write_r = delay_send_r + mul_q15_32(dr, m->delay_feedback);
         m->delay_l[m->delay_pos] = clip16(write_l);
         m->delay_r[m->delay_pos] = clip16(write_r);
         m->delay_pos++;
         if (m->delay_pos >= delay_len) m->delay_pos = 0u;
-        left += ((int64_t)dl * m->delay_mix) >> 15;
-        right += ((int64_t)dr * m->delay_mix) >> 15;
+        left += mul_q15_32(dl, m->delay_mix);
+        right += mul_q15_32(dr, m->delay_mix);
     }
 
     {
@@ -122,23 +133,24 @@ void mixer_fx_process(mixer_fx_t *m, const int16_t input[MIX_TRACKS], int16_t *o
         int32_t in_a = clamp32(reverb_send_l + (reverb_send_r >> 1), -65536, 65535);
         int32_t in_b = clamp32(reverb_send_r + (reverb_send_l >> 1), -65536, 65535);
 
-        m->reverb_lp_a += (int32_t)(((int64_t)(ra - m->reverb_lp_a) * damp) >> 15);
-        m->reverb_lp_b += (int32_t)(((int64_t)(rb - m->reverb_lp_b) * damp) >> 15);
-        m->reverb_a[m->reverb_pos_a] = clip16(in_a + (int32_t)(((int64_t)m->reverb_lp_b * m->reverb_feedback) >> 15));
-        m->reverb_b[m->reverb_pos_b] = clip16(in_b + (int32_t)(((int64_t)m->reverb_lp_a * m->reverb_feedback) >> 15));
+        m->reverb_lp_a += mul_q15_32(ra - m->reverb_lp_a, damp);
+        m->reverb_lp_b += mul_q15_32(rb - m->reverb_lp_b, damp);
+        m->reverb_a[m->reverb_pos_a] = clip16(in_a + mul_q15_32(m->reverb_lp_b, m->reverb_feedback));
+        m->reverb_b[m->reverb_pos_b] = clip16(in_b + mul_q15_32(m->reverb_lp_a, m->reverb_feedback));
         if (++m->reverb_pos_a >= MIX_REVERB_A) m->reverb_pos_a = 0u;
         if (++m->reverb_pos_b >= MIX_REVERB_B) m->reverb_pos_b = 0u;
 
-        left += ((int64_t)(ra + (rb >> 1)) * m->reverb_mix) >> 15;
-        right += ((int64_t)(rb + (ra >> 1)) * m->reverb_mix) >> 15;
+        left += mul_q15_32(ra + (rb >> 1), m->reverb_mix);
+        right += mul_q15_32(rb + (ra >> 1), m->reverb_mix);
     }
 
     {
-        /* The old path narrowed/clipped the multi-track sum before DIST. That
-           made DIST=0 still sound overdriven. Apply explicit four-track
-           headroom first; only then enter optional nonlinear processing. */
-        int32_t l = clamp32((left * MIX_MASTER_HEADROOM_Q15) >> 15, -32768, 32767);
-        int32_t r = clamp32((right * MIX_MASTER_HEADROOM_Q15) >> 15, -32768, 32767);
+        /* Narrow only after the complete linear sum. Clamp to the largest value
+         * that keeps the fixed -12 dB multiply strictly inside signed 32 bit. */
+        int32_t prem_l = clamp32(left, -MIX_PREMASTER_LIMIT, MIX_PREMASTER_LIMIT);
+        int32_t prem_r = clamp32(right, -MIX_PREMASTER_LIMIT, MIX_PREMASTER_LIMIT);
+        int32_t l = clamp32((prem_l * MIX_MASTER_HEADROOM_Q15) >> 15, -32768, 32767);
+        int32_t r = clamp32((prem_r * MIX_MASTER_HEADROOM_Q15) >> 15, -32768, 32767);
         l = saturate(l, m->drive);
         r = saturate(r, m->drive);
         l = compress(l, m->compressor_threshold);
@@ -150,8 +162,8 @@ void mixer_fx_process(mixer_fx_t *m, const int16_t input[MIX_TRACKS], int16_t *o
             m->filter_r = r;
         } else {
             int32_t fc = clamp32(m->filter_cutoff, 256, 32767);
-            m->filter_l += (int32_t)(((int64_t)(l - m->filter_l) * fc) >> 15);
-            m->filter_r += (int32_t)(((int64_t)(r - m->filter_r) * fc) >> 15);
+            m->filter_l += mul_q15_32(l - m->filter_l, fc);
+            m->filter_r += mul_q15_32(r - m->filter_r, fc);
         }
         *out_l = clip16(m->filter_l);
         *out_r = clip16(m->filter_r);

@@ -4,96 +4,63 @@ Experimental replacement firmware for the M-VAVE FM-1: a compact four-machine ac
 
 ## Target
 
-- ACID A — original 303-inspired mono synth
-- ACID B — second independent acid synth
-- 808 — synthesized drum machine
-- 909 — distinct synthesized drum machine with real sequencer flam state
+- ACID A / ACID B — two independent 303-inspired mono synths
+- 808 / 909 — distinct synthesized drum machines, including persisted 909 flam state
 - A–H patterns + song chaining
-- four-track mixer + performance FX
+- four-track mixer + PCF / Delay / Dist / Comp performance FX
 - USB/TRS MIDI + USB audio
-- browser installer/editor + Virtual FM-1/WASM
-- guarded FM-1 installer based on the pinned Felucca update path
+- 240×240 physical UI + matching Virtual FM-1/WASM
+- guarded FM-1 package flow based on pinned Felucca 1.0.5
 
 See [`plan.md`](plan.md), [`docs/TB303_MODEL.md`](docs/TB303_MODEL.md), [`docs/FLASH_SAFETY.md`](docs/FLASH_SAFETY.md) and [`docs/PHYSICAL_BETA2_VALIDATION.md`](docs/PHYSICAL_BETA2_VALIDATION.md).
 
-## Current status — beta.9 303 oscillator refinement
+## Current status — beta.10 physical realtime-audio correction
 
-Beta.8 fixed the global audio-path defects found on the physical FM-1: live-note clamping, false slide timing, mixer clipping, duplicate target attenuation and the unusable fallback drum synthesis. Beta.9 keeps those corrections and works specifically on the remaining 303 SAW/SQUARE source quality.
+Physical beta.9 feedback showed a more important failure than oscillator character alone: both 303 and drums are dominated by a high, scratchy/digital component while the intended bass/drum sound remains faint underneath. Cutoff, resonance, Env Mod and decay therefore appear to affect only the quiet underlying signal.
 
-The beta.9 oscillator batch changes the precomputed wavetable path instead of masking it with EQ or distortion:
+Because the same artifact is present on independent synth and drum engines, beta.10 moves the investigation to the **shared FM-1 realtime path** instead of applying more oscillator EQ, detune or saturation.
 
-- both FM-1 and Virtual now derive SAW303 and SQUARE303 from one shared **2048-sample Open303-style source prototype**;
-- the physical target tables are doubled from **512 to 1024 samples** per waveform/band;
-- the target expands from 10 to **12 pitch bands** covering the full supported MIDI range through note 127;
-- SQUARE303 is derived from the SAW303 prototype using the Open303-style tanh shaping values (36.9 dB, offset +4.37), polarity inversion and 180° phase shift instead of using a separate ideal-square model in Virtual;
-- square remains at half the raw saw-table amplitude, preserving the Open303 BlendOscillator convention while keeping the rendered SAW/SQUARE fundamentals closely level matched;
-- harmonic budgets are calculated per pitch band with a small **19.845 kHz final-Nyquist guard** to reduce interpolation/decimation products folding back into the audible range;
-- adjacent mip levels are phase aligned and crossfaded over the final **two semitones** before each pitch threshold instead of hard-switching spectra during a note or slide;
-- target and Virtual use the same pitch-band boundaries and audible harmonic budgets, so browser testing no longer hides a different oscillator model;
-- the beta.7 fixed-point source headroom remains intact;
-- pitch, filter, Env Mod, resonance, envelope, accent, 60 ms slide and clean mixer laws are otherwise unchanged.
+### What was verified first
 
-The periodic mip reconstruction intentionally keeps the existing zero-mean spectral-table convention; beta.9 does **not** alter oscillator DC/ladder bias. That keeps this test focused on lookup resolution, band limiting and transition behavior.
+The pinned Felucca output path still performs its original final **Q15 → 24-bit `<< 7` conversion** after the ReFm render. Replacing Felucca's `mix_block()` did not remove the later UAC/DAC processing. The bug is therefore not explained by a missing final output shift.
 
-Software reference probes show essentially unchanged source level while changing the intended spectrum: the new open SAW render is peak 8673 / mean-abs 2865 and SQUARE is peak 5589 / mean-abs 2835. End-to-end rendered pitch remains C2/C3/C4 = 33/66/131 crossings per 0.5 seconds.
+### beta.10 realtime changes
+
+- the shared mixer hot path is converted from repeated signed `int64_t` multiplies to bounded signed **32-bit fixed-point arithmetic**;
+- all 32-bit products have explicit numerical bounds, including track level/pan, delay, reverb, PCF, Dist and the -12 dB master summing stage;
+- the mixer clamps the pre-master accumulator before its Q15 multiply so the maximum legal product remains below `INT32_MAX`;
+- synthetic drum oscillator/ring-modulation multiplications are likewise moved out of the per-sample signed-64-bit path;
+- drum pitch, decay and timbre constants are unchanged by this batch;
+- a fully released/idle 303 now returns zero immediately from the groovebox mixer input instead of continuously running its oscillator and four-times-oversampled ladder;
+- this is especially important for drum-only playback: beta.9 still spent substantial CPU on **two silent 303 ladders** every sample;
+- active 303 oscillator, ladder, cutoff, resonance, Env Mod, decay, accent and slide laws are unchanged;
+- beta.9's 12×1024 Open303-derived SAW/SQUARE wavetable bank and smooth mip crossfades remain unchanged.
+
+The purpose of beta.10 is to test whether the common high-frequency scratch is caused by target realtime/compiler load or arithmetic in the shared path. It deliberately avoids another subjective timbre redesign.
 
 ## 303 reference points
 
-The stock-style ACID core currently uses:
+The ACID engine currently uses:
 
-- equal temperament with A4=440 Hz at TUNE center;
-- explicit TB-303 low-A service anchor near 110 Hz;
+- equal temperament with A4=440 Hz and a low-A reference near 110 Hz;
 - stable DDS pitch with no hidden drift when slide/LFO are off;
-- 4x oscillator/filter processing at 176.4 kHz;
+- 4× oscillator/filter processing at 176.4 kHz while the voice is active;
 - one shared 2048-sample Open303-style SAW303/SQUARE303 source model;
-- 12 precomputed pitch bands, 1024 samples per target table;
-- two-semitone phase-aligned crossfades between adjacent mip bands;
+- 12 precomputed pitch bands and 1024 samples per physical-target table;
+- phase-aligned two-semitone crossfades between adjacent mip bands;
 - ~19.845 kHz harmonic guard below final 44.1 kHz Nyquist;
-- Open303's measured nominal cutoff range around 313.8–2394.4 Hz;
-- Open303's exponential Env Mod scaler/offset mapping;
-- TeeBee/Open303 resonance skew and feedback coefficient law;
+- Open303/TeeBee-inspired cutoff, Env Mod and resonance mappings;
 - ~150 Hz feedback-loop high-pass;
 - ~1000 ms normal / ~200 ms accented main-envelope decay anchors;
-- raw main filter envelope plus ~15 ms smoothed accent contribution;
-- ~1230 ms amplitude decay and fast normal / ~50 ms accented release behavior;
-- nominal **60 ms** slide time constant at the 44.1 kHz control/audio rate;
-- ~44.486 Hz pre-ladder and ~24.167 Hz post-ladder AC-coupling stages.
+- nominal 60 ms slide time constant;
+- pre/post-ladder AC coupling;
+- no random stock-mode pitch drift or always-on distortion.
 
-The goal is a convincing hardware-safe TB-303 behavior, not source-level duplication of any commercial emulator. Stock mode deliberately has no random pitch drift, detune or always-on distortion.
+A fully released voice is now skipped before entering this expensive path.
 
-## Virtual FM-1
+## Physical controls
 
-Virtual FM-1 uses the same groovebox state model and the same audible 303 oscillator spectrum as the physical target. Its table lookup is 2048 samples rather than 1024, but the source prototype, band boundaries, harmonic budgets, headroom and SAW/SQUARE balance are shared.
-
-### ACID A / ACID B
-
-Use **SEQ** as a direct 303-style step editor:
-
-1. select one of the 16 steps;
-2. choose note, REST or TIE;
-3. toggle ACCENT and SLIDE;
-4. use the Virtual ReBirth-style C…C pitch keyboard and DOWN/NORMAL/UP register workflow;
-5. audition through the shared groovebox runtime.
-
-Virtual's compact C…C interaction is intentionally a UI convenience. It must not rewrite the pitch meaning of a physical FM-1 key.
-
-### 808 / 909
-
-Select a drum lane and click the 16-step grid. Each cell cycles:
-
-**OFF → HIT → ACCENT → OFF**
-
-909 also retains persisted flam state and width. The synthesized fallback engines remain active when no bundled sample exists.
-
-### Display
-
-The logical display remains **240×240**, matching the physical FM-1. Virtual FM-1 also provides a true **480×480 DISPLAY 2×** view while retaining the same underlying UI state.
-
-## Physical FM-1 controls
-
-The hardware remains page-first: ordinary operation must not require hidden modifier chords.
-
-Primary pages:
+Primary pages remain page-first:
 
 - `ENV` → ACID A
 - `LFO` → ACID B
@@ -103,110 +70,89 @@ Primary pages:
 - `FX` → effects
 - `SCL` → song/pattern
 - `SAVE` → project
-- `PLAY` → transport immediately
+- `PLAY` → transport
 
-### Physical ACID step entry
+### ACID step entry
 
-On **SEQ**:
+On `SEQ`:
 
-- `PRESET` → select step 1–16;
-- musical key → write that key's true chromatic pitch into the selected step and make it a NOTE;
-- `OCT-` / `OCT+` → shift the physical keyboard register by one octave;
-- `K1` → fine note edit by semitone;
-- `K2` → REST / NOTE / TIE;
-- `K3` → Accent/Slide combinations;
-- `K4` → probability.
+- `PRESET` selects step 1–16;
+- a musical key writes/auditions its true chromatic pitch;
+- `OCT-` / `OCT+` change the physical keyboard register;
+- `K1` edits stored pitch by semitone;
+- `K2` selects REST / NOTE / TIE;
+- `K3` controls Accent/Slide state;
+- `K4` controls probability.
 
-The hardware key scanner records note ownership at key-down, so octave/page changes cannot transform a later key-up into the wrong note. Machine/page changes remain panic-guarded against stuck notes. Live notes are not constrained by the step-editor pitch clamp.
+Live physical notes are not clamped to the editor's old note range.
 
-### Physical 808 / 909 programming
+### 808 / 909
 
-On **DRUM**:
+On `ARP` / DRUM:
 
-- repeated/contextual DRUM selection switches 808/909;
-- `PRESET` → select step 1–16;
-- `K1` or `OCT-` / `OCT+` → lane down/up;
-- `K2` → OFF / HIT / ACCENT;
-- musical keys → select/program/audition mapped drum voices;
-- 909 `K3` → FLAM;
-- 909 `K4` → flam width.
+- contextual machine selection switches 808/909;
+- `PRESET` selects step 1–16;
+- `K1` or `OCT-` / `OCT+` selects the lane;
+- `K2` cycles OFF / HIT / ACCENT;
+- musical keys select/program/audition mapped voices;
+- 909 `K3` toggles FLAM;
+- 909 `K4` sets flam width.
 
-808 and 909 use different model-specific oscillator tunings/workflows; they are not two labels over one identical drum map.
+## Clean audio contract
 
-## Audio and mixer behavior
+The startup mixer remains intentionally neutral:
 
-Four machine channels feed level/pan/mute/solo plus delay/reverb sends. Master performance processing is Dist → Comp → PCF.
+- four track faders at unity;
+- one -12 dB shared master summing stage for four-channel headroom;
+- DIST=0;
+- compressor effectively transparent;
+- PCF fully open/bypassed;
+- physical MASTER applied after the ReFm render;
+- final target fixed attenuation remains unity because shared mixer headroom already owns the fixed gain reduction;
+- Felucca's original Q15→24-bit DAC conversion remains after the ReFm callback.
 
-The clean startup contract retained from beta.8 is explicit:
+beta.10 changes the **implementation width/realtime cost**, not this gain structure.
 
-- all four track faders start at unity;
-- a single -12 dB master summing stage provides four-track headroom before nonlinear processing;
-- master DIST starts at zero;
-- compressor threshold starts effectively transparent;
-- PCF starts fully open and bypasses its one-pole coloration at the top setting;
-- the physical MASTER pot is applied after the ReFm render;
-- target output scaling is unity after the physical master pot because the shared mixer already owns fixed summing headroom;
-- individual drum synthesis and the combined drum bus both retain headroom rather than relying on final hard clipping.
+## Virtual FM-1
 
-Initial hardware listening tests should still start at low external/headphone volume.
+Virtual uses the same groovebox state model and audible 303 source spectrum as hardware. Its wavetable lookup uses 2048 samples rather than 1024, but source prototype, band boundaries, harmonic budgets, headroom and SAW/SQUARE balance are shared.
 
-## 240×240 hardware UI
+The logical display remains 240×240, with an optional true 480×480 DISPLAY 2× view.
 
-Current `main` uses the dedicated compact RB-240 renderer rather than stacking legacy Felucca graph layers underneath it.
+## Build and release safety
 
-Implemented target behavior includes:
+`.github/workflows/build-all.yml` builds the exact commit for:
 
-- page-specific compact layout;
-- exact 16-step ACID and drum readback;
-- independent selected-step and playhead indication;
-- real NOTE / REST / TIE / ACCENT / SLIDE state;
-- real drum OFF / HIT / ACCENT and 909 FLAM state;
-- dirty card/cell redraw for same-page changes;
-- full-screen clear only on page/machine transitions.
+1. Host DSP/integration tests;
+2. shared WASM runtime + browser smoke tests;
+3. the real JieLi/FM-1 app, loader and experimental `.fwsc` package;
+4. target ROM/memory gates, manifest and SHA checks;
+5. a non-release sample link-size experiment.
 
-Physical confirmation is still required for zero visible flash, label legibility and stale-pixel cleanup on the actual LCD.
+The FM-1 build uses the pinned Felucca foundation `3dd2b0852bc310a2c1bf00c2d443ac19202c2140`. GitHub Actions never connects to or flashes a physical unit.
 
-## Build everything in GitHub
+Published betas are immutable. A new beta is published only from the exact successful `main` Build-all commit; older tags are never moved or overwritten.
 
-`.github/workflows/build-all.yml` builds the exact commit for Host, WASM and the real JieLi/FM-1 package.
+The next physical diagnostic prerelease is **`v0.1.0-beta.10`**. beta.9 and all earlier releases remain untouched.
 
-Artifacts include:
+## beta.10 physical test priority
 
-1. **`refm-wasm-<commit>`**
-   - `refm.js`
-   - `refm.wasm`
-   - combined browser/Virtual app
-   - checksums
+Start at low external/headphone volume.
 
-2. **`refm-fm1-experimental-<commit>`**
-   - `TheReFmB1rth-experimental.fwsc`
-   - application binary
-   - Felucca `ota.bin`
-   - manifest/provenance/memory reports
-   - checksums
+1. Test a single 808/909 kick or snare with both ACID voices silent. The previous common high scratch should be gone or substantially reduced if idle-303/realtime load was the cause.
+2. Test one sustained ACID note with drums stopped. Listen for the same high scratch independently of oscillator pitch.
+3. Compare SAW and SQUARE with low resonance/Env Mod.
+4. Sweep cutoff through its full range; the audible body should now follow it clearly if the correct 303 signal is no longer masked.
+5. Raise resonance and Env Mod separately and confirm clearly audible control depth.
+6. Test mixed ACID + drums under load.
+7. If the scratch remains almost unchanged on every engine, stop retuning synthesis. The next diagnostic build should bypass the groovebox/mixer with a direct Q15 sine/test tone, then direct drum and pre/post-ladder 303 paths, to isolate the Felucca/I²S/DAC postpath from DSP.
 
-The FM-1 job prepares the exact pinned Felucca foundation, applies the deterministic overlay, downloads the JieLi pi32v2 toolchain, fetches the pinned AC79 SDK, performs the target compile/link/package build and enforces memory/ROM-reference gates. GitHub Actions never connects to or flashes a physical unit.
-
-Useful local/CI-equivalent checks:
-
-```sh
-tests/run_host_tests.sh
-sh web/emu/build_wasm.sh
-# Real FM-1 package: Build all artifacts in GitHub Actions.
-```
-
-## Release policy
-
-Published betas are immutable. The requested beta is cut only from an exact `main` commit after Host, WASM and FM-1 target-package jobs are green for that commit. The release marker is versioned; an existing tag is never overwritten.
-
-For this oscillator-refinement batch, the expected next tag is **`v0.1.0-beta.9`**. `v0.1.0-beta.8` and every earlier beta remain untouched.
+Existing runtime diagnostics should also be checked for late audio blocks / excessive render time during the mixed-load test.
 
 ## Sample policy
 
-Only auditable redistributable content may be shipped. The preferred implementation synthesizes 808/909-style voices and uses CC0/Public Domain samples only where useful. See [`docs/SAMPLE_SOURCES.md`](docs/SAMPLE_SOURCES.md).
+Only auditable redistributable content may ship. The preferred implementation synthesizes 808/909-style voices and uses CC0/Public Domain samples only where useful. See [`docs/SAMPLE_SOURCES.md`](docs/SAMPLE_SOURCES.md).
 
 ## Legal / identity
 
-This is an independent open-source project. It is not affiliated with or endorsed by Roland, Propellerhead/Reason Studios, M-VAVE, or the Felucca authors. Product names mentioned in documentation are historical references to instruments/software and desired workflow/sound characteristics.
-
-The firmware implementation must preserve licenses and notices from Felucca-derived source and all included third-party components.
+This is an independent open-source project. It is not affiliated with or endorsed by Roland, Propellerhead/Reason Studios, M-VAVE, or the Felucca authors. Product names are historical references to instruments/software and desired workflow/sound characteristics.

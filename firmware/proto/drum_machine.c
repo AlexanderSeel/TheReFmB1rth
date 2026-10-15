@@ -7,7 +7,10 @@
 static int16_t clip16(int32_t v){return(int16_t)(v<-32768?-32768:v>32767?32767:v);}
 static int32_t tri(uint32_t p){uint32_t q=p>>16;return q<32768u?(int32_t)q*2-32768:98302-(int32_t)q*2;}
 static int32_t sq(uint32_t p){return(p&0x80000000u)?-32768:32767;}
-static int32_t sineish(uint32_t p){int32_t t=tri(p);int32_t a=t<0?-t:t;return(int32_t)(((int64_t)t*(49152-(a>>1)))>>15);}
+/* |tri| <= 32768 and the shaping factor <= 49152, so the full product stays
+ * below 1.61e9. Keep the per-sample drum oscillator entirely signed-32-bit on
+ * the JieLi target. */
+static int32_t sineish(uint32_t p){int32_t t=tri(p);int32_t a=t<0?-t:t;return(t*(49152-(a>>1)))>>15;}
 static int32_t nz(drum_machine_t*d){uint32_t x=d->noise?d->noise:0x12345678u;x^=x<<13;x^=x>>17;x^=x<<5;d->noise=x;return(int32_t)(x>>16)-32768;}
 
 /* Q32 phase increments at 44.1 kHz. These are intentionally voice/model
@@ -107,14 +110,14 @@ static int32_t render(drum_machine_t*d,drum_voice_id_t id){
         break;
     }
     case DRUM_RS:{
-        int32_t ring=(int32_t)(((int64_t)sq(v->phase1)*sq(v->phase2))>>15);
+        int32_t ring=(sq(v->phase1)*sq(v->phase2))>>15;
         y=(ring*e)>>16;
         break;
     }
     case DRUM_CH:case DRUM_OH:{
-        /* Ring multiplication, not bitwise XOR. XOR on signed PCM samples was
-         * producing digital 0/-1 artefacts instead of a metallic oscillator. */
-        int32_t ring=(int32_t)(((int64_t)sq(v->phase1)*sq(v->phase2))>>15);
+        /* Ring multiplication, not bitwise XOR. The bounded square-wave
+         * product is safely signed-32-bit and avoids a target 64-bit hotpath. */
+        int32_t ring=(sq(v->phase1)*sq(v->phase2))>>15;
         int32_t metal=(ring*3+nz(d))/4;
         y=(metal*e)>>15;
         break;
@@ -123,7 +126,7 @@ static int32_t render(drum_machine_t*d,drum_voice_id_t id){
         y=(sineish(v->phase1)*e)>>15;
         break;
     case DRUM_CR:case DRUM_RD:{
-        int32_t ring=(int32_t)(((int64_t)sq(v->phase1)*sq(v->phase2))>>15);
+        int32_t ring=(sq(v->phase1)*sq(v->phase2))>>15;
         int32_t metal=(ring+sq(v->phase1)+nz(d))/3;
         y=(metal*e)>>16;
         break;

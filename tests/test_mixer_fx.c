@@ -30,6 +30,31 @@ int main(void) {
     assert(r>29000 && r<31000);
     assert(l!=32767 && l!=-32768 && r!=32767 && r!=-32768);
 
+    /* Target signed-32 polarity regression at the absolute Q15 inputs. */
+    int16_t maxp[MIX_TRACKS]={32767,32767,32767,32767};
+    int16_t maxn[MIX_TRACKS]={-32768,-32768,-32768,-32768};
+    mixer_fx_init(&m);
+    mixer_fx_process(&m,maxp,&l,&r);
+    assert(l>0 && r>0);
+    mixer_fx_init(&m);
+    mixer_fx_process(&m,maxn,&l,&r);
+    assert(l<0 && r<0);
+
+    /* Signed-32 target hotpath regression: full sends, maximum delay/reverb
+       feedback and maximum DIST. The goal is to exercise every bounded
+       multiply repeatedly and verify the ring state remains valid. */
+    mixer_fx_init(&m);
+    for(unsigned i=0;i<MIX_TRACKS;++i){m.track[i].delay_send=127u;m.track[i].reverb_send=127u;}
+    mixer_fx_set_delay(&m,1u,31000,32767);
+    mixer_fx_set_reverb(&m,MIX_REVERB_FEEDBACK_MAX,32767,30000);
+    m.drive=32767;
+    for(unsigned n=0;n<32u;++n){
+        mixer_fx_process(&m,(n&1u)?maxn:maxp,&l,&r);
+        assert(m.delay_len==1u && m.delay_pos<1u);
+        assert(m.reverb_pos_a<MIX_REVERB_A);
+        assert(m.reverb_pos_b<MIX_REVERB_B);
+    }
+
     int16_t in[MIX_TRACKS]={12000,8000,4000,2000};
     mixer_fx_init(&m); mixer_fx_process(&m,in,&l,&r);
     assert(l!=0 && r!=0);
