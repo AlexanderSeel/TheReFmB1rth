@@ -169,7 +169,20 @@ def patch_build(dst: Path) -> None:
     if compile_anchor not in text:
         raise SystemExit("build.py compile anchor changed")
     source_literal = repr(REFM_SOURCES)
-    injected = (f"    refm_sources = {source_literal}\n" "    refm_objs = []\n" "    for idx, rel in enumerate(refm_sources):\n" "        obj = OUT / f\"refm_{idx:02d}.o\"\n" "        tc(\"cc\", *flags, \"-DREFM_FELUCCA_PLATFORM=1\", \"-Ifirmware/refm/proto\",\n" "           \"-Ifirmware/refm/integration\", \"-c\", FW / \"refm\" / rel, \"-o\", obj)\n" "        refm_objs.append(obj)\n")
+    # X0X runs substantial floating-point DSP on this exact AC79/FМ-1 target by
+    # enabling the chip's single-precision FPU. Without these flags clang emits
+    # libgcc soft-float calls (__mulsf3, __floatsisf, ...), but Felucca's
+    # freestanding linker intentionally does not provide that runtime.
+    injected = (
+        f"    refm_sources = {source_literal}\n"
+        "    refm_fpu = [\"-mcpu=r3\", \"-mfprev1\", \"-ffp-contract=off\"]\n"
+        "    refm_objs = []\n"
+        "    for idx, rel in enumerate(refm_sources):\n"
+        "        obj = OUT / f\"refm_{idx:02d}.o\"\n"
+        "        tc(\"cc\", *flags, *refm_fpu, \"-DREFM_FELUCCA_PLATFORM=1\", \"-Ifirmware/refm/proto\",\n"
+        "           \"-Ifirmware/refm/integration\", \"-c\", FW / \"refm\" / rel, \"-o\", obj)\n"
+        "        refm_objs.append(obj)\n"
+    )
     text = text.replace(compile_anchor, injected + compile_anchor, 1)
     link_old = '       OUT / "felucca.o", "-o", elf)\n'
     link_new = '       OUT / "felucca.o", *refm_objs, "-o", elf)\n'
