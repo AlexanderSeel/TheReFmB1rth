@@ -23,6 +23,13 @@ int main(void)
     groovebox_midi_init(&r);
     assert(groovebox_handle_channel_midi(&g, &r, 0x90u, 60u, 120u));
     assert(g.acid[0].gate);
+
+    /* Physical/live chromatic notes must reach the 303 unchanged. The previous
+       live-MIDI path silently clamped every key above C4/MIDI60 to C4. */
+    assert(groovebox_handle_channel_midi(&g, &r, 0x80u, 60u, 0u));
+    assert(groovebox_handle_channel_midi(&g, &r, 0x90u, 67u, 120u));
+    assert(g.acid[0].phase_inc == acid303_note_to_phase_inc(67u));
+
     assert(groovebox_handle_channel_midi(&g, &r, 0xB0u, 74u, 100u));
     assert(g.acid[0].cutoff == 25800u);
     assert(groovebox_handle_channel_midi(&g, &r, 0x99u, 36u, 127u));
@@ -31,11 +38,11 @@ int main(void)
     /* Browser/editor pattern-write protocol: select step, then update fields. */
     assert(groovebox_handle_channel_midi(&g, &r, 0xB0u, 102u, 5u));
     assert(r.editor_step == 5u);
-    assert(groovebox_handle_channel_midi(&g, &r, 0xB0u, 103u, 48u));
+    assert(groovebox_handle_channel_midi(&g, &r, 0xB0u, 103u, 84u));
     assert(groovebox_handle_channel_midi(&g, &r, 0xB0u, 104u, 1u));
     assert(groovebox_handle_channel_midi(&g, &r, 0xB0u, 105u, 3u));
     assert(groovebox_handle_channel_midi(&g, &r, 0xB0u, 106u, 87u));
-    assert(g.acid_seq[0].step[5].note == 48u);
+    assert(g.acid_seq[0].step[5].note == 84u);
     assert((g.acid_seq[0].step[5].flags & (SEQ16_GATE | SEQ16_ACCENT | SEQ16_SLIDE)) ==
            (SEQ16_GATE | SEQ16_ACCENT | SEQ16_SLIDE));
     assert(g.acid_seq[0].step[5].probability == 87u);
