@@ -3,44 +3,46 @@
 #include <string.h>
 
 #define MIX_MASTER_HEADROOM_Q15 8192 /* -12 dB: four full-scale tracks sum cleanly */
-/* Bound before the master-headroom multiply. 262140 * 8192 stays below
- * INT32_MAX; anything above this would clamp to full Q15 after the -12 dB
- * master stage anyway. */
 #define MIX_PREMASTER_LIMIT 262140
 
 static int32_t clamp32(int32_t v, int32_t lo, int32_t hi) { return v<lo?lo:v>hi?hi:v; }
 static int16_t clip16(int32_t v) { return (int16_t)clamp32(v,-32768,32767); }
-/* All hot-path operands passed here are bounded to <= 65536 in magnitude.
- * The worst product (65536 * 32767) remains inside signed 32 bit. This avoids
- * target/compiler 64-bit arithmetic in the shared audio path. */
 static int32_t mul_q15_32(int32_t a, int32_t b) { return (a * b) >> 15; }
 
 void mixer_fx_init(mixer_fx_t *m) {
     memset(m, 0, sizeof(*m));
-    /* Keep track faders at unity and reserve summing headroom once at the
-       master bus. That is easier to reason about than hiding attenuation in
-       selected tracks and guarantees the default four-track mix stays linear. */
     for (unsigned i=0; i<MIX_TRACKS; ++i) {
         m->track[i].level = 32767;
         m->track[i].pan = 0;
     }
+    /* Fresh projects must actually feed the time effects. Previous betas had
+     * useful global wet/feedback defaults but every per-track send was zero,
+     * making DELAY/REVERB appear broken until the mixer sends were discovered.
+     * Keep acid more spacious and drums tighter so the factory live set remains
+     * punchy while both effects are immediately testable. */
+    m->track[0].delay_send = 42u;
+    m->track[0].reverb_send = 28u;
+    m->track[1].delay_send = 34u;
+    m->track[1].reverb_send = 34u;
+    m->track[2].delay_send = 12u;
+    m->track[2].reverb_send = 12u;
+    m->track[3].delay_send = 16u;
+    m->track[3].reverb_send = 14u;
 #if defined(__EMSCRIPTEN__)
     m->delay_len = 11025u; /* 250 ms */
     m->delay_feedback = 15000;
-    m->delay_mix = 7000;
+    m->delay_mix = 9000;
     m->reverb_feedback = 29400;
-    m->reverb_mix = 6000;
+    m->reverb_mix = 8000;
     m->reverb_damp = 7000;
 #else
     m->delay_len = 1102u;
     m->delay_feedback = 14000;
-    m->delay_mix = 7000;
+    m->delay_mix = 9000;
     m->reverb_feedback = 24500;
-    m->reverb_mix = 6000;
+    m->reverb_mix = 8000;
     m->reverb_damp = 9000;
 #endif
-    /* DIST, COMP and PCF are performance effects. Fresh firmware is an
-       intentionally transparent mixer, not an always-on mastering chain. */
     m->drive = 0;
     m->compressor_threshold = 32767;
     m->filter_cutoff = 32767;
@@ -63,7 +65,6 @@ void mixer_fx_set_reverb(mixer_fx_t *m, int16_t feedback, int16_t mix, int16_t d
 
 static int32_t saturate(int32_t x, int16_t drive) {
     if (drive <= 0) return clamp32(x, -32768, 32767);
-    /* |x| <= 32768 and gain <= 65535 => product <= 2147450880. */
     int32_t y = (x * (32768 + (int32_t)drive)) >> 15;
     int32_t v = clamp32(y, -65536, 65535);
     int32_t a = v < 0 ? -v : v;
@@ -145,8 +146,6 @@ void mixer_fx_process(mixer_fx_t *m, const int16_t input[MIX_TRACKS], int16_t *o
     }
 
     {
-        /* Narrow only after the complete linear sum. Clamp to the largest value
-         * that keeps the fixed -12 dB multiply strictly inside signed 32 bit. */
         int32_t prem_l = clamp32(left, -MIX_PREMASTER_LIMIT, MIX_PREMASTER_LIMIT);
         int32_t prem_r = clamp32(right, -MIX_PREMASTER_LIMIT, MIX_PREMASTER_LIMIT);
         int32_t l = clamp32((prem_l * MIX_MASTER_HEADROOM_Q15) >> 15, -32768, 32767);
@@ -157,7 +156,6 @@ void mixer_fx_process(mixer_fx_t *m, const int16_t input[MIX_TRACKS], int16_t *o
         r = compress(r, m->compressor_threshold);
 
         if (m->filter_cutoff >= 32760) {
-            /* PCF fully open means no hidden one-pole coloration. */
             m->filter_l = l;
             m->filter_r = r;
         } else {
