@@ -36,7 +36,9 @@ static void test_physical_staged_audio_probe(void) {
             assert(stage < REFM_DIAG_STAGE_COUNT);
             assert(l >= -32768 && l <= 32767);
             assert(r >= -32768 && r <= 32767);
-            assert(l == r);
+            /* Direct reference/drum/303 stages remain mono. Mixer stages 2/4
+               intentionally exercise the now-active stereo delay/reverb path. */
+            if (stage != 2u && stage != 4u) assert(l == r);
             if (l || r) stage_nonzero[stage]++;
             if (stage == 0u && a > reference_peak) reference_peak = a;
         }
@@ -58,6 +60,10 @@ static void test_physical_staged_audio_probe(void) {
     refm_target_render_q15(&t, out, 64u);
     /* Diagnostics reinitialize a fresh stopped groovebox before normal mode. */
     for (unsigned i = 0; i < 128u; ++i) assert(out[i] == 0);
+    /* Pattern A from the factory live bank must be active and ready for PLAY. */
+    assert(t.groovebox.current_pattern == 0u);
+    assert(t.groovebox.acid_seq[0].step[0].flags & SEQ16_GATE);
+    assert(t.groovebox.drum_hits[0][0] != 0u);
 }
 #endif
 
