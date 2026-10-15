@@ -252,22 +252,39 @@ static int32_t poly_blep_q15(uint32_t phase, uint32_t dt) {
 }
 #endif
 
+#if REFM_ACID_WAVETABLE
+static int32_t wavetable_lookup(const int16_t *table, uint32_t phase) {
+    uint32_t idx = phase >> (32u - REFM_ACID_WT_BITS);
+    uint32_t frac = (phase >> (17u - REFM_ACID_WT_BITS)) & 32767u;
+    int32_t a = table[idx & REFM_ACID_WT_MASK];
+    int32_t b = table[(idx + 1u) & REFM_ACID_WT_MASK];
+    return a + (int32_t)(((int64_t)(b - a) * frac) >> 15);
+}
+#endif
+
 static int32_t oscillator_substep(acid303_t *s, uint32_t sub_inc) {
     s->phase += sub_inc;
 #if REFM_ACID_WAVETABLE
     {
         uint32_t band = 0u;
-        uint32_t idx;
-        uint32_t frac;
-        const int16_t *table;
-        int32_t a, b;
-        while (band + 1u < REFM_ACID_WT_BANDS && s->phase_inc > refm_acid_wt_threshold_inc[band]) ++band;
-        table = s->square ? refm_acid_wt_square[band] : refm_acid_wt_saw[band];
-        idx = s->phase >> (32u - REFM_ACID_WT_BITS);
-        frac = (s->phase >> (17u - REFM_ACID_WT_BITS)) & 32767u;
-        a = table[idx & REFM_ACID_WT_MASK];
-        b = table[(idx + 1u) & REFM_ACID_WT_MASK];
-        return a + (int32_t)(((int64_t)(b - a) * frac) >> 15);
+        const int16_t *const *bank = s->square ? refm_acid_wt_square : refm_acid_wt_saw;
+        while (band + 1u < REFM_ACID_WT_BANDS &&
+               s->phase_inc >= refm_acid_wt_threshold_inc[band]) {
+            ++band;
+        }
+        if (band + 1u < REFM_ACID_WT_BANDS &&
+            s->phase_inc > refm_acid_wt_xfade_start_inc[band]) {
+            uint32_t start = refm_acid_wt_xfade_start_inc[band];
+            uint32_t end = refm_acid_wt_threshold_inc[band];
+            uint32_t span = end - start;
+            uint32_t pos = s->phase_inc - start;
+            uint32_t mix = span ? (uint32_t)(((uint64_t)pos * 32767u + span / 2u) / span) : 32767u;
+            int32_t lo = wavetable_lookup(bank[band], s->phase);
+            int32_t hi = wavetable_lookup(bank[band + 1u], s->phase);
+            if (mix > 32767u) mix = 32767u;
+            return lo + (int32_t)(((int64_t)(hi - lo) * mix) >> 15);
+        }
+        return wavetable_lookup(bank[band], s->phase);
     }
 #else
     {
@@ -462,9 +479,9 @@ int32_t acid303_process(acid303_t *s) {
         if (!sub_inc && s->phase_inc) sub_inc = 1u;
 
         /* Match Open303's 4x oscillator/filter processing rate. The generated
-           source tables are already band-limited to the final 44.1 kHz output
-           Nyquist, so averaging the four ladder samples is a conservative
-           embedded downsampler without reintroducing ultrasonic aliases. */
+           source tables keep a small final-Nyquist guard band, so averaging
+           the four phase-aligned ladder samples remains a conservative compact
+           downsampler without letting table-edge products dominate the top end. */
         y0 = teebee_ladder_substep(s, pre_ladder_highpass(s, -oscillator_substep(s, sub_inc)));
         y1 = teebee_ladder_substep(s, pre_ladder_highpass(s, -oscillator_substep(s, sub_inc)));
         y2 = teebee_ladder_substep(s, pre_ladder_highpass(s, -oscillator_substep(s, sub_inc)));
