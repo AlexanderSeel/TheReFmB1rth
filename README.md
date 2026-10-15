@@ -16,26 +16,24 @@ Experimental replacement firmware for the M-VAVE FM-1: a compact four-machine ac
 
 See [`plan.md`](plan.md), [`docs/TB303_MODEL.md`](docs/TB303_MODEL.md), [`docs/FLASH_SAFETY.md`](docs/FLASH_SAFETY.md) and [`docs/PHYSICAL_BETA2_VALIDATION.md`](docs/PHYSICAL_BETA2_VALIDATION.md).
 
-## Current status — beta.8 clean-audio candidate
+## Current status — beta.9 303 oscillator refinement
 
-The physical beta.7 listening pass exposed a real audio-path failure: the overall result sounded overloaded, the 303 square was thin/metallic, pitch felt unstable, and the synthesized drums were unusably harsh. Beta.8 treats that report as a correctness problem rather than adding more coloration.
+Beta.8 fixed the global audio-path defects found on the physical FM-1: live-note clamping, false slide timing, mixer clipping, duplicate target attenuation and the unusable fallback drum synthesis. Beta.9 keeps those corrections and works specifically on the remaining 303 SAW/SQUARE source quality.
 
-The corrective batch includes:
+The beta.9 oscillator batch changes the precomputed wavetable path instead of masking it with EQ or distortion:
 
-- live ACID notes now preserve the exact incoming MIDI/physical-key pitch instead of clamping every note above MIDI 60/C4 down to C4;
-- programmed ACID steps keep the extended C1..C6 editor range independently from live keyboard routing;
-- the DDS has explicit upper-MIDI monotonicity tests and remains numerically static for a full second whenever slide and LFO are off;
-- stock slide now uses the documented Open303 **60 ms** slew time constant instead of the previous ~12 ms implementation;
-- all four mixer channel faders start at unity, with one explicit **-12 dB master summing headroom** stage before optional nonlinear processing;
-- DIST starts at zero, COMP is transparent and PCF starts fully open/bypassed, so a fresh project has no hidden saturation, compression or low-pass coloration;
-- the physical MASTER pot remains active, while the older duplicate fixed target attenuation is removed because summing headroom now has one clear owner;
-- the synthetic 808 kick is moved from the erroneous ~390 Hz range to ~55 Hz and the 909 kick to ~60 Hz, with substantially longer analogue-style body decays;
-- snare/tom fundamentals are moved into musically appropriate ranges;
-- hats/cymbals use bipolar ring multiplication instead of signed bitwise XOR, which had been producing digital metallic artefacts;
-- the drum bus reserves its own transient headroom so kick/snare/hat combinations do not rail-clip;
-- samples remain optional: the corrected synthesized engines are the guaranteed firmware fallback.
+- both FM-1 and Virtual now derive SAW303 and SQUARE303 from one shared **2048-sample Open303-style source prototype**;
+- the physical target tables are doubled from **512 to 1024 samples** per waveform/band;
+- the target expands from 10 to **12 pitch bands** covering the full supported MIDI range through note 127;
+- SQUARE303 is derived from the SAW303 prototype using the Open303-style tanh shaping values (36.9 dB, offset +4.37), polarity inversion and 180° phase shift instead of using a separate ideal-square model in Virtual;
+- square remains at half the raw saw-table amplitude, preserving the Open303 BlendOscillator convention while keeping the rendered SAW/SQUARE fundamentals closely level matched;
+- harmonic budgets are calculated per pitch band with a small **19.845 kHz final-Nyquist guard** to reduce interpolation/decimation products folding back into the audible range;
+- adjacent mip levels are phase aligned and crossfaded over the final **two semitones** before each pitch threshold instead of hard-switching spectra during a note or slide;
+- target and Virtual use the same pitch-band boundaries and audible harmonic budgets, so browser testing no longer hides a different oscillator model;
+- the beta.7 fixed-point source headroom remains intact;
+- pitch, filter, Env Mod, resonance, envelope, accent, 60 ms slide and clean mixer laws are otherwise unchanged.
 
-This is software-validated but still requires a new physical FM-1 listening pass. Beta.8 must therefore be judged first on **clean pitch and clean gain structure**, before any further attempt to make the 303 more characterful.
+Software reference probes show essentially unchanged source level while changing the intended spectrum: the new open SAW render is peak 8673 / mean-abs 2865 and SQUARE is peak 5589 / mean-abs 2835. End-to-end rendered pitch remains C2/C3/C4 = 33/66/131 crossings per 0.5 seconds.
 
 ## 303 reference points
 
@@ -45,7 +43,10 @@ The stock-style ACID core currently uses:
 - explicit TB-303 low-A service anchor near 110 Hz;
 - stable DDS pitch with no hidden drift when slide/LFO are off;
 - 4x oscillator/filter processing at 176.4 kHz;
-- Open303-shaped SAW303/SQUARE303 source tables;
+- one shared 2048-sample Open303-style SAW303/SQUARE303 source model;
+- 12 precomputed pitch bands, 1024 samples per target table;
+- two-semitone phase-aligned crossfades between adjacent mip bands;
+- ~19.845 kHz harmonic guard below final 44.1 kHz Nyquist;
 - Open303's measured nominal cutoff range around 313.8–2394.4 Hz;
 - Open303's exponential Env Mod scaler/offset mapping;
 - TeeBee/Open303 resonance skew and feedback coefficient law;
@@ -56,11 +57,11 @@ The stock-style ACID core currently uses:
 - nominal **60 ms** slide time constant at the 44.1 kHz control/audio rate;
 - ~44.486 Hz pre-ladder and ~24.167 Hz post-ladder AC-coupling stages.
 
-The goal is a convincing hardware-safe TB-303 behavior, not source-level duplication of any commercial emulator. The beta.8 pass deliberately does not add random pitch drift, detune or always-on distortion.
+The goal is a convincing hardware-safe TB-303 behavior, not source-level duplication of any commercial emulator. Stock mode deliberately has no random pitch drift, detune or always-on distortion.
 
 ## Virtual FM-1
 
-Virtual FM-1 uses the same groovebox state model and is the primary no-hardware test surface.
+Virtual FM-1 uses the same groovebox state model and the same audible 303 oscillator spectrum as the physical target. Its table lookup is 2048 samples rather than 1024, but the source prototype, band boundaries, harmonic budgets, headroom and SAW/SQUARE balance are shared.
 
 ### ACID A / ACID B
 
@@ -114,7 +115,7 @@ On **SEQ**:
 - `K3` → Accent/Slide combinations;
 - `K4` → probability.
 
-The hardware key scanner records note ownership at key-down, so octave/page changes cannot transform a later key-up into the wrong note. Machine/page changes remain panic-guarded against stuck notes. Live notes are no longer constrained by the step-editor pitch clamp.
+The hardware key scanner records note ownership at key-down, so octave/page changes cannot transform a later key-up into the wrong note. Machine/page changes remain panic-guarded against stuck notes. Live notes are not constrained by the step-editor pitch clamp.
 
 ### Physical 808 / 909 programming
 
@@ -134,7 +135,7 @@ On **DRUM**:
 
 Four machine channels feed level/pan/mute/solo plus delay/reverb sends. Master performance processing is Dist → Comp → PCF.
 
-The clean startup contract for beta.8 is explicit:
+The clean startup contract retained from beta.8 is explicit:
 
 - all four track faders start at unity;
 - a single -12 dB master summing stage provides four-track headroom before nonlinear processing;
@@ -142,7 +143,7 @@ The clean startup contract for beta.8 is explicit:
 - compressor threshold starts effectively transparent;
 - PCF starts fully open and bypasses its one-pole coloration at the top setting;
 - the physical MASTER pot is applied after the ReFm render;
-- no second fixed target attenuation is stacked after that pot;
+- target output scaling is unity after the physical master pot because the shared mixer already owns fixed summing headroom;
 - individual drum synthesis and the combined drum bus both retain headroom rather than relying on final hard clipping.
 
 Initial hardware listening tests should still start at low external/headphone volume.
@@ -196,7 +197,7 @@ sh web/emu/build_wasm.sh
 
 Published betas are immutable. The requested beta is cut only from an exact `main` commit after Host, WASM and FM-1 target-package jobs are green for that commit. The release marker is versioned; an existing tag is never overwritten.
 
-For this corrective batch, the expected next tag is **`v0.1.0-beta.8`**. `v0.1.0-beta.7`, `v0.1.0-beta.2` and every other existing beta remain untouched.
+For this oscillator-refinement batch, the expected next tag is **`v0.1.0-beta.9`**. `v0.1.0-beta.8` and every earlier beta remain untouched.
 
 ## Sample policy
 
