@@ -69,6 +69,14 @@ def main() -> int:
     if forced in bridge_text:
         bridge.write_text(bridge_text.replace(forced, "refm_target_init(&g_refm, bpm);", 1))
 
+    # The page replacement chain intentionally consumes duplicated intermediate
+    # branch anchors. PROJECT is the final page and therefore needs the same
+    # normalization explicitly before the JieLi compiler sees ui_draw.c.
+    draw = root / "firmware" / "src" / "ui_draw.c"
+    draw_text = draw.read_text()
+    if "} else {} else {" in draw_text:
+        draw.write_text(draw_text.replace("} else {} else {", "} else {", 1))
+
     h = hashlib.sha256()
     for path in (
         graph,
