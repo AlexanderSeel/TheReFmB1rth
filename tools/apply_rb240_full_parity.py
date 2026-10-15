@@ -35,7 +35,8 @@ def patch_bridge(root: Path) -> None:
     text = bridge.read_text()
 
     # The pattern bank already contains all A-H factory parts. Do not overwrite A
-    # with the old one-off beta test pattern after target init.
+    # with the old one-off beta test pattern after target init. Remove the old
+    # helper as well so -Werror cannot reject the generated target bridge.
     text = text.replace(
         "        seed_beta_pattern();",
         "        groovebox_pattern_load(&g_refm.groovebox.patterns, &g_refm.groovebox, 0u);",
@@ -43,6 +44,13 @@ def patch_bridge(root: Path) -> None:
     text = text.replace(
         "    seed_beta_pattern();",
         "    groovebox_pattern_load(&g_refm.groovebox.patterns, &g_refm.groovebox, 0u);",
+    )
+    text = replace_section(
+        text,
+        "static void seed_beta_pattern(void)\n",
+        "static void ensure_ready(void)\n",
+        "",
+        "obsolete beta seeder",
     )
     text = text.replace("refm_target_init(&g_refm, 128u);", "refm_target_init(&g_refm, 136u);")
     text = text.replace("refm_target_init(&g_refm, bpm);", "(void)bpm;\n    refm_target_init(&g_refm, 136u);")
