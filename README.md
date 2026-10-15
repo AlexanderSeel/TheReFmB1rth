@@ -33,6 +33,8 @@ The beta.9 oscillator batch changes the precomputed wavetable path instead of ma
 - the beta.7 fixed-point source headroom remains intact;
 - pitch, filter, Env Mod, resonance, envelope, accent, 60 ms slide and clean mixer laws are otherwise unchanged.
 
+The periodic mip reconstruction intentionally keeps the existing zero-mean spectral-table convention; beta.9 does **not** alter oscillator DC/ladder bias. That keeps this test focused on lookup resolution, band limiting and transition behavior.
+
 Software reference probes show essentially unchanged source level while changing the intended spectrum: the new open SAW render is peak 8673 / mean-abs 2865 and SQUARE is peak 5589 / mean-abs 2835. End-to-end rendered pitch remains C2/C3/C4 = 33/66/131 crossings per 0.5 seconds.
 
 ## 303 reference points
