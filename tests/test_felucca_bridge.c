@@ -25,9 +25,9 @@ static uint32_t usb_midi(uint8_t status, uint8_t d1, uint8_t d2) {
 
 static void settle_boot_probe(int32_t *audio) {
     /* Harmless stopped-silence rendering on normal host builds; on the
-       REFM_FELUCCA_PLATFORM overlay this consumes the beta.11 3 s direct tone
-       before assertions that intentionally exercise normal groovebox audio. */
-    for (unsigned block = 0u; block < 1034u; ++block)
+       REFM_FELUCCA_PLATFORM overlay this consumes beta.12's 10 s staged DSP
+       probe before assertions intentionally exercise normal groovebox audio. */
+    for (unsigned block = 0u; block < 3446u; ++block)
         refm_felucca_audio_block(audio, 128u);
 }
 

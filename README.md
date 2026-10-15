@@ -14,29 +14,39 @@ Experimental replacement firmware for the M-VAVE FM-1: a compact four-machine ac
 
 See [`plan.md`](plan.md), [`docs/TB303_MODEL.md`](docs/TB303_MODEL.md), [`docs/FLASH_SAFETY.md`](docs/FLASH_SAFETY.md) and [`docs/PHYSICAL_BETA2_VALIDATION.md`](docs/PHYSICAL_BETA2_VALIDATION.md).
 
-## Current status — beta.11 direct physical audio-path probe
+## Current status — beta.12 staged DSP isolation
 
-Physical beta.9/10 feedback points to a shared high-frequency scratch/digital component that can mask the intended 303 and drum sound. Because the same artifact is heard on independent engines, beta.11 is a deliberately narrow diagnostic prerelease.
+Physical beta.11 produced the decisive first result: its direct ~1 kHz startup tone was **clean**, while normal 303 and 808/909 audio still contained the strange added/doubled high component. That makes Felucca's final Q15→24-bit conversion, I²S/DAC formatting and the basic physical output chain unlikely to be the source of the artifact.
 
-On the **physical FM-1 target only**, the first three seconds after ReFm initialization output a direct ~1 kHz, quarter-scale (~-12 dBFS) test tone. This tone is generated at the target output boundary and bypasses:
+beta.12 therefore does not retune the 303 or drums. On the **physical FM-1 target only**, the first ten seconds after ReFm initialization run five two-second diagnostic stages:
 
-- ACID A / ACID B;
-- 808 / 909;
-- groovebox transport/rendering;
-- mixer, PCF, Delay, Dist, Comp and sends.
+1. **0–2 s — direct 1 kHz reference tone**: bypasses all ReFm engines and mixer.
+2. **2–4 s — direct 808 kick**: synthetic 808 BD directly from `drum_machine_process()`, mixer/FX bypassed; four hits at 0.5 s spacing.
+3. **4–6 s — mixed 808 kick**: the same BD engine routed through the normal ReFm mixer.
+4. **6–8 s — direct 303 C2 SAW**: complete 303 oscillator + ladder output, mixer/FX bypassed; C2 is retriggered once per second.
+5. **8–10 s — mixed 303 C2 SAW**: the same 303 setup routed through the normal ReFm mixer.
 
-After exactly three seconds the probe ends automatically and beta.10 normal operation resumes. Host and Virtual/WASM builds do **not** enable this startup probe.
+After ten seconds the diagnostic state is discarded, a fresh stopped groovebox is initialized, and normal operation begins. Host and Virtual/WASM builds do **not** run the startup sequence.
 
-The purpose is binary diagnosis:
+This provides a short decision tree:
 
-- **boot tone is already scratchy / has the same high overlay** → investigate Felucca post-render / I²S / DAC / DMA / output formatting before touching synthesis again;
-- **boot tone is clean, normal 303/drums are scratchy** → the corruption is inside the ReFm DSP/render path and the next build should isolate direct drum and 303 pre/post-ladder stems.
+- **stage 2 clean, stage 3 contaminated** → shared mixer/FX path is the source for the drum artifact;
+- **stage 2 already contaminated** → the synthetic drum engine itself is producing the unwanted component;
+- **stage 4 clean, stage 5 contaminated** → shared mixer/FX path is the source for the 303 artifact;
+- **stage 4 already contaminated** → the fault is inside the active 303 oscillator/ladder/fixed-point path;
+- **stages 2 and 4 both clean but normal playback later contaminates** → investigate groovebox event/routing/load behavior rather than the individual engines or mixer.
 
-Use low external/headphone volume before powering the unit because the diagnostic tone starts automatically.
+Use low external/headphone volume before power-on because the diagnostic sequence begins automatically.
+
+## beta.11 finding retained
+
+beta.11's clean direct startup tone is now a known physical fact for this hardware test path. The pinned Felucca output still performs its original final Q15 → 24-bit `<< 7` conversion after the ReFm render. beta.12 does not add another output shift, EQ, limiter or guessed attenuation workaround.
+
+The pinned Felucca source was also rechecked: its native `events_block()` and original synth rendering are called from `mix_block()`, and ReFm replaces that `mix_block()` call on the physical audio path. That makes a simultaneously rendered native Felucca synth less likely as the source of the physical-key artifact.
 
 ## beta.10 realtime correction retained
 
-beta.11 keeps all beta.10 target-realtime changes:
+beta.12 keeps all beta.10 target-realtime changes:
 
 - shared mixer hot path uses bounded signed 32-bit fixed-point arithmetic instead of repeated signed `int64_t` multiplies;
 - track level/pan, delay/reverb sends, PCF, Dist and -12 dB master summing remain bounded and regression-tested;
@@ -44,8 +54,6 @@ beta.11 keeps all beta.10 target-realtime changes:
 - a fully released/idle 303 returns exact zero instead of continuously running oscillator + 4× ladder;
 - active 303 oscillator/filter laws are unchanged;
 - beta.9's 12×1024 Open303-derived target wavetable bank and smooth mip crossfades remain unchanged.
-
-The pinned Felucca output path still performs its original final Q15 → 24-bit `<< 7` conversion after the ReFm render. beta.11 does not add a second guessed output shift or another global attenuation stage.
 
 ## 303 reference points
 
@@ -105,7 +113,7 @@ On `ARP` / DRUM:
 
 ## Clean audio contract
 
-Outside the beta.11 three-second startup probe, startup mixer behavior remains neutral:
+Outside beta.12's ten-second startup diagnostics, startup mixer behavior remains neutral:
 
 - four track faders at unity;
 - one -12 dB shared master summing stage for four-channel headroom;
@@ -113,14 +121,13 @@ Outside the beta.11 three-second startup probe, startup mixer behavior remains n
 - compressor effectively transparent;
 - PCF fully open/bypassed;
 - physical MASTER applied after the ReFm render;
-- target fixed attenuation remains unity because the shared mixer owns summing headroom;
 - Felucca's original Q15→24-bit DAC conversion remains after the ReFm callback.
 
 ## Virtual FM-1
 
 Virtual uses the same groovebox state model and audible 303 source spectrum as hardware. Its wavetable lookup uses 2048 samples rather than 1024, but source prototype, band boundaries, harmonic budgets, headroom and SAW/SQUARE balance are shared.
 
-The beta.11 boot probe is intentionally physical-target-only because it exists to isolate the FM-1 output chain. Virtual/WASM starts normally.
+The beta.12 staged startup probe is intentionally physical-target-only because it exists to isolate target DSP sections. Virtual/WASM starts normally.
 
 ## Build and release safety
 
@@ -136,21 +143,19 @@ The FM-1 build uses pinned Felucca `3dd2b0852bc310a2c1bf00c2d443ac19202c2140`. G
 
 Published betas are immutable. A new beta is published only from the exact successful `main` Build-all commit; older tags are never moved or overwritten.
 
-The next physical diagnostic prerelease is **`v0.1.0-beta.11`**. beta.10 and all earlier releases remain untouched.
+The next physical diagnostic prerelease is **`v0.1.0-beta.12`**. beta.11 and all earlier releases remain untouched.
 
-## beta.11 physical test priority
+## beta.12 physical test priority
 
-Start with low headphone/external volume.
+Start with low headphone/external volume and simply classify the five startup stages:
 
-1. Power-cycle / boot beta.11 and listen only to the first ~3 seconds.
-2. Classify the direct 1 kHz probe as either **clean** or carrying the **same high scratch/overlay**.
-3. After the probe ends, leave transport stopped: output should return to normal silence.
-4. Press `PLAY`, then test a single 808/909 kick or snare with ACID silent.
-5. Test one sustained ACID SAW note with drums stopped, then SQUARE.
-6. Sweep cutoff through the full range, then resonance, Env Mod and decay separately.
-7. Finally test ACID + drums under load.
+1. **0–2 s reference tone** — expected clean.
+2. **2–4 s direct 808 BD** — does the strange extra/high component already exist?
+3. **4–6 s mixed 808 BD** — is it materially different/worse than stage 2?
+4. **6–8 s direct 303 C2 SAW** — does the doubled/high component already exist?
+5. **8–10 s mixed 303 C2 SAW** — is it materially different/worse than stage 4?
 
-The first result is the key one. If the direct boot probe is contaminated, do not retune 303/drum synthesis next. If the probe is clean but engine audio is contaminated, the next diagnostic build will expose isolated drum and 303 pre/post-ladder paths.
+The most useful report is simply `1 clean/dirty, 2 clean/dirty, 3 clean/dirty, 4 clean/dirty, 5 clean/dirty`, plus whether 2→3 or 4→5 introduces the unwanted sound.
 
 ## Sample policy
 
