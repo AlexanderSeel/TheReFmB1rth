@@ -7,7 +7,7 @@ const $$ = s => [...document.querySelectorAll(s)];
 const machineNames=['ACID A','ACID B','808','909'];
 const channels=[0,1,2,3];
 const drumMap=[['BD',36],['SD',38],['CP',39],['RS',37],['CH',42],['OH',46],['LT',41],['MT',45],['HT',48],['CR',49],['RD',51]];
-const RELEASES_API='https://api.github.com/repos/AlexanderSeel/TheReFmB1rth/releases?per_page=20';
+const RELEASE_BY_TAG_API='https://api.github.com/repos/AlexanderSeel/TheReFmB1rth/releases/tags';
 const CHANNEL_ROOT='https://raw.githubusercontent.com/AlexanderSeel/TheReFmB1rth/firmware-channel';
 const state = {
   access:null, updater:null, pkg:null, editorOut:null, machine:0, note:null,
@@ -42,30 +42,32 @@ const drop=$('#dropZone');drop.addEventListener('dragover',e=>{e.preventDefault(
 $('#loadRelease').addEventListener('click',async()=>{
   const btn=$('#loadRelease');btn.disabled=true;btn.textContent='LOADING…';
   try{
-    const rs=await fetch(RELEASES_API,{headers:{Accept:'application/vnd.github+json'}});
-    if(!rs.ok)throw new Error(`GitHub API ${rs.status}`);
-    const releases=await rs.json();
-    let found=null;
-    for(const r of releases){if(r.draft)continue;const asset=r.assets?.find(a=>/\.fwsc$/i.test(a.name));if(asset){found={r,asset};break;}}
-    if(!found)throw new Error('No GitHub Release containing a .fwsc asset was found.');
-
-    log(`Latest firmware release is ${found.r.tag_name}; checking browser channel mirror…`);
-    const bust=`?v=${encodeURIComponent(found.r.tag_name)}-${Date.now()}`;
-    const mr=await fetch(`${CHANNEL_ROOT}/latest.json${bust}`,{cache:'no-store'});
+    const now=Date.now();
+    const mr=await fetch(`${CHANNEL_ROOT}/latest.json?v=${now}`,{cache:'no-store'});
     if(!mr.ok)throw new Error(`Browser firmware channel is not available yet (${mr.status}). Publish a new hardware-test release or choose the .fwsc locally.`);
     const meta=await mr.json();
-    if(meta.tag!==found.r.tag_name)throw new Error(`Browser channel is ${meta.tag||'unknown'} but latest GitHub release is ${found.r.tag_name}. Wait for the release workflow to finish or choose the .fwsc locally.`);
-    if(meta.asset!==found.asset.name)throw new Error(`Browser channel asset mismatch: ${meta.asset||'unknown'}.`);
+    if(!/^v.+-beta(?:\.|-)?\d+$/i.test(meta.tag||''))throw new Error(`Browser channel has an invalid beta tag: ${meta.tag||'unknown'}.`);
+    if(!/\.fwsc$/i.test(meta.asset||''))throw new Error(`Browser channel asset is not an .fwsc package: ${meta.asset||'unknown'}.`);
     if(!/^[0-9a-f]{64}$/i.test(meta.sha256||''))throw new Error('Browser channel metadata has an invalid SHA-256.');
 
-    log(`Downloading ${meta.asset} from browser-safe firmware channel…`);
-    const fw=await fetch(`${CHANNEL_ROOT}/${encodeURIComponent(meta.asset)}${bust}`,{cache:'no-store'});
+    log(`Browser channel points to ${meta.tag}; verifying that exact GitHub release…`);
+    const releaseUrl=`${RELEASE_BY_TAG_API}/${encodeURIComponent(meta.tag)}?v=${now}`;
+    const rs=await fetch(releaseUrl,{cache:'no-store',headers:{Accept:'application/vnd.github+json'}});
+    if(!rs.ok)throw new Error(`GitHub release ${meta.tag} is not available (${rs.status}). Choose the .fwsc locally if GitHub is still updating.`);
+    const release=await rs.json();
+    if(release.draft)throw new Error(`GitHub release ${meta.tag} is still a draft.`);
+    if(release.tag_name!==meta.tag)throw new Error(`GitHub tag mismatch: channel ${meta.tag}, release ${release.tag_name||'unknown'}.`);
+    const asset=release.assets?.find(a=>a.name===meta.asset&&/\.fwsc$/i.test(a.name));
+    if(!asset)throw new Error(`GitHub release ${meta.tag} does not contain channel asset ${meta.asset}.`);
+
+    log(`Verified ${meta.tag} and ${meta.asset}; downloading browser-safe firmware mirror…`);
+    const fw=await fetch(`${CHANNEL_ROOT}/${encodeURIComponent(meta.asset)}?v=${encodeURIComponent(meta.tag)}-${now}`,{cache:'no-store'});
     if(!fw.ok)throw new Error(`Firmware channel download ${fw.status}`);
     const bytes=new Uint8Array(await fw.arrayBuffer());
     const actual=await sha256Hex(bytes);
     if(actual.toLowerCase()!==meta.sha256.toLowerCase())throw new Error(`Firmware mirror SHA-256 mismatch (${actual}).`);
     log(`Mirror verified: SHA-256 ${actual}`);
-    await loadPackage(bytes,`GitHub ${found.r.tag_name}`);
+    await loadPackage(bytes,`GitHub ${meta.tag}`);
   }catch(err){log(`RELEASE ERROR: ${err.message}`);}finally{btn.disabled=false;btn.textContent='LOAD LATEST GITHUB RELEASE';}
 });
 
