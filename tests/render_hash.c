@@ -3,13 +3,12 @@
 #include <stdio.h>
 #include "../firmware/proto/groovebox.h"
 
-/* beta.13 deterministic audio fingerprint. The intentional audio change is
-   confined to the ACID target-DSP correction: the Open303-derived source
-   mipmaps and measured knob laws are retained, while filter coefficient lookup,
-   ladder/VCA arithmetic and control-rate coefficient landing now use bounded
-   32-bit fixed point. Pitch, headroom, mixer and drum behavior remain guarded
-   independently by behavioral tests. */
-#define EXPECTED_RENDER_HASH 0x53406763c892a3c7ull
+/* Physical-feedback 303 fingerprint. The beta.13 all-32-bit target path is
+   retained, but control-rate ladder coefficients now interpolate to each exact
+   32-sample target instead of jumping there in one sample. This intentionally
+   reduces envelope-modulation zipper/harshness while preserving the measured
+   cutoff law, oscillator, pitch, mixer and drum contracts. */
+#define EXPECTED_RENDER_HASH 0xec9be17d3f9af807ull
 
 static uint64_t fnv1a_u16(uint64_t h, uint16_t v) {
     h ^= (uint8_t)v; h *= 1099511628211ull;
