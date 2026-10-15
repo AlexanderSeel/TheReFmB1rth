@@ -3,6 +3,21 @@
 #include "../proto/groovebox_midi.h"
 #include <string.h>
 
+/* Physical beta.11 diagnostic oscillator.
+ * This intentionally mirrors the bounded signed-32 sine approximation already
+ * used by the drum engine, but it is generated directly at the target boundary
+ * so it bypasses groovebox, 303, drums, mixer and FX completely. */
+static int32_t diag_tri(uint32_t p) {
+    uint32_t q = p >> 16;
+    return q < 32768u ? (int32_t)q * 2 - 32768 : 98302 - (int32_t)q * 2;
+}
+
+static int32_t diag_sineish(uint32_t p) {
+    int32_t t = diag_tri(p);
+    int32_t a = t < 0 ? -t : t;
+    return (t * (49152 - (a >> 1))) >> 15;
+}
+
 static uint8_t channel_data_len(uint8_t status) {
     switch (status & 0xF0u) {
         case 0xC0u:
@@ -23,6 +38,11 @@ void refm_target_init(refm_target_t *target, uint16_t bpm) {
     memset(target, 0, sizeof(*target));
     groovebox_init(&target->groovebox, bpm);
     groovebox_midi_init(&target->midi);
+#ifdef REFM_FELUCCA_PLATFORM
+    /* Three seconds is long enough to hear reliably after boot, but short
+     * enough that normal beta.10 operation follows automatically. */
+    target->diag_frames_remaining = REFM_BOOT_PROBE_FRAMES;
+#endif
 }
 
 void refm_target_set_external_clock(refm_target_t *target, uint8_t external) {
@@ -30,11 +50,23 @@ void refm_target_set_external_clock(refm_target_t *target, uint8_t external) {
 }
 
 void refm_target_render_q15(refm_target_t *target, int32_t *interleaved_stereo, uint32_t frames) {
+    /* 1 kHz Q32 phase increment at 44.1 kHz. The diagnostic tone is kept near
+     * -12 dBFS (quarter-scale) so first-boot listening is conservative. */
+    const uint32_t diag_inc = 97391549u;
     for (uint32_t i = 0; i < frames; ++i) {
-        int16_t l = 0, r = 0;
-        groovebox_process(&target->groovebox, &l, &r);
-        interleaved_stereo[2u * i] = l;
-        interleaved_stereo[2u * i + 1u] = r;
+        if (target->diag_frames_remaining) {
+            int32_t s;
+            target->diag_phase += diag_inc;
+            s = diag_sineish(target->diag_phase) >> 2;
+            interleaved_stereo[2u * i] = s;
+            interleaved_stereo[2u * i + 1u] = s;
+            target->diag_frames_remaining--;
+        } else {
+            int16_t l = 0, r = 0;
+            groovebox_process(&target->groovebox, &l, &r);
+            interleaved_stereo[2u * i] = l;
+            interleaved_stereo[2u * i + 1u] = r;
+        }
     }
 }
 

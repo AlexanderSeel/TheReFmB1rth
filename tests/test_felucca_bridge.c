@@ -23,6 +23,14 @@ static uint32_t usb_midi(uint8_t status, uint8_t d1, uint8_t d2) {
            ((uint32_t)d1 << 16) | ((uint32_t)d2 << 24);
 }
 
+static void settle_boot_probe(int32_t *audio) {
+    /* Harmless stopped-silence rendering on normal host builds; on the
+       REFM_FELUCCA_PLATFORM overlay this consumes the beta.11 3 s direct tone
+       before assertions that intentionally exercise normal groovebox audio. */
+    for (unsigned block = 0u; block < 1034u; ++block)
+        refm_felucca_audio_block(audio, 128u);
+}
+
 int main(void) {
     int32_t audio[128 * 2];
     uint8_t blob[PROJECT_STORE_MAX_PAYLOAD];
@@ -32,8 +40,9 @@ int main(void) {
     assert(refm_felucca_bpm() == 132u);
     assert(refm_felucca_ui_value(0u) == 0u); /* HOME */
     assert(refm_felucca_ui_value(1u) == 0u); /* ACID A */
+    settle_boot_probe(audio);
 
-    /* Direct MIDI remains usable. */
+    /* Direct MIDI remains usable after the physical boot probe. */
     refm_felucca_midi_packet(usb_midi(0x90u, 60u, 110u));
     refm_felucca_audio_block(audio, 128u);
     {
