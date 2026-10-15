@@ -2,7 +2,7 @@
 """Convert approved WAV assets into deterministic compact PCM16/C assets.
 
 Input is samples/sources.json after tools/fetch_samples.py has populated build/samples.
-The generated C unit is intended for WASM audition first; target firmware embedding is opt-in.
+The generated C unit is used by WASM audition and the memory-gated FM-1 target bundle.
 """
 from __future__ import annotations
 import argparse, hashlib, json, struct, wave
@@ -13,6 +13,16 @@ ROLE_TO_VOICE = {
     "closed_hat": 4, "open_hat": 5,
     "low_tom": 6, "mid_tom": 7, "high_tom": 8,
     "crash": 9, "ride": 10,
+}
+
+# Peak targets are deliberately role-aware. Low drums can sit close to full
+# scale while cymbals keep a little more transient/headroom so the mixed kit
+# sounds balanced rather than every source being independently maximized.
+ROLE_PEAK_TARGET = {
+    "kick": 30000, "snare": 29500, "clap": 28500, "rim": 28000,
+    "closed_hat": 26500, "open_hat": 26000,
+    "low_tom": 29000, "mid_tom": 28500, "high_tom": 28000,
+    "crash": 25500, "ride": 25000,
 }
 
 
@@ -47,6 +57,16 @@ def trim(samples, threshold=96):
     return samples[max(0, first - pad):min(len(samples), last + pad + 1)]
 
 
+def remove_dc(samples):
+    if not samples:
+        return samples
+    # Integer mean keeps preprocessing deterministic across Python platforms.
+    mean = int(round(sum(samples) / len(samples)))
+    if not mean:
+        return samples[:]
+    return [max(-32768, min(32767, x - mean)) for x in samples]
+
+
 def resample_linear(samples, src_rate, dst_rate):
     if src_rate == dst_rate or len(samples) < 2:
         return samples[:]
@@ -62,12 +82,26 @@ def resample_linear(samples, src_rate, dst_rate):
     return out
 
 
-def normalize(samples, peak_target=30000):
+def normalize(samples, peak_target=30000, max_boost=4.0):
+    """Peak-normalize in both directions, with bounded boost for noisy sources."""
     peak = max((abs(x) for x in samples), default=0)
-    if peak == 0 or peak <= peak_target:
-        return samples
-    gain = peak_target / peak
+    if peak == 0:
+        return samples[:]
+    gain = min(max_boost, peak_target / peak)
     return [max(-32768, min(32767, int(round(x * gain)))) for x in samples]
+
+
+def tail_fade(samples, frames=64):
+    """Short deterministic end fade to suppress trim/retrigger clicks."""
+    out = samples[:]
+    n = min(frames, len(out))
+    if n <= 1:
+        return out
+    start = len(out) - n
+    den = n - 1
+    for i in range(n):
+        out[start + i] = int(round(out[start + i] * (den - i) / den))
+    return out
 
 
 def ident(kit, role):
@@ -108,7 +142,11 @@ def main():
         if not src.exists():
             raise SystemExit(f"missing fetched sample: {src}; run tools/fetch_samples.py first")
         src_rate, pcm = read_wav(src)
-        pcm = normalize(resample_linear(trim(pcm), src_rate, args.rate))
+        pcm = trim(pcm)
+        pcm = remove_dc(pcm)
+        pcm = resample_linear(pcm, src_rate, args.rate)
+        pcm = normalize(pcm, ROLE_PEAK_TARGET.get(role, 28000))
+        pcm = tail_fade(pcm)
         raw = struct.pack("<" + "h" * len(pcm), *pcm)
         name = ident(entry["kit"], role)
         pcm_path = out / f"{entry['kit']}-{role}.pcm16le"
@@ -120,6 +158,7 @@ def main():
             "kit": entry["kit"], "role": role, "voice": ROLE_TO_VOICE[role],
             "source": str(src), "source_rate": src_rate, "target_rate": args.rate,
             "frames": len(pcm), "bytes": len(raw), "sha256": sha,
+            "peak_target": ROLE_PEAK_TARGET.get(role, 28000),
             "license": entry["license"], "repository": entry["repository"],
             "commit": entry["commit"], "path": entry["path"],
         })
@@ -148,7 +187,7 @@ def main():
     lines.append("}")
     c.write_text("\n".join(lines) + "\n", encoding="utf-8")
     report = {
-        "version": 1, "target_rate": args.rate,
+        "version": 2, "target_rate": args.rate,
         "selection": args.selection,
         "asset_count": len(assets), "total_pcm_bytes": sum(x["bytes"] for x in assets),
         "assets": assets,
