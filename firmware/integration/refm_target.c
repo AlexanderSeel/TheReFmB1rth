@@ -17,6 +17,12 @@ static int32_t diag_sineish(uint32_t p) {
     int32_t a = t < 0 ? -t : t;
     return (t * (49152 - (a >> 1))) >> 15;
 }
+
+static int32_t diag_limit_q15(int32_t x) {
+    if (x < -32768) return -32768;
+    if (x > 32767) return 32767;
+    return x;
+}
 #endif
 
 static uint8_t channel_data_len(uint8_t status) {
@@ -36,6 +42,15 @@ static uint8_t channel_data_len(uint8_t status) {
 }
 
 #ifdef REFM_FELUCCA_PLATFORM
+static void diag_prepare_acid(acid303_t *acid) {
+    acid303_init(acid);
+    acid->cutoff = 32767u;
+    acid->resonance = 0u;
+    acid->env_mod = 0u;
+    acid->drive = 0u;
+    acid->square = 0u;
+}
+
 static void diag_prepare_stage(refm_target_t *target) {
     groovebox_t *g = &target->groovebox;
     target->diag_phase = 0u;
@@ -54,23 +69,27 @@ static void diag_prepare_stage(refm_target_t *target) {
         break;
     case 3u:
         /* C2 SAW after the complete 303 engine/ladder, mixer bypassed. */
-        acid303_init(&g->acid[0]);
-        g->acid[0].cutoff = 32767u;
-        g->acid[0].resonance = 0u;
-        g->acid[0].env_mod = 0u;
-        g->acid[0].drive = 0u;
-        g->acid[0].square = 0u;
+        diag_prepare_acid(&g->acid[0]);
         break;
     case 4u:
         /* Same C2 SAW engine output through the shared mixer. */
-        acid303_init(&g->acid[0]);
-        g->acid[0].cutoff = 32767u;
-        g->acid[0].resonance = 0u;
-        g->acid[0].env_mod = 0u;
-        g->acid[0].drive = 0u;
-        g->acid[0].square = 0u;
+        diag_prepare_acid(&g->acid[0]);
         mixer_fx_init(&g->mixer);
         break;
+#if REFM_DIAG_EXTENDED_303
+    case 5u:
+        /* Internal tap: pre-ladder high-pass state after a normal 303 process. */
+        diag_prepare_acid(&g->acid[0]);
+        break;
+    case 6u:
+        /* Internal tap: fourth ladder state after a normal 303 process. */
+        diag_prepare_acid(&g->acid[0]);
+        break;
+    case 7u:
+        /* Internal tap: post-ladder high-pass state before VCA/drive. */
+        diag_prepare_acid(&g->acid[0]);
+        break;
+#endif
     default:
         break;
     }
@@ -134,6 +153,26 @@ static void diag_render(refm_target_t *target, int32_t *left, int32_t *right) {
         l = ml; r = mr;
         break;
     }
+#if REFM_DIAG_EXTENDED_303
+    case 5u:
+        if ((target->diag_stage_frame % REFM_TARGET_SAMPLE_RATE) == 0u)
+            acid303_set_note(&g->acid[0], 36u, 0u, 0u);
+        (void)acid303_process(&g->acid[0]);
+        l = r = diag_limit_q15(g->acid[0].output_hp_y >> 2);
+        break;
+    case 6u:
+        if ((target->diag_stage_frame % REFM_TARGET_SAMPLE_RATE) == 0u)
+            acid303_set_note(&g->acid[0], 36u, 0u, 0u);
+        (void)acid303_process(&g->acid[0]);
+        l = r = diag_limit_q15(g->acid[0].lp4 >> 3);
+        break;
+    case 7u:
+        if ((target->diag_stage_frame % REFM_TARGET_SAMPLE_RATE) == 0u)
+            acid303_set_note(&g->acid[0], 36u, 0u, 0u);
+        (void)acid303_process(&g->acid[0]);
+        l = r = diag_limit_q15(g->acid[0].post_hp_y >> 2);
+        break;
+#endif
     default:
         break;
     }
