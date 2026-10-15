@@ -10,7 +10,7 @@ adjust presentation without replacing that proven hardware contract.
 
 Compatibility contract markers retained for tests/documentation:
 compact-rebirth-inspired, rb240-beta3-approved, direct-step-navigation,
-exact-pattern-readback, physical-lcd-cleanup.
+exact-pattern-readback, physical-lcd-cleanup, no-legacy-graph-strip.
 """
 from __future__ import annotations
 import argparse, hashlib, subprocess, sys
@@ -70,7 +70,7 @@ def main() -> int:
     ):
         h.update(path.read_bytes())
     (root / ".refm-ui-overlay").write_text(
-        f"style=compact-rebirth-inspired+rb240-beta3-approved+hardware-240x240-wasm-parity+direct-step-navigation+exact-pattern-readback+physical-lcd-cleanup+direct-isr-keyboard+physical-master+gain32+clean-output+render-shifts+contextual-controls+dirty-regions+pattern-edit-write-through+physical-chromatic-step-entry+organ-square+refm-boot-splash\nsha256={h.hexdigest()}\n"
+        f"style=compact-rebirth-inspired+rb240-beta3-approved+hardware-240x240-wasm-parity+direct-step-navigation+exact-pattern-readback+physical-lcd-cleanup+no-legacy-graph-strip+direct-isr-keyboard+physical-master+gain32+clean-output+render-shifts+contextual-controls+dirty-regions+pattern-edit-write-through+physical-chromatic-step-entry+organ-square+refm-boot-splash\nsha256={h.hexdigest()}\n"
     )
     print("FM-1 ReFm hardware UI/input/audio correction stack applied")
     return 0
