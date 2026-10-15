@@ -59,6 +59,7 @@ def main() -> int:
     subprocess.run([sys.executable, str(ROOT / "tools" / "apply_square_organ_tone.py"), str(root)], check=True, cwd=ROOT)
     subprocess.run([sys.executable, str(ROOT / "tools" / "apply_rb240_wasm_parity.py"), str(root)], check=True, cwd=ROOT)
     subprocess.run([sys.executable, str(ROOT / "tools" / "apply_rb240_full_parity.py"), str(root)], check=True, cwd=ROOT)
+    subprocess.run([sys.executable, str(ROOT / "tools" / "fix_rb240_target_arithmetic.py"), str(root)], check=True, cwd=ROOT)
 
     # The physical factory fallback starts at 136 BPM, but an explicit bridge
     # initialization (host test, project restore, editor/runtime caller) must keep
