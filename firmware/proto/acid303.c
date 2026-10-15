@@ -1,542 +1,238 @@
 // SPDX-License-Identifier: GPL-3.0-only
 /*
- * TB-303-inspired fixed-point voice for the FM-1.
+ * FM-1 TB-303 engine.
  *
- * The oscillator prototypes, four-stage filter topology, measured cutoff /
- * envelope mapping and timing are fixed-point adaptations informed by Robin
- * Schmidt's Open303 (MIT). The optional band-limited oscillator tables are
- * generated locally by tools/generate_303_wavetables.py.
- *
- * The realtime path intentionally avoids signed 64-bit arithmetic. The JieLi
- * pi32v2 target is much happier with bounded 32-bit Q15 operations, while
- * coefficient lookup tables preserve the Open303 TB-303 transfer law.
+ * The public API/project values are TheReFmB1rth's, while the audible signal
+ * path follows the strategy proven on the same hardware by fm1-x0x's GPL-3.0
+ * Open303 port: float-only/no-libm maths, polyBLEP oscillator, Open303's
+ * measured envelope-modulation mapping, TeeBee TB_303 filter coefficients and
+ * very short control intervals with interpolation.  This replaces the beta.13
+ * Q15/LUT ladder whose coarse state transitions produced physical gain jumps
+ * and runaway distortion when cutoff/resonance/env-mod crossed zero.
  */
 #include "acid303.h"
 #include <limits.h>
 #include <string.h>
 
-#ifndef REFM_ACID_WAVETABLE
-#define REFM_ACID_WAVETABLE 1
-#endif
-
-#if REFM_ACID_WAVETABLE
-#include "acid303_wavetable.h"
-#endif
-
-#define SR 44100u
+#define SR 44100.0f
+#define OS 2.0f
+#define FSO (SR * OS)
+#define CTRL 4u
 #define Q15_ONE 32767
-#define COEFF_PERIOD 32u
-#define SLIDE_TAU_SAMPLES ((SR * 60u) / 1000u)
-#define TB_COEFF_LUT_SIZE 65u
-#define TB_COEFF_HZ_MIN 200u
-#define TB_COEFF_HZ_SPAN 19800u
 
-static int32_t clamp32(int32_t x, int32_t lo, int32_t hi) {
-    if (x < lo) return lo;
-    if (x > hi) return hi;
-    return x;
+/* ---- FM-1 float-only fast maths (adapted from fm1-x0x fastmath.h) --------------------- */
+typedef union { float f; uint32_t u; int32_t i; } fbits_t;
+static float ffabs(float x){fbits_t b;b.f=x;b.u&=0x7fffffffu;return b.f;}
+static float fclamp(float x,float lo,float hi){return x<lo?lo:x>hi?hi:x;}
+static float ffloor(float x){int32_t i=(int32_t)x;float f=(float)i;return f>x?f-1.0f:f;}
+static float exp2_nf(int32_t n,float f){
+    fbits_t b;float p;
+    if(n<-126)return 0.0f;
+    p=1.534580891e-04f;p=p*f+1.339993158e-03f;p=p*f+9.618488972e-03f;
+    p=p*f+5.550328776e-02f;p=p*f+2.402264689e-01f;p=p*f+6.931472057e-01f;p=p*f+1.0f;
+    b.f=p;b.i+=n<<23;return b.f;
 }
+static float fexp2(float x){float n;if(x<-126.0f)return 0.0f;if(x>127.0f)x=127.0f;n=ffloor(x+0.5f);return exp2_nf((int32_t)n,x-n);}
+static float fexp(float x){float n;if(x<-87.3f)return 0.0f;if(x>88.7f)x=88.7f;n=ffloor(x*1.44269504088896f+0.5f);x=(x-n*0.693145752f)-n*1.42860677e-6f;return exp2_nf((int32_t)n,x*1.44269504088896f);}
+static float ftanh(float x){float a=ffabs(x),e,r;if(a<0.0004f)return x;if(a<0.5f){float z=x*x;return x*(1.0f+z*(-0.333333333f+z*(0.133333333f+z*(-0.0539682540f+z*(0.0218694885f+z*(-0.00886323552f+z*0.00359212803f))))));}if(a>9.0f)return x>0?1.0f:-1.0f;e=fexp2(2.88539008177793f*a);r=1.0f-2.0f/(e+1.0f);return x>0?r:-r;}
 
-static uint32_t abs_u32(int32_t x) {
-    return x < 0 ? (uint32_t)(-(x + 1)) + 1u : (uint32_t)x;
-}
+static int32_t clamp32(int32_t x,int32_t lo,int32_t hi){return x<lo?lo:x>hi?hi:x;}
+static int16_t q15_from_float(float x){x=fclamp(x,-1.0f,0.9999695f);return(int16_t)(x*32768.0f);}
+static int32_t q15_state(float x){x=fclamp(x,-8.0f,8.0f);return(int32_t)(x*32768.0f);}
 
-/* Signed Q15 multiply without int64. Inputs in this voice are bounded so the
-   decomposed result remains far inside int32 even when a direct a*b would
-   overflow 32 bits. */
-static int32_t mul_q15(int32_t a, int32_t b) {
-    uint32_t ua = abs_u32(a);
-    uint32_t ub = abs_u32(b);
-    uint32_t ahi = ua >> 15;
-    uint32_t alo = ua & 32767u;
-    uint32_t bhi = ub >> 15;
-    uint32_t blo = ub & 32767u;
-    uint32_t v = ahi * ub + alo * bhi + ((alo * blo) >> 15);
-    int neg = (a < 0) != (b < 0);
-    if (v > (uint32_t)INT32_MAX) v = (uint32_t)INT32_MAX;
-    return neg ? -(int32_t)v : (int32_t)v;
-}
-
-static uint16_t ratio_q15(uint32_t num, uint32_t den) {
-    if (!den || num >= den) return 32767u;
-    while (num > 131000u || den > 131000u) {
-        num = (num + 1u) >> 1;
-        den = (den + 1u) >> 1;
-        if (!den) return 32767u;
-    }
-    return (uint16_t)((num * 32767u + den / 2u) / den);
-}
-
-static const uint32_t semitone_inc[12] = {
-    796254u, 843601u, 893765u, 946911u, 1003217u, 1062871u,
-    1126073u, 1193033u, 1263974u, 1339134u, 1418763u, 1503127u
+/* ---- pitch --------------------------------------------------------------------------- */
+static const uint32_t semitone_inc[12]={
+    796254u,843601u,893765u,946911u,1003217u,1062871u,
+    1126073u,1193033u,1263974u,1339134u,1418763u,1503127u
 };
 
-uint32_t acid303_note_to_phase_inc(uint8_t note) {
-    uint32_t base = semitone_inc[note % 12u];
-    uint32_t octave = note / 12u;
-    if (octave >= 32u || base > (UINT32_MAX >> octave)) return UINT32_MAX;
-    return base << octave;
+uint32_t acid303_note_to_phase_inc(uint8_t note){
+    uint32_t base=semitone_inc[note%12u],octave=note/12u;
+    if(octave>=32u||base>(UINT32_MAX>>octave))return UINT32_MAX;
+    return base<<octave;
 }
 
-uint32_t acid303_apply_tune(uint32_t phase_inc, int8_t tune) {
-    static const uint32_t up_q16[13] = {
-        65536u,69433u,73562u,77936u,82570u,87480u,92682u,
-        98193u,104032u,110218u,116772u,123715u,131072u
-    };
-    static const uint32_t down_q16[13] = {
-        65536u,61858u,58386u,55109u,52016u,49097u,46341u,
-        43740u,41285u,38968u,36781u,34716u,32768u
-    };
-    int t = tune;
-    uint32_t ratio, hi, lo, frac, result;
-    if (t < -12) t = -12;
-    if (t > 12) t = 12;
-    ratio = t < 0 ? down_q16[-t] : up_q16[t];
-    hi = phase_inc >> 16;
-    lo = phase_inc & 65535u;
-    if (hi && ratio > UINT32_MAX / hi) return UINT32_MAX;
-    result = hi * ratio;
-    frac = lo * (ratio >> 16);
-    frac += (lo * (ratio & 65535u) + 32768u) >> 16;
-    if (result > UINT32_MAX - frac) return UINT32_MAX;
-    result += frac;
-    return result ? result : 1u;
+uint32_t acid303_apply_tune(uint32_t phase_inc,int8_t tune){
+    static const uint32_t up_q16[13]={65536u,69433u,73562u,77936u,82570u,87480u,92682u,98193u,104032u,110218u,116772u,123715u,131072u};
+    static const uint32_t down_q16[13]={65536u,61858u,58386u,55109u,52016u,49097u,46341u,43740u,41285u,38968u,36781u,34716u,32768u};
+    int t=tune;uint32_t ratio,hi,lo,frac,result;
+    if(t<-12)t=-12;if(t>12)t=12;ratio=t<0?down_q16[-t]:up_q16[t];hi=phase_inc>>16;lo=phase_inc&65535u;
+    if(hi&&ratio>UINT32_MAX/hi)return UINT32_MAX;result=hi*ratio;frac=lo*(ratio>>16);frac+=(lo*(ratio&65535u)+32768u)>>16;
+    if(result>UINT32_MAX-frac)return UINT32_MAX;result+=frac;return result?result:1u;
 }
 
-static int32_t shape_q15(int32_t x) {
-    int32_t x2, x3;
-    x = clamp32(x, -46340, 46340);
-    x2 = mul_q15(x, x);
-    x3 = mul_q15(x2, x);
-    return clamp32(x - x3 / 6, -49152, 49152);
+static float inc_to_hz(uint32_t inc){return(float)inc*(SR/4294967296.0f);}
+
+/* ---- public control mapping ----------------------------------------------------------- */
+uint16_t acid303_cutoff_hz(const acid303_t*s){
+    static const uint16_t lut[33]={314,334,356,380,405,431,459,489,522,556,592,631,672,716,763,814,867,924,984,1049,1118,1191,1269,1352,1441,1535,1636,1743,1857,1979,2109,2247,2394};
+    uint32_t n=s->cutoff>32767u?32767u:s->cutoff,pos=n*32u,i=pos>>15,frac=pos&32767u;int32_t d;
+    if(i>=32u)return lut[32];d=(int32_t)lut[i+1u]-(int32_t)lut[i];return(uint16_t)((int32_t)lut[i]+(d*(int32_t)frac>>15));
 }
 
-static uint32_t decay_tau_samples(uint16_t decay, uint8_t accented) {
-    if (accented) return (SR * 200u) / 1000u;
-    return (SR * (200u + ((uint32_t)decay * 1800u) / 32767u)) / 1000u;
-}
-
-static void decay_env(int32_t *env, uint32_t tau_samples) {
-    int32_t step;
-    if (*env <= 0) { *env = 0; return; }
-    step = *env / (int32_t)(tau_samples ? tau_samples : 1u);
-    if (step < 1) step = 1;
-    *env -= step;
-    if (*env < 8) *env = 0;
-}
-
-uint16_t acid303_cutoff_hz(const acid303_t *s) {
-    static const uint16_t lut[33] = {
-        314,334,356,380,405,431,459,489,522,556,592,
-        631,672,716,763,814,867,924,984,1049,1118,1191,
-        1269,1352,1441,1535,1636,1743,1857,1979,2109,2247,2394
-    };
-    uint32_t n = s->cutoff > 32767u ? 32767u : s->cutoff;
-    uint32_t pos = n * 32u;
-    uint32_t i = pos >> 15;
-    uint32_t frac = pos & 32767u;
-    int32_t d;
-    if (i >= 32u) return lut[32];
-    d = (int32_t)lut[i + 1u] - (int32_t)lut[i];
-    return (uint16_t)((int32_t)lut[i] + (d * (int32_t)frac >> 15));
-}
-
-static int32_t resonance_skew_q15(uint16_t resonance) {
-    static const uint16_t lut[16] = {
-        0,6252,11370,15564,19005,21797,24097,25981,
-        27521,28782,29815,30663,31355,31921,32387,32767
-    };
-    uint32_t r = resonance > 32767u ? 32767u : resonance;
-    uint32_t pos = r * 15u;
-    uint32_t i = pos >> 15;
-    uint32_t frac = pos & 32767u;
-    int32_t d;
-    if (i >= 15u) return 32767;
-    d = (int32_t)lut[i + 1u] - (int32_t)lut[i];
-    return (int32_t)lut[i] + (d * (int32_t)frac >> 15);
-}
-
-/* The beta.12 Open303-derived fixed-point TB_303 coefficient formulas sampled
-   at 65 uniformly spaced frequencies from 200 to 20,000 Hz at the 4x
-   (176.4 kHz) ladder rate. Linear interpolation stays within a few Q-LSBs of
-   that implementation while removing signed-64-bit polynomial/division work
-   from the realtime target path. */
-static const uint16_t tb_b0_lut[TB_COEFF_LUT_SIZE] = {
-    175,418,653,882,1104,1320,1530,1734,1933,2126,2313,2497,2675,
-    2848,3018,3182,3344,3500,3653,3803,3948,4090,4230,4365,4498,4628,
-    4754,4878,4999,5118,5234,5347,5458,5567,5673,5778,5879,5979,6077,
-    6173,6267,6359,6450,6538,6625,6710,6794,6876,6957,7035,7113,7189,
-    7264,7337,7409,7480,7549,7618,7684,7750,7815,7879,7941,8003,8063
-};
-
-static const uint32_t tb_kbase_lut[TB_COEFF_LUT_SIZE] = {
-    70330,71424,72526,73639,74756,75880,77015,78155,79306,80461,81623,
-    82797,83974,85158,86353,87552,88762,89976,91197,92428,93663,94904,
-    96156,97412,98679,99948,101224,102511,103800,105095,106402,107711,109030,
-    110352,111680,113019,114359,115706,117062,118420,119789,121159,122535,123921,
-    125308,126701,128104,129506,130920,131072,131072,131072,131072,131072,131072,
-    131072,131072,131072,131072,131072,131072,131072,131072,131072,131072
-};
-
-static void tb_coeff_lookup(uint32_t hz, int32_t *b0, int32_t *kbase) {
-    uint32_t scaled, i, rem;
-    int32_t db, dk;
-    if (hz <= TB_COEFF_HZ_MIN) {
-        *b0 = tb_b0_lut[0];
-        *kbase = (int32_t)tb_kbase_lut[0];
-        return;
-    }
-    if (hz >= TB_COEFF_HZ_MIN + TB_COEFF_HZ_SPAN) {
-        *b0 = tb_b0_lut[TB_COEFF_LUT_SIZE - 1u];
-        *kbase = (int32_t)tb_kbase_lut[TB_COEFF_LUT_SIZE - 1u];
-        return;
-    }
-    scaled = (hz - TB_COEFF_HZ_MIN) * (TB_COEFF_LUT_SIZE - 1u);
-    i = scaled / TB_COEFF_HZ_SPAN;
-    rem = scaled - i * TB_COEFF_HZ_SPAN;
-    db = (int32_t)tb_b0_lut[i + 1u] - (int32_t)tb_b0_lut[i];
-    dk = (int32_t)tb_kbase_lut[i + 1u] - (int32_t)tb_kbase_lut[i];
-    *b0 = (int32_t)tb_b0_lut[i] + (db * (int32_t)rem) / (int32_t)TB_COEFF_HZ_SPAN;
-    *kbase = (int32_t)tb_kbase_lut[i] + (dk * (int32_t)rem) / (int32_t)TB_COEFF_HZ_SPAN;
-    if (*kbase > 131072) *kbase = 131072;
-}
-
-static void reset_analog_path(acid303_t *s) {
-    s->phase = 0u;
-    s->lp1 = s->lp2 = s->lp3 = s->lp4 = 0;
-    s->resonance_hp_lp = 0;
-    s->output_hp_x = 0;
-    s->output_hp_y = 0;
-    s->post_hp_x = 0;
-    s->post_hp_y = 0;
-    s->gain_smooth1 = 0;
-    s->gain_smooth2 = 0;
-    s->env_rc = 0;
-    s->accent_env = 0;
-    s->accent_sweep = 0;
-    s->coeff_valid = 0u;
-    s->coeff_countdown = 0u;
-}
-
-void acid303_init(acid303_t *s) {
-    memset(s, 0, sizeof(*s));
-    s->cutoff = 18688u;
-    s->resonance = 0u;
-    s->env_mod = 8192u;
-    s->decay = 14563u;
-    s->accent = 0u;
-    s->drive = 0u;
-    s->tune = 0;
-    s->amp_sustain = 0u;
-    s->amp_release = 0u;
-    s->lfo_rate = 35u;
-    s->lfo_amount = 0u;
-    s->lfo_shape = ACID_LFO_SINE;
-    s->amp_stage = ACID_ENV_OFF;
-    s->idle = 1u;
-}
-
-void acid303_set_note(acid303_t *s, uint8_t note, uint8_t accent, uint8_t slide) {
-    uint32_t inc = acid303_apply_tune(acid303_note_to_phase_inc(note), s->tune);
-    if (slide && s->gate) {
-        s->slide_target_inc = inc;
-        s->sliding = 1u;
-        s->accented = accent ? 1u : 0u;
-    } else {
-        if (s->idle) reset_analog_path(s);
-        s->phase_inc = inc;
-        s->slide_target_inc = inc;
-        s->sliding = 0u;
-        s->env = Q15_ONE;
-        s->amp = Q15_ONE;
-        s->amp_stage = ACID_ENV_DECAY;
-        s->accented = accent ? 1u : 0u;
-    }
-    s->gate = 1u;
-    s->idle = 0u;
-}
-
-void acid303_note_off(acid303_t *s) {
-    s->gate = 0u;
-    s->amp_stage = ACID_ENV_RELEASE;
-}
-
-int16_t acid303_lfo_value(const acid303_t *s) {
-    uint32_t q = s->lfo_phase >> 16;
-    int32_t saw = (int32_t)q - 32768;
-    int32_t tri = q < 32768u ? (int32_t)q * 2 - 32768 : 98302 - (int32_t)q * 2;
-    switch ((acid_lfo_shape_t)(s->lfo_shape & 3u)) {
-    case ACID_LFO_TRI: return (int16_t)tri;
-    case ACID_LFO_SAW: return (int16_t)saw;
-    case ACID_LFO_SQUARE: return q < 32768u ? 32767 : -32768;
-    default: {
-        int32_t a = tri < 0 ? -tri : tri;
-        return (int16_t)clamp32(mul_q15(tri, 49152 - a / 2), -32768, 32767);
-    }
+int16_t acid303_lfo_value(const acid303_t*s){
+    uint32_t q=s->lfo_phase>>16;int32_t saw=(int32_t)q-32768;int32_t tri=q<32768u?(int32_t)q*2-32768:98302-(int32_t)q*2;
+    switch((acid_lfo_shape_t)(s->lfo_shape&3u)){
+    case ACID_LFO_TRI:return(int16_t)tri;
+    case ACID_LFO_SAW:return(int16_t)saw;
+    case ACID_LFO_SQUARE:return q<32768u?32767:-32768;
+    default:{int32_t a=tri<0?-tri:tri;return(int16_t)clamp32((tri*(49152-(a>>1)))>>15,-32768,32767);}
     }
 }
 
-#if !REFM_ACID_WAVETABLE
-static int32_t poly_blep_q15(uint32_t phase, uint32_t dt) {
-    if (!dt) return 0;
-    if (phase < dt) {
-        int32_t x = (int32_t)ratio_q15(phase, dt);
-        return (x << 1) - mul_q15(x, x) - 32768;
+static float resonance_skew(const acid303_t*s){
+    float n=(float)(s->resonance>32767u?32767u:s->resonance)*(1.0f/32767.0f);
+    return(1.0f-fexp(-3.0f*n))*(1.0f/0.950212932f);
+}
+
+static float decay_coeff(const acid303_t*s){
+    float n=(float)(s->decay>32767u?32767u:s->decay)*(1.0f/32767.0f);
+    float ms=200.0f*fexp2(3.321928095f*n); /* 200..2000 ms */
+    return fexp(-1000.0f/(ms*SR));
+}
+
+/* ---- lifecycle ------------------------------------------------------------------------ */
+static void clear_filter(acid303_t*s){
+    s->f_hp1_x=s->f_hp1_y=s->f_fb_x=s->f_fb_y=0.0f;
+    s->f_y1=s->f_y2=s->f_y3=s->f_y4=0.0f;
+    s->f_post_x=s->f_post_y=0.0f;s->f_decim_x1=s->f_decim_y1=0.0f;
+    s->lp1=s->lp2=s->lp3=s->lp4=0;s->output_hp_x=s->output_hp_y=0;s->post_hp_x=s->post_hp_y=0;
+    s->resonance_hp_lp=0;
+}
+
+void acid303_init(acid303_t*s){
+    memset(s,0,sizeof(*s));
+    s->cutoff=18688u;s->resonance=0u;s->env_mod=8192u;s->decay=14563u;s->accent=0u;s->drive=0u;s->tune=0;
+    s->lfo_rate=35u;s->lfo_amount=0u;s->lfo_shape=ACID_LFO_SINE;s->amp_stage=ACID_ENV_OFF;s->idle=1u;
+    s->f_freq=s->f_target_freq=440.0f;s->f_slew=440.0f;s->f_ctrl_left=0u;
+}
+
+void acid303_set_note(acid303_t*s,uint8_t note,uint8_t accent,uint8_t slide){
+    uint32_t inc=acid303_apply_tune(acid303_note_to_phase_inc(note),s->tune);float f=inc_to_hz(inc);
+    if(slide&&s->gate){
+        s->slide_target_inc=inc;s->f_target_freq=f;s->sliding=1u;s->accented=accent?1u:0u;
+    }else{
+        if(s->idle){clear_filter(s);s->phase=0u;s->f_phase=0.0f;}
+        s->phase_inc=inc;s->slide_target_inc=inc;s->f_freq=s->f_target_freq=s->f_slew=f;s->sliding=0u;
+        s->f_env=1.0f;s->f_env_rc1=1.0f;s->f_env_rc2=accent?0.05f:0.0f;s->f_amp=1.0f;
+        s->env=Q15_ONE;s->env_rc=Q15_ONE;s->accent_env=accent?1638:0;s->accent_sweep=s->accent_env;s->amp=Q15_ONE;
+        s->amp_stage=ACID_ENV_DECAY;s->accented=accent?1u:0u;s->f_ctrl_left=0u;
     }
-    if (phase > 0xffffffffu - dt) {
-        uint32_t remain = 0xffffffffu - phase;
-        int32_t x = -(int32_t)ratio_q15(remain, dt);
-        return mul_q15(x, x) + (x << 1) + 32768;
+    s->gate=1u;s->idle=0u;
+}
+
+void acid303_note_off(acid303_t*s){s->gate=0u;s->amp_stage=ACID_ENV_RELEASE;}
+
+static void slide_step(acid303_t*s){
+    if(!s->sliding)return;
+    if(s->phase_inc==s->slide_target_inc){s->sliding=0u;s->f_freq=s->f_target_freq;return;}
+    if(s->phase_inc<s->slide_target_inc){uint32_t d=s->slide_target_inc-s->phase_inc,st=d/2646u;if(!st)st=1u;s->phase_inc+=st;if(s->phase_inc>s->slide_target_inc)s->phase_inc=s->slide_target_inc;}
+    else{uint32_t d=s->phase_inc-s->slide_target_inc,st=d/2646u;if(!st)st=1u;s->phase_inc-=st;if(s->phase_inc<s->slide_target_inc)s->phase_inc=s->slide_target_inc;}
+    s->f_freq=inc_to_hz(s->phase_inc);
+}
+
+static void envelope_step(acid303_t*s){
+    const float rc1=0.9924690f; /* exp(-1/(3 ms * 44.1 kHz)) */
+    const float rc2=0.9984890f; /* exp(-1/(15 ms * 44.1 kHz)) */
+    float dc=decay_coeff(s),release=s->accented?0.9995466f:0.9775794f; /* 50 ms / 1 ms */
+    s->f_env*=dc;
+    s->f_env_rc1=rc1*s->f_env_rc1+(1.0f-rc1)*s->f_env;
+    if(s->accented)s->f_env_rc2=rc2*s->f_env_rc2+(1.0f-rc2)*s->f_env;else s->f_env_rc2*=rc2;
+    if(s->gate)s->f_amp*=0.99998156f; /* ~1230 ms TB-303 amp decay */
+    else s->f_amp*=release;
+    if(s->f_env<0.0000005f)s->f_env=0.0f;
+    if(s->f_amp<0.0000305f){s->f_amp=0.0f;s->amp=0;s->amp_stage=ACID_ENV_OFF;if(!s->gate)s->idle=1u;}
+    else{s->amp=(int32_t)(fclamp(s->f_amp,0.0f,1.0f)*32767.0f);}
+    s->env=(int32_t)(fclamp(s->f_env,0.0f,1.0f)*32767.0f);
+    /* Keep historical diagnostic/test semantics while the audible path uses the two RC followers. */
+    s->env_rc=s->env;
+    s->accent_env=s->accented?(int32_t)(fclamp(s->f_env_rc2,0.0f,0.999f)*32767.0f):0;
+    s->accent_sweep=s->accent_env;
+}
+
+/* ---- oscillator / filter -------------------------------------------------------------- */
+static float blep(float t,float dt){float x;if(dt<=0.0f)return 0.0f;if(t<dt){x=t/dt;return x+x-x*x-1.0f;}if(t>1.0f-dt){x=(t-1.0f)/dt;return x*x+x+x+1.0f;}return 0.0f;}
+
+static float osc(acid303_t*s,float inc){
+    float p=s->f_phase,y,t;
+    if(!s->square){t=p+0.5f;if(t>=1.0f)t-=1.0f;y=-(t+t-1.0f-blep(t,inc));}
+    else{
+        /* Band-limited square for the compact target. The post-oscillator HP removes DC. */
+        y=p<0.5f?1.0f:-1.0f;y+=blep(p,inc);t=p+0.5f;if(t>=1.0f)t-=1.0f;y-=blep(t,inc);y*=-0.5f;
     }
-    return 0;
-}
-#endif
-
-#if REFM_ACID_WAVETABLE
-static int32_t wavetable_lookup(const int16_t *table, uint32_t phase) {
-    uint32_t idx = phase >> (32u - REFM_ACID_WT_BITS);
-    uint32_t frac = (phase >> (17u - REFM_ACID_WT_BITS)) & 32767u;
-    int32_t a = table[idx & REFM_ACID_WT_MASK];
-    int32_t b = table[(idx + 1u) & REFM_ACID_WT_MASK];
-    return a + (((b - a) * (int32_t)frac) >> 15);
-}
-#endif
-
-static int32_t oscillator_substep(acid303_t *s, uint32_t sub_inc) {
-    s->phase += sub_inc;
-#if REFM_ACID_WAVETABLE
-    {
-        uint32_t band = 0u;
-        const int16_t *const *bank = s->square ? refm_acid_wt_square : refm_acid_wt_saw;
-        while (band + 1u < REFM_ACID_WT_BANDS &&
-               s->phase_inc >= refm_acid_wt_threshold_inc[band]) ++band;
-        if (band + 1u < REFM_ACID_WT_BANDS &&
-            s->phase_inc > refm_acid_wt_xfade_start_inc[band]) {
-            uint32_t start = refm_acid_wt_xfade_start_inc[band];
-            uint32_t end = refm_acid_wt_threshold_inc[band];
-            uint16_t mix = ratio_q15(s->phase_inc - start, end - start);
-            int32_t lo = wavetable_lookup(bank[band], s->phase);
-            int32_t hi = wavetable_lookup(bank[band + 1u], s->phase);
-            return lo + (((hi - lo) * (int32_t)mix) >> 15);
-        }
-        return wavetable_lookup(bank[band], s->phase);
-    }
-#else
-    {
-        int32_t blep_wrap = poly_blep_q15(s->phase, sub_inc);
-        if (!s->square) {
-            int32_t saw = (int32_t)(s->phase >> 16) - 32768;
-            return clamp32(saw - blep_wrap, -32768, 32767);
-        }
-        {
-            int32_t sq = s->phase < 0x80000000u ? 16000 : -16000;
-            int32_t blep_duty = poly_blep_q15(s->phase - 0x80000000u, sub_inc);
-            sq += (blep_wrap * 16000) >> 15;
-            sq -= (blep_duty * 16000) >> 15;
-            return clamp32(sq, -32768, 32767);
-        }
-    }
-#endif
+    p+=inc;if(p>=1.0f)p-=1.0f;s->f_phase=p;return y;
 }
 
-static void slide_step(acid303_t *s) {
-    uint32_t d, step;
-    if (!s->sliding) return;
-    if (s->slide_target_inc > s->phase_inc) {
-        d = s->slide_target_inc - s->phase_inc;
-        step = d / SLIDE_TAU_SAMPLES;
-        if (!step) step = 1u;
-        if (step >= d) { s->phase_inc = s->slide_target_inc; s->sliding = 0u; }
-        else s->phase_inc += step;
-    } else if (s->slide_target_inc < s->phase_inc) {
-        d = s->phase_inc - s->slide_target_inc;
-        step = d / SLIDE_TAU_SAMPLES;
-        if (!step) step = 1u;
-        if (step >= d) { s->phase_inc = s->slide_target_inc; s->sliding = 0u; }
-        else s->phase_inc -= step;
-    } else {
-        s->sliding = 0u;
-    }
+static float modulated_cutoff(acid303_t*s){
+    float c=(float)(s->cutoff>32767u?32767u:s->cutoff)*(1.0f/32767.0f);
+    float e=(float)(s->env_mod>32767u?32767u:s->env_mod)*(1.0f/32767.0f);
+    float slo=3.773996325f*e+0.736965594f,shi=4.194548788f*e+0.864344901f;
+    float scaler=(1.0f-c)*slo+c*shi,offset=0.048292931f*c+0.294391201f;
+    float a=(float)(s->accent>32767u?32767u:s->accent)*(1.0f/32767.0f);
+    float fc=(float)acid303_cutoff_hz(s)*fexp2(scaler*(s->f_env_rc1-offset)+(s->accented?a*s->f_env_rc2:0.0f));
+    if(s->lfo_amount){int16_t lv=acid303_lfo_value(s);float d=(float)lv*(float)s->lfo_amount*(1600.0f/(32768.0f*127.0f));fc+=d;}
+    return fclamp(fc,200.0f,20000.0f);
 }
 
-static void envelope_step(acid303_t *s) {
-    int32_t accent_target, d;
-    decay_env(&s->env, decay_tau_samples(s->decay, s->accented));
-    s->env_rc = s->env;
-    accent_target = (s->accented && s->accent) ? s->env : 0;
-    d = accent_target - s->accent_env;
-    s->accent_env += (d * 50) >> 15;
-    if (s->gate) decay_env(&s->amp, (SR * 1230u) / 1000u);
-    else decay_env(&s->amp, (SR * (s->accented ? 50u : 1u)) / 1000u);
-    if (!s->amp) {
-        s->amp_stage = ACID_ENV_OFF;
-        if (!s->gate) s->idle = 1u;
-    }
+static void update_coeff_target(acid303_t*s){
+    float fc=modulated_cutoff(s),r=resonance_skew(s),fx=fc*(0.707106781f/FSO),b0,k,g2;
+    b0=(0.00045522346f+6.1922189f*fx)/(1.0f+12.358354f*fx+4.4156345f*fx*fx);
+    k=fx*(fx*(fx*(fx*(fx*(fx+7198.6997f)-5837.7917f)-476.47308f)+614.95611f)+213.87126f)+16.998792f;
+    g2=2.0f*((k*(1.0f/17.0f)-1.0f)*r+1.0f)*(1.0f+r);k*=r;
+    if(!s->coeff_valid){s->f_b0=b0;s->f_k=k;s->f_g2=g2;s->coeff_valid=1u;}
+    s->f_b0_target=b0;s->f_k_target=k;s->f_g2_target=g2;
+    s->f_b0_step=(b0-s->f_b0)*(1.0f/(float)CTRL);s->f_k_step=(k-s->f_k)*(1.0f/(float)CTRL);s->f_g2_step=(g2-s->f_g2)*(1.0f/(float)CTRL);
+    s->f_ctrl_left=CTRL;s->f_last_cutoff=fc;s->f_last_reso=r;s->f_last_envmod=(float)s->env_mod;
 }
 
-static int32_t feedback_highpass(acid303_t *s, int32_t x) {
-    int32_t d = x - s->resonance_hp_lp;
-    s->resonance_hp_lp += (d * 175) >> 15;
-    return x - s->resonance_hp_lp;
+static void advance_coeffs(acid303_t*s){
+    if(!s->f_ctrl_left)update_coeff_target(s);
+    s->f_b0+=s->f_b0_step;s->f_k+=s->f_k_step;s->f_g2+=s->f_g2_step;
+    if(--s->f_ctrl_left==0u){s->f_b0=s->f_b0_target;s->f_k=s->f_k_target;s->f_g2=s->f_g2_target;}
+    s->coeff_b0=(int32_t)(s->f_b0*32768.0f);s->coeff_k=(int32_t)(s->f_k*32768.0f);s->coeff_g=(int32_t)(s->f_g2*32768.0f);
 }
 
-static int32_t pre_ladder_highpass(acid303_t *s, int32_t x) {
-    int32_t diff = x - s->output_hp_x;
-    int32_t y = mul_q15(s->output_hp_y + diff, 32716);
-    s->output_hp_x = x;
-    s->output_hp_y = y;
-    return y;
+static float ladder_substep(acid303_t*s,float in){
+    const float hp1_b0=0.998417963f,hp1_a1=0.996835926f;
+    const float fb_b0=0.994685600f,fb_a1=0.989371200f;
+    float hp=hp1_b0*(in-s->f_hp1_x)+hp1_a1*s->f_hp1_y,t;
+    s->f_hp1_x=in;s->f_hp1_y=hp;
+    t=s->f_k*s->f_y4;s->f_fb_y=fb_b0*(t-s->f_fb_x)+fb_a1*s->f_fb_y;s->f_fb_x=t;t=hp-s->f_fb_y;
+    s->f_y1+=2.0f*s->f_b0*(t-s->f_y1+s->f_y2);
+    s->f_y2+=s->f_b0*(s->f_y1-2.0f*s->f_y2+s->f_y3);
+    s->f_y3+=s->f_b0*(s->f_y2-2.0f*s->f_y3+s->f_y4);
+    s->f_y4+=s->f_b0*(s->f_y3-2.0f*s->f_y4);
+    return s->f_g2*s->f_y4;
 }
 
-static int32_t post_ladder_highpass(acid303_t *s, int32_t x) {
-    int32_t diff = x - s->post_hp_x;
-    int32_t y = mul_q15(s->post_hp_y + diff, 32655);
-    s->post_hp_x = x;
-    s->post_hp_y = y;
-    return y;
+static float post_highpass(acid303_t*s,float x){
+    const float b0=0.998281354f,a1=0.996562707f;float y=b0*(x-s->f_post_x)+a1*s->f_post_y;s->f_post_x=x;s->f_post_y=y;return y;
 }
 
-static int32_t declick_gain(acid303_t *s, int32_t target) {
-    s->gain_smooth1 += ((target - s->gain_smooth1) * 920) >> 15;
-    s->gain_smooth2 += ((s->gain_smooth1 - s->gain_smooth2) * 920) >> 15;
-    return mul_q15(s->gain_smooth2, 23170);
-}
-
-static void set_filter_coeff_target(acid303_t *s, uint32_t cutoff_hz) {
-    int32_t b0, kbase;
-    int32_t r = resonance_skew_q15(s->resonance);
-    int32_t k, gbase, g;
-    tb_coeff_lookup(cutoff_hz, &b0, &kbase);
-    k = (int32_t)(((uint32_t)kbase * (uint32_t)r) >> 12);
-    gbase = (kbase * 8) / 17;
-    g = 32768 + mul_q15(gbase - 32768, r);
-    g = mul_q15(g, 32768 + r);
-
-    if (!s->coeff_valid) {
-        /* First note starts on the requested coefficient set immediately. */
-        s->coeff_b0 = b0;
-        s->coeff_k = k;
-        s->coeff_g = g;
-        s->coeff_valid = 1u;
-    }
-    /* Reuse the legacy *_step fields as exact interpolation targets. This
-       avoids extra per-voice state while still guaranteeing exact landing. */
-    s->coeff_b0_step = b0;
-    s->coeff_k_step = k;
-    s->coeff_g_step = g;
-    s->coeff_countdown = COEFF_PERIOD;
-}
-
-static void advance_filter_coeffs(acid303_t *s) {
-    int32_t n;
-    if (!s->coeff_countdown) return;
-    n = (int32_t)s->coeff_countdown;
-    s->coeff_b0 += (s->coeff_b0_step - s->coeff_b0) / n;
-    s->coeff_k += (s->coeff_k_step - s->coeff_k) / n;
-    s->coeff_g += (s->coeff_g_step - s->coeff_g) / n;
-    --s->coeff_countdown;
-    if (!s->coeff_countdown) {
-        s->coeff_b0 = s->coeff_b0_step;
-        s->coeff_k = s->coeff_k_step;
-        s->coeff_g = s->coeff_g_step;
-    }
-}
-
-static int32_t teebee_ladder_substep(acid303_t *s, int32_t in) {
-    int32_t fb = clamp32(mul_q15(s->lp4, s->coeff_k), -262144, 262144);
-    int32_t y0 = clamp32(in - feedback_highpass(s, fb), -196608, 196608);
-    int32_t d1 = clamp32(y0 - s->lp1 + s->lp2, -262144, 262144);
-    int32_t d2, d3, d4;
-
-    s->lp1 = clamp32(s->lp1 + 2 * mul_q15(s->coeff_b0, d1), -262144, 262144);
-    d2 = clamp32(s->lp1 - 2 * s->lp2 + s->lp3, -262144, 262144);
-    s->lp2 = clamp32(s->lp2 + mul_q15(s->coeff_b0, d2), -262144, 262144);
-    d3 = clamp32(s->lp2 - 2 * s->lp3 + s->lp4, -262144, 262144);
-    s->lp3 = clamp32(s->lp3 + mul_q15(s->coeff_b0, d3), -262144, 262144);
-    d4 = clamp32(s->lp3 - 2 * s->lp4, -262144, 262144);
-    s->lp4 = clamp32(s->lp4 + mul_q15(s->coeff_b0, d4), -262144, 262144);
-    return clamp32(2 * mul_q15(s->coeff_g, s->lp4), -131072, 131072);
-}
-
-static int32_t exp2_q15(int32_t x_q15) {
-    int32_t ip, frac, f2, f3, f4, y;
-    if (x_q15 < -(2 << 15)) x_q15 = -(2 << 15);
-    if (x_q15 >  (5 << 15)) x_q15 =  (5 << 15);
-    if (x_q15 >= 0) ip = x_q15 >> 15;
-    else ip = -(int32_t)(((uint32_t)(-x_q15) + 32767u) >> 15);
-    frac = x_q15 - ip * 32768;
-    f2 = (frac * frac) >> 15;
-    f3 = (f2 * frac) >> 15;
-    f4 = (f3 * frac) >> 15;
-    y = 32768 + ((22713 * frac) >> 15) + ((7874 * f2) >> 15) +
-        ((1819 * f3) >> 15) + ((315 * f4) >> 15);
-    if (ip >= 0) y <<= ip;
-    else y >>= -ip;
-    return clamp32(y, 4096, 1048576);
-}
-
-static uint32_t measured_env_cutoff(acid303_t *s) {
-    int32_t c = s->cutoff > 32767u ? 32767 : (int32_t)s->cutoff;
-    int32_t e = s->env_mod > 32767u ? 32767 : (int32_t)s->env_mod;
-    int32_t s_lo = 24149 + mul_q15(123666, e);
-    int32_t s_hi = 28323 + mul_q15(137447, e);
-    int32_t scaler = s_lo + mul_q15(s_hi - s_lo, c);
-    int32_t offset = 9647 + mul_q15(1582, c);
-    int32_t tmp1 = mul_q15(scaler, s->env_rc - offset);
-    int32_t tmp2 = (s->accented && s->accent) ? mul_q15((int32_t)s->accent, s->accent_env) : 0;
-    int32_t factor = exp2_q15(tmp1 + tmp2);
-    int32_t fc = mul_q15((int32_t)acid303_cutoff_hz(s), factor);
-    if (fc < 200) fc = 200;
-    if (fc > 20000) fc = 20000;
-    return (uint32_t)fc;
-}
-
-static uint32_t modulated_cutoff(acid303_t *s) {
-    uint32_t fc = measured_env_cutoff(s);
-    if (s->lfo_amount) {
-        int16_t lfo = acid303_lfo_value(s);
-        int32_t coarse = ((int32_t)lfo * (int32_t)s->lfo_amount) >> 7;
-        int32_t delta = (coarse * 1600) >> 15;
-        int32_t m = (int32_t)fc + delta;
-        fc = (uint32_t)(m < 200 ? 200 : m > 20000 ? 20000 : m);
-    }
-    return fc;
-}
-
-int32_t acid303_process(acid303_t *s) {
-    uint32_t sub_inc, fc;
-    int32_t y0, y1, y2, y3, y, gain;
+int32_t acid303_process(acid303_t*s){
+    float inc,o0,o1,y,target_amp,out;
     slide_step(s);
-    if (s->lfo_amount) s->lfo_phase += 4870u + (uint32_t)s->lfo_rate * 15310u;
+    if(s->lfo_amount)s->lfo_phase+=4870u+(uint32_t)s->lfo_rate*15310u;
     envelope_step(s);
+    if(s->idle&&!s->gate&&s->amp_stage==ACID_ENV_OFF)return 0;
+    advance_coeffs(s);
 
-    fc = modulated_cutoff(s);
-    if (!s->coeff_countdown) set_filter_coeff_target(s, fc);
-    advance_filter_coeffs(s);
+    inc=(s->f_freq/FSO);if(inc>0.45f)inc=0.45f;if(inc<0.0f)inc=0.0f;
+    o0=ladder_substep(s,osc(s,inc));
+    o1=ladder_substep(s,osc(s,inc));
+    /* The ladder is already strongly low-pass; pair averaging is a conservative 2x decimator. */
+    y=post_highpass(s,0.5f*(o0+o1));
 
-    sub_inc = s->phase_inc >> 2;
-    if (!sub_inc && s->phase_inc) sub_inc = 1u;
+    target_amp=s->f_amp;
+    if(s->gate){target_amp+=0.45f*s->f_env;if(s->accented&&s->accent)target_amp+=4.0f*((float)s->accent*(1.0f/32767.0f))*s->f_env;}
+    /* ~200 Hz de-click smoothing. Crucially parameter zero crossings never reset this gain. */
+    s->f_amp_smooth=0.971906f*s->f_amp_smooth+0.028094f*target_amp;
+    out=y*s->f_amp_smooth*0.38f;
+    if(s->drive){float g=1.0f+7.0f*((float)s->drive*(1.0f/32767.0f));out=ftanh(out*g)/g;}
 
-    y0 = teebee_ladder_substep(s, pre_ladder_highpass(s, -oscillator_substep(s, sub_inc)));
-    y1 = teebee_ladder_substep(s, pre_ladder_highpass(s, -oscillator_substep(s, sub_inc)));
-    y2 = teebee_ladder_substep(s, pre_ladder_highpass(s, -oscillator_substep(s, sub_inc)));
-    y3 = teebee_ladder_substep(s, pre_ladder_highpass(s, -oscillator_substep(s, sub_inc)));
-    y = post_ladder_highpass(s, (y0 + y1 + y2 + y3) / 4);
-
-    gain = s->amp;
-    if (s->gate) {
-        gain += (s->env * 14746) >> 15;
-        if (s->accented && s->accent) {
-            int32_t accent_gain = ((int32_t)s->env * (int32_t)s->accent) >> 15;
-            gain = clamp32(gain + 4 * accent_gain, 0, 196608);
-        }
-    }
-    gain = declick_gain(s, gain);
-    y = mul_q15(y, gain);
-    if (s->drive) {
-        int32_t k = 32768 + s->drive;
-        y = shape_q15(mul_q15(y, k));
-    }
-    return clamp32(y, -32768, 32767);
+    s->phase=(uint32_t)(s->f_phase*4294967040.0f);
+    s->lp1=q15_state(s->f_y1);s->lp2=q15_state(s->f_y2);s->lp3=q15_state(s->f_y3);s->lp4=q15_state(s->f_y4);
+    s->output_hp_x=q15_state(s->f_hp1_x);s->output_hp_y=q15_state(s->f_hp1_y);s->post_hp_x=q15_state(s->f_post_x);s->post_hp_y=q15_state(s->f_post_y);
+    s->gain_smooth1=(int32_t)(fclamp(s->f_amp_smooth,0.0f,6.0f)*32768.0f);s->gain_smooth2=s->gain_smooth1;
+    return(int32_t)q15_from_float(out);
 }
