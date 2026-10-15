@@ -1,8 +1,10 @@
 {
   "version": 1,
-  "description": "Conservative FM-1 sample candidates. Full sample kits stay browser-only until target flash/CPU measurements justify more.",
-  "max_pcm_bytes": 98304,
+  "description": "FM-1 hybrid drum sample set. Selected lanes use bundled CC0 PCM; all other 808/909 lanes retain synthesized fallback.",
+  "max_pcm_bytes": 131072,
   "candidates": [
+    {"kit": "808", "role": "kick"},
+    {"kit": "808", "role": "snare"},
     {"kit": "909", "role": "closed_hat"},
     {"kit": "909", "role": "open_hat"},
     {"kit": "909", "role": "ride"}
