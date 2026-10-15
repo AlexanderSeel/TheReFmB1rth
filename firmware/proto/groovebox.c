@@ -2,7 +2,7 @@
 #include "groovebox.h"
 #include <string.h>
 
-static int16_t acid_sample(acid303_t*s){int32_t v=acid303_process(s);if(v<-32768)v=-32768;if(v>32767)v=32767;return(int16_t)v;}
+static int16_t acid_sample(acid303_t*s){if(s->idle&&!s->gate&&s->amp_stage==ACID_ENV_OFF)return 0;int32_t v=acid303_process(s);if(v<-32768)v=-32768;if(v>32767)v=32767;return(int16_t)v;}
 static void active_to_bank(pattern_bank_t*b,const groovebox_t*g,uint8_t p){if(p>=PATTERN_BANK_COUNT)return;for(unsigned a=0;a<2u;a++)memcpy(b->acid[a][p],g->acid_seq[a].step,sizeof(b->acid[a][p]));for(unsigned d=0;d<2u;d++){memcpy(b->drum_hits[d][p],g->drum_hits[d],sizeof(b->drum_hits[d][p]));memcpy(b->drum_accents[d][p],g->drum_accents[d],sizeof(b->drum_accents[d][p]));}memcpy(b->drum_909_flams[p],g->drum_909_flams,sizeof(b->drum_909_flams[p]));}
 static void bank_to_active(const pattern_bank_t*b,groovebox_t*g,uint8_t p){if(p>=PATTERN_BANK_COUNT)return;for(unsigned a=0;a<2u;a++){memcpy(g->acid_seq[a].step,b->acid[a][p],sizeof(b->acid[a][p]));seq16_reset(&g->acid_seq[a]);}for(unsigned d=0;d<2u;d++){memcpy(g->drum_hits[d],b->drum_hits[d][p],sizeof(b->drum_hits[d][p]));memcpy(g->drum_accents[d],b->drum_accents[d][p],sizeof(b->drum_accents[d][p]));}memcpy(g->drum_909_flams,b->drum_909_flams[p],sizeof(g->drum_909_flams));g->flam_pending=0u;g->flam_pending_accents=0u;g->flam_countdown=0u;g->current_pattern=p;g->pending_pattern=GROOVEBOX_NO_PENDING_PATTERN;g->step=0u;}
 static void switch_pattern(groovebox_t*g,uint8_t p){if(p>=PATTERN_BANK_COUNT||p==g->current_pattern){g->pending_pattern=GROOVEBOX_NO_PENDING_PATTERN;return;}active_to_bank(&g->patterns,g,g->current_pattern);bank_to_active(&g->patterns,g,p);}
