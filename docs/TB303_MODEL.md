@@ -1,13 +1,13 @@
 # TB-303 model and ReBirth-inspired UI direction
 
-The ACID engine is no longer treated as a generic mono subtractive synth. The target is the characteristic behavior of an original TB-303 signal path and sequencer interaction, implemented independently for the FM-1's fixed-point DSP constraints.
+The ACID engine is not treated as a generic mono subtractive synth. The target is the characteristic behavior of an original TB-303 signal path and sequencer interaction, implemented independently for the FM-1's fixed-point DSP constraints.
 
 ## Authentic core
 
-The stock-style path now models:
+The stock-style path models:
 
 - one oscillator with **SAW** and an asymmetric **303-SQUARE** derived-style waveform;
-- compact band-limited mipmapped oscillator tables on the FM-1 target;
+- precomputed band-limited mipmapped oscillator tables on the FM-1 target;
 - **4x internal oscillator/filter processing at 176.4 kHz** before returning to the 44.1 kHz engine rate;
 - non-linear-capable **TB-303/TeeBee four-stage low-pass filtering** informed by Open303's `TeeBeeFilter` topology;
 - an approximately **150 Hz high-pass in the resonance feedback loop**;
@@ -29,23 +29,64 @@ The implementation is circuit-informed rather than copied wholesale from Open303
 
 ## Pitch / tuning calibration
 
-The oscillator uses equal temperament with **A4 = 440 Hz** at TUNE center. In addition to the generic A4 arithmetic test, the host suite checks the service-calibration anchor used for the original TB-303: the low A register resolves to approximately **110 Hz**, with exact octave doubling above it.
+The oscillator uses equal temperament with **A4 = 440 Hz** at TUNE center. The host suite checks the service-calibration anchor used for the original TB-303: the low A register resolves to approximately **110 Hz**, with exact octave doubling above it.
 
-The physical keyboard passes its real chromatic MIDI note directly to the ACID engine. Programmed step editing has its own bounded pitch range and must not clamp live hardware notes. Beta.8 also tests that upper MIDI pitches remain monotonic and that `phase_inc` remains unchanged for a full second when slide and LFO are both disabled. There is intentionally **no random pitch drift or analog-detune modulation** in stock mode.
+The physical keyboard passes its real chromatic MIDI note directly to the ACID engine. Programmed step editing has its own bounded pitch range and must not clamp live hardware notes. The suite also tests that upper MIDI pitches remain monotonic and that `phase_inc` remains unchanged for a full second when slide and LFO are both disabled. There is intentionally **no random pitch drift or analog-detune modulation** in stock mode.
 
 ## Slide correction
 
-Beta.7 still carried an implementation mistake: the code divided pitch error by `529` on every 44.1 kHz output sample, which is approximately a 12 ms e-fold. That was much faster than the intended 60 ms stock glide and could make sequences sound as if pitch were constantly smearing or retuning.
+Beta.8 corrected the earlier pitch-slew implementation to use `44100 * 0.060 = 2646` samples as the stock 60 ms time constant. The regression test checks that after 2646 samples an octave slide retains approximately `1/e` of its original frequency-increment distance. Slide remains legato and does not retrigger the main filter envelope.
 
-Beta.8 uses `44100 * 0.060 = 2646` samples as the pitch-slew time constant. The regression test checks that after 2646 samples an octave slide retains approximately `1/e` of its original frequency-increment distance. Slide remains legato and does not retrigger the main filter envelope.
+## Beta.9 oscillator / wavetable refinement
+
+The physical beta feedback isolated the remaining 303 concern to source timbre, especially SQUARE. The beta.9 work therefore changes the wavetable construction and lookup path rather than adding EQ, detune or distortion.
+
+### Shared Open303-derived source model
+
+Both the target and Virtual generators now start from the same **2048-sample reference prototype**:
+
+- SAW303 uses Open303's split rising-saw construction;
+- SQUARE303 is derived from that exact saw via the Open303-style tanh shaper at **36.9 dB**, offset **+4.37**, followed by polarity inversion and a **180° phase shift**;
+- the square table keeps the Open303 BlendOscillator convention of half the raw saw-table amplitude;
+- source headroom remains 6 dB below full Q15 so the ladder/accent path has fixed-point room.
+
+This removes the previous mismatch where the FM-1 used the Open303-shaped square while the browser/HQ generator used a more ideal odd-harmonic square. Hardware and Virtual can now be compared meaningfully.
+
+### Target table resolution and pitch coverage
+
+The FM-1 bank is now:
+
+- **1024 samples per table** instead of 512;
+- **12 pitch bands** instead of 10;
+- bands span the supported MIDI register through note 127;
+- each band is reconstructed from the Fourier coefficients of the full 2048-sample source prototype rather than first reducing the prototype itself.
+
+Virtual keeps 2048 lookup samples per table but uses the same audible harmonic budget as the target. Its extra samples improve interpolation resolution only; they do not give Virtual a different oscillator spectrum.
+
+### Harmonic budget / alias guard
+
+The final audio rate is 44.1 kHz while the oscillator/filter core runs at 4x internally. The compact embedded downsampler is intentionally conservative, so beta.9 does not populate partials exactly to final Nyquist. Each pitch band is truncated to a maximum partial below **19.845 kHz** (`0.45 * 44100`).
+
+This small guard is intended to reduce audible fold-back from table interpolation, nonlinear ladder processing and the compact four-sample decimation stage. It does not change oscillator fundamental frequency.
+
+### Smooth mip transitions
+
+Beta.8 selected one complete wavetable per pitch band and changed tables abruptly at the threshold. Adjacent bands contain different high harmonics, so a legato slide could change spectrum discontinuously even though phase and pitch were continuous.
+
+Beta.9 adds explicit crossfade-start metadata and phase-aligned runtime blending:
+
+- the next mip level begins blending in **two semitones before** each threshold;
+- both tables are read at the exact same oscillator phase;
+- the Q15 blend reaches the next band at the threshold;
+- outside a transition region only one table lookup is performed.
+
+The intent is to remove pitch-dependent metallic steps without smoothing or modulating the oscillator's actual frequency.
 
 ## Fixed-point headroom calibration
 
 Open303 keeps its oscillator, filter and VCA in floating point, so aggressive resonance/accent peaks can temporarily exceed a normalized ±1 signal without immediately becoming a hard clip. The compact oscillator banks therefore retain source headroom before the ladder.
 
-Beta.8 adds the more important system-level correction: the four-track mixer now reserves **-12 dB at the master summing stage before any optional nonlinear processing**. Fresh firmware starts with DIST=0, transparent COMP and PCF fully open/bypassed. This ensures “effects off” is actually a clean linear path rather than a clipped sum that merely happens to have the distortion control at zero.
-
-The physical MASTER pot remains active after the ReFm render. A previous extra fixed target attenuation is removed so fixed summing headroom has a single owner and the hardware path does not stack unexplained gain changes.
+The clean system-level contract from beta.8 remains: the four-track mixer reserves **-12 dB at the master summing stage before any optional nonlinear processing**. Fresh firmware starts with DIST=0, transparent COMP and PCF fully open/bypassed. The physical MASTER pot remains active after the ReFm render, and target output scaling is unity because fixed summing headroom has one owner.
 
 ## Measured Env Mod mapping
 
@@ -61,47 +102,11 @@ The effective cutoff is therefore based on `nominalCutoff * 2^(scaler * (envelop
 
 ## Resonance model
 
-The resonance knob is skewed with the same musical mapping used by Open303 (`(1-exp(-3r))/(1-exp(-3))`). The target then evaluates the TB-303 coefficient approximation for `b0`, feedback `k`, output gain `g` and the 150 Hz feedback high-pass using fixed-point arithmetic. The clean-audio correction deliberately leaves these equations unchanged rather than using resonance boosts/cuts to hide gain-path bugs.
-
-## Oscillator shapes
-
-The compact FM-1 tables follow Open303's 303 oscillator construction:
-
-- SAW303 uses the split rising-saw prototype;
-- SQUARE303 is derived from that saw with the Open303 tanh shaping defaults (**36.9 dB**, offset **+4.37**), polarity inversion and **180°** phase shift;
-- square is retained at half the saw level, matching Open303's BlendOscillator convention;
-- pitch bands are band-limited for the final 44.1 kHz output bandwidth while the oscillator/filter run at 4x internally.
-
-The browser's larger HQ bank remains a second spectral reference and follows the same source-headroom policy. Beta.8 intentionally does **not** redesign the square waveform in response to the beta.7 hardware report. The gain, pitch and drum correctness faults are fixed first. If the square remains thin/metallic on the clean physical path, oscillator prototype and ladder interaction will be isolated next.
+The resonance knob is skewed with the same musical mapping used by Open303 (`(1-exp(-3r))/(1-exp(-3))`). The target then evaluates the TB-303 coefficient approximation for `b0`, feedback `k`, output gain `g` and the 150 Hz feedback high-pass using fixed-point arithmetic. Beta.9 deliberately leaves these equations unchanged so oscillator work can be judged independently from filter retuning.
 
 ## LFO extension
 
-An original TB-303 has no user LFO. The existing LFO remains an optional TheReFmB1rth extension and defaults to zero amount in the ReBirth-style browser UI.
-
-When enabled, all four selectable shapes are connected to real filter modulation:
-
-- sine-like
-- triangle
-- saw
-- square
-
-Host tests render each shape and require different audio fingerprints, preventing the UI selector from becoming a graph-only control.
-
-## Browser UI
-
-`web/emu/index.html` uses an original ReBirth-inspired composition rather than the previous dashboard:
-
-- two horizontal silver ACID strips;
-- SAW / SQUARE switches per ACID machine;
-- stock TUNE / Cutoff / Resonance / Env Mod / Decay / Accent controls;
-- optional MOD/LFO extension kept visually separate from the stock 303 panel;
-- 16 grouped step buttons with accent/slide state;
-- A–H pattern bank;
-- dark 808/909 rhythm section;
-- narrow transport/master strip;
-- shared firmware graph model and WASM engine underneath.
-
-The goal is recognizable workflow and density, not a pixel copy of ReBirth RB-338. No original ReBirth artwork, logos or skins are included.
+An original TB-303 has no user LFO. The existing LFO remains an optional TheReFmB1rth extension and defaults to zero amount in the ReBirth-style browser UI. All four shapes are connected to real filter modulation: sine-like, triangle, saw and square.
 
 ## Validation
 
@@ -115,6 +120,11 @@ The core has explicit tests for:
 - true 60 ms slide behavior;
 - bounded output and aggressive-patch rail occupancy;
 - measured cutoff endpoints/midpoint;
+- shared 2048-sample Open303 source prototype;
+- 1024-sample target tables and 12-band full-register coverage;
+- decreasing pitch-band harmonic budgets below the 19.845 kHz guard;
+- Open303-shaped square fundamental/body rather than an unrelated ideal square;
+- two-semitone mip crossfade metadata;
 - saw vs 303-square producing different audio;
 - stock mode keeping LFO disabled;
 - slide preserving the running filter envelope;
@@ -126,4 +136,4 @@ The core has explicit tests for:
 - clean four-track summing with effects off;
 - deterministic whole-groovebox audio fingerprint.
 
-The browser and FM-1 target remain calibrated from the same 303 reference assumptions. A successful render/build is not by itself proof of exact analog equivalence; the final calibration still requires listening/reference comparison and physical FM-1 CPU/underrun validation.
+The browser and FM-1 target now use the same audible oscillator assumptions. A successful render/build is not by itself proof of exact analog equivalence; the final calibration still requires listening/reference comparison and physical FM-1 CPU/underrun validation.
