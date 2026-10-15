@@ -7,6 +7,10 @@
 #include "../proto/groovebox.h"
 #include "../proto/midi_router.h"
 
+#define REFM_TARGET_SAMPLE_RATE 44100u
+#define REFM_BOOT_PROBE_HZ 1000u
+#define REFM_BOOT_PROBE_FRAMES (REFM_TARGET_SAMPLE_RATE * 3u)
+
 typedef struct {
     groovebox_t groovebox;
     midi_router_t midi;
@@ -14,6 +18,8 @@ typedef struct {
     uint8_t midi_data[2];
     uint8_t midi_needed;
     uint8_t midi_have;
+    uint32_t diag_phase;
+    uint32_t diag_frames_remaining;
 } refm_target_t;
 
 void refm_target_init(refm_target_t *target, uint16_t bpm);
