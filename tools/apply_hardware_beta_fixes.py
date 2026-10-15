@@ -227,35 +227,34 @@ static void draw_refm_beta(void)
         refm_card_val(121, 61, "ENV", (int32_t)refm_pct(p2));
         refm_card_val(180, 61, "DECAY", (int32_t)refm_pct(p3));
         refm_card_text(3, 112, "WAVE", wave ? "SQUARE" : "SAW");
-        refm_card_text(62, 112, "ACCENT", acc ? "ON" : "OFF");
-        refm_card_text(121, 112, "SLIDE", slide ? "ON" : "OFF");
-        refm_card_text(180, 112, "KEYS", machine < 2u ? "LIVE" : "TRACK");
-        refm_footer("K1 CUTOFF  K2 RES  K3 ENV  K4 DECAY");
+        refm_card_text(62, 112, "EDIT", "WAVE");
+        refm_card_text(121, 112, "SEQ", "STEP");
+        refm_card_text(180, 112, "KEYS", "LIVE");
+        refm_footer("K1 CUT K2 RES K3 ENV K4 DEC | EDIT WAVE");
     } else if (page == 2u) {
-        refm_steps(sel_step & 15u, play_step & 15u);
-        refm_card_val(3, 139, "STEP", (int32_t)(sel_step & 15u) + 1);
-        refm_card_text(62, 139, "TYPE", stype == 1u ? "NOTE" : stype == 2u ? "TIE" : "REST");
-        refm_card_text(121, 139, "ACC", acc ? "ON" : "OFF");
-        refm_card_text(180, 139, "SLIDE", slide ? "ON" : "OFF");
-        refm_footer("KEYS select step | K2 TYPE K3 ACC K4 SLIDE");
+        refm_steps(sel_step, playing ? play_step : 0xffffu);
+        refm_card_val(3, 139, "NOTE", p0);
+        refm_card_text(62, 139, "TYPE", stype == 0u ? "REST" : stype == 1u ? "NOTE" : "TIE");
+        refm_card_text(121, 139, "FLAGS", acc && slide ? "A+S" : acc ? "ACC" : slide ? "SLIDE" : "--");
+        refm_card_val(180, 139, "PROB", p3);
+        refm_footer("PRESET STEP | K1 NOTE K2 TYPE K3 FLAGS K4 PROB");
     } else if (page == 3u) {
-        const char *dn = lane < 11u ? REFM_DRUM_NAME[lane] : "?";
-        refm_steps(sel_step & 15u, play_step & 15u);
-        refm_card_text(3, 139, "VOICE", dn);
-        refm_card_val(62, 139, "STEP", (int32_t)(sel_step & 15u) + 1);
-        refm_card_text(121, 139, "STATE", dstate == 2u ? "ACCENT" : dstate == 1u ? "HIT" : "OFF");
-        refm_card_text(180, 139, "KIT", machine == 3u ? "909" : "808");
-        refm_footer("PRESET VOICE | KEYS STEP | K1 OFF/HIT/ACC");
+        refm_steps(sel_step, playing ? play_step : 0xffffu);
+        refm_card_text(3, 139, "LANE", lane < 11u ? REFM_DRUM_NAME[lane] : "?");
+        refm_card_text(62, 139, "STATE", dstate == 0u ? "OFF" : dstate == 1u ? "HIT" : "ACC");
+        refm_card_val(121, 139, "STEP", (int32_t)sel_step + 1);
+        refm_card_text(180, 139, "KIT", machine == 2u ? "808" : "909");
+        refm_footer("K1 LANE K2 OFF/HIT/ACC | PRESET STEP");
     } else if (page == 4u) {
         refm_card_val(3, 61, "LEVEL", (int32_t)refm_pct(p0));
-        refm_card_val(62, 61, "PAN", (int32_t)p1 * 200 / 32767 - 100);
-        refm_card_val(121, 61, "DELAY", (int32_t)refm_pct(p2));
-        refm_card_val(180, 61, "REVERB", (int32_t)refm_pct(p3));
-        refm_card_text(3, 112, "MUTE", mute ? "YES" : "NO");
-        refm_card_text(62, 112, "SOLO", solo ? "YES" : "NO");
-        refm_card_text(121, 112, "TRACK", mn);
-        refm_card_text(180, 112, "OUT", "STEREO");
-        refm_footer("K1 LEVEL K2 PAN K3 DELAY K4 REVERB | EDIT MUTE REC SOLO");
+        refm_card_val(62, 61, "PAN", ((int32_t)p1 - 32767) * 100 / 32767);
+        refm_card_val(121, 61, "DELAY", (int32_t)p2 * 100 / 127);
+        refm_card_val(180, 61, "REVERB", (int32_t)p3 * 100 / 127);
+        refm_card_text(3, 112, "MUTE", mute ? "ON" : "OFF");
+        refm_card_text(62, 112, "SOLO", solo ? "ON" : "OFF");
+        refm_card_text(121, 112, "EDIT", "MUTE");
+        refm_card_text(180, 112, "REC", "SOLO");
+        refm_footer("ALGO TRACK | K1 LVL K2 PAN K3 DLY K4 REV");
     } else if (page == 5u) {
         refm_card_val(3, 61, "DRIVE", (int32_t)refm_pct(p0));
         refm_card_val(62, 61, "DLY FB", (int32_t)p1 * 100 / 31000);
@@ -294,10 +293,8 @@ static void draw_refm_beta(void)
         "    style_apply();\n    draw_refm_beta();\n    return;\n"
     )
 
-    # The current 303 core already owns its idle fast path. Older beta builds
-    # patched that optimization into acid303_process() here; keeping the stale
-    # source-text anchor would couple physical integration to an obsolete DSP
-    # implementation and block the x0x/Open303-style core.
+    # The x0x/Open303-style core already owns its physical idle fast path.
+    # Keep this integration pass independent from the concrete 303 DSP body.
 
     (root / ".refm-hardware-beta").write_text(
         "ui=dedicated-refm-pages\n"
