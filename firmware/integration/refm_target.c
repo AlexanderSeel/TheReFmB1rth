@@ -18,11 +18,13 @@ static int32_t diag_sineish(uint32_t p) {
     return (t * (49152 - (a >> 1))) >> 15;
 }
 
+#if REFM_DIAG_EXTENDED_303
 static int32_t diag_limit_q15(int32_t x) {
     if (x < -32768) return -32768;
     if (x > 32767) return 32767;
     return x;
 }
+#endif
 #endif
 
 static uint8_t channel_data_len(uint8_t status) {
