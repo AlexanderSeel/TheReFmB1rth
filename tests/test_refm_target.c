@@ -18,7 +18,7 @@ static void test_audio_block(void) {
 static void test_physical_staged_audio_probe(void) {
     refm_target_t t;
     int32_t out[256 * 2];
-    unsigned stage_nonzero[REFM_DIAG_STAGE_COUNT] = {0u,0u,0u,0u,0u};
+    unsigned stage_nonzero[REFM_DIAG_STAGE_COUNT] = {0u};
     int32_t reference_peak = 0;
     refm_target_init(&t, 128u);
     assert(t.diag_frames_remaining == REFM_DIAG_TOTAL_FRAMES);
@@ -33,13 +33,12 @@ static void test_physical_staged_audio_probe(void) {
             int32_t l = out[2u * i];
             int32_t r = out[2u * i + 1u];
             int32_t a = l < 0 ? -l : l;
+            assert(stage < REFM_DIAG_STAGE_COUNT);
             assert(l >= -32768 && l <= 32767);
             assert(r >= -32768 && r <= 32767);
+            assert(l == r);
             if (l || r) stage_nonzero[stage]++;
-            if (stage == 0u) {
-                assert(l == r);
-                if (a > reference_peak) reference_peak = a;
-            }
+            if (stage == 0u && a > reference_peak) reference_peak = a;
         }
         assert(t.diag_frames_remaining == before - n);
     }
@@ -48,6 +47,12 @@ static void test_physical_staged_audio_probe(void) {
     assert(reference_peak >= 7000 && reference_peak <= 9000);
     for (unsigned s = 0; s < REFM_DIAG_STAGE_COUNT; ++s)
         assert(stage_nonzero[s] > 100u);
+
+#if REFM_DIAG_EXTENDED_303
+    assert(REFM_DIAG_STAGE_COUNT == 8u);
+#else
+    assert(REFM_DIAG_STAGE_COUNT == 5u);
+#endif
 
     memset(out, 0x55, sizeof(out));
     refm_target_render_q15(&t, out, 64u);
