@@ -57,6 +57,9 @@ def main() -> int:
     # Keep final generated target arithmetic self-contained. The pi32v2 compiler
     # otherwise emits undocumented ROM helpers for some generic arithmetic.
     subprocess.run([sys.executable, str(ROOT / "tools" / "fix_hardware_gain_target.py"), str(root)], check=True, cwd=ROOT)
+    # The shared mixer now owns four-track summing headroom. Do not apply the old
+    # second fixed -6 dB target attenuator after the physical MASTER pot.
+    subprocess.run([sys.executable, str(ROOT / "tools" / "fix_hardware_clean_output.py"), str(root)], check=True, cwd=ROOT)
     subprocess.run([sys.executable, str(ROOT / "tools" / "fix_hardware_renderer_target.py"), str(root)], check=True, cwd=ROOT)
 
     h = hashlib.sha256()
@@ -72,7 +75,7 @@ def main() -> int:
     ):
         h.update(path.read_bytes())
     (root / ".refm-ui-overlay").write_text(
-        f"style=hardware-240x240-clean+direct-isr-keyboard+physical-master+gain32+render-shifts+contextual-controls+dirty-regions+pattern-edit-write-through+physical-chromatic-step-entry+no-legacy-graph-strip+refm-boot-splash\nsha256={h.hexdigest()}\n"
+        f"style=hardware-240x240-clean+direct-isr-keyboard+physical-master+gain32+clean-output+render-shifts+contextual-controls+dirty-regions+pattern-edit-write-through+physical-chromatic-step-entry+no-legacy-graph-strip+refm-boot-splash\nsha256={h.hexdigest()}\n"
     )
     print("FM-1 ReFm hardware UI/input/audio correction stack applied")
     return 0

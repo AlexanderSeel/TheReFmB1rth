@@ -3,11 +3,11 @@
 #include <stdio.h>
 #include "../firmware/proto/groovebox.h"
 
-/* beta.7 calibration fingerprint. The intentional change is the 6 dB source
-   headroom in the compact 303 wavetable bank: pitch, measured cutoff/Env Mod,
-   resonance, accent timing and slide laws remain independently guarded by
-   behavioral tests. This hash must only move after those tests pass. */
-#define EXPECTED_RENDER_HASH 0x828246b14755ca83ull
+/* beta.8 clean-audio fingerprint. This intentional change combines the
+   analogue-range 808/909 fallback, transparent four-track master headroom and
+   Open303 60 ms slide correction. Pitch, clipping, individual drum tuning and
+   mixer linearity are independently guarded by behavioral tests. */
+#define EXPECTED_RENDER_HASH 0x72807c8acccc8563ull
 
 static uint64_t fnv1a_u16(uint64_t h, uint16_t v) {
     h ^= (uint8_t)v; h *= 1099511628211ull;

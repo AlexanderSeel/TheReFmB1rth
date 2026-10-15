@@ -2,17 +2,18 @@
 #include "mixer_fx.h"
 #include <string.h>
 
+#define MIX_MASTER_HEADROOM_Q15 8192 /* -12 dB: four full-scale tracks sum cleanly */
+
 static int32_t clamp32(int64_t v, int32_t lo, int32_t hi) { return v<lo?lo:v>hi?hi:(int32_t)v; }
 static int16_t clip16(int32_t v) { return (int16_t)clamp32(v,-32768,32767); }
 
 void mixer_fx_init(mixer_fx_t *m) {
     memset(m, 0, sizeof(*m));
-    /* Keep the startup mix clean and leave extra headroom for the two ACID
-       voices. Hardware validation showed that running four full-scale buses
-       into an always-on saturation/compressor stage masked the drums and made
-       low ACID notes sound much harsher than the underlying 303 voice. */
+    /* Keep track faders at unity and reserve summing headroom once at the
+       master bus. That is easier to reason about than hiding attenuation in
+       selected tracks and guarantees the default four-track mix stays linear. */
     for (unsigned i=0; i<MIX_TRACKS; ++i) {
-        m->track[i].level = i < 2u ? 24576 : 32767;
+        m->track[i].level = 32767;
         m->track[i].pan = 0;
     }
 #if defined(__EMSCRIPTEN__)
@@ -30,11 +31,11 @@ void mixer_fx_init(mixer_fx_t *m) {
     m->reverb_mix = 6000;
     m->reverb_damp = 9000;
 #endif
-    /* DIST and COMP are performance effects, not mandatory colouration. Start
-       neutral; the FX page can deliberately dial either stage back in. */
+    /* DIST, COMP and PCF are performance effects. Fresh firmware is an
+       intentionally transparent mixer, not an always-on mastering chain. */
     m->drive = 0;
     m->compressor_threshold = 32767;
-    m->filter_cutoff = 30000;
+    m->filter_cutoff = 32767;
 }
 
 void mixer_fx_set_delay(mixer_fx_t *m, uint16_t samples, int16_t feedback, int16_t mix) {
@@ -53,9 +54,6 @@ void mixer_fx_set_reverb(mixer_fx_t *m, int16_t feedback, int16_t mix, int16_t d
 }
 
 static int32_t saturate(int32_t x, int16_t drive) {
-    /* A zero DIST control must be electrically/arithmetically neutral. The old
-       implementation still applied a 0.75-FS soft knee at drive=0, effectively
-       placing permanent distortion before the compressor. */
     if (drive <= 0) return clamp32(x, -32768, 32767);
     int64_t y = ((int64_t)x * (32768 + drive)) >> 15;
     int32_t v = clamp32(y, -65536, 65535);
@@ -69,7 +67,7 @@ static int32_t saturate(int32_t x, int16_t drive) {
 
 static int32_t compress(int32_t x, int16_t threshold) {
     int32_t a = x < 0 ? -x : x;
-    if (a <= threshold) return x;
+    if (threshold >= 32767 || a <= threshold) return x;
     int32_t v = threshold + (a - threshold) / 4;
     return x < 0 ? -v : v;
 }
@@ -124,9 +122,6 @@ void mixer_fx_process(mixer_fx_t *m, const int16_t input[MIX_TRACKS], int16_t *o
         int32_t in_a = clamp32(reverb_send_l + (reverb_send_r >> 1), -65536, 65535);
         int32_t in_b = clamp32(reverb_send_r + (reverb_send_l >> 1), -65536, 65535);
 
-        /* Damping runs inside the feedback loop. A longer WASM line pair plus
-           high-but-bounded feedback produces a several-second tail without
-           resorting to a giant convolution buffer. */
         m->reverb_lp_a += (int32_t)(((int64_t)(ra - m->reverb_lp_a) * damp) >> 15);
         m->reverb_lp_b += (int32_t)(((int64_t)(rb - m->reverb_lp_b) * damp) >> 15);
         m->reverb_a[m->reverb_pos_a] = clip16(in_a + (int32_t)(((int64_t)m->reverb_lp_b * m->reverb_feedback) >> 15));
@@ -139,14 +134,25 @@ void mixer_fx_process(mixer_fx_t *m, const int16_t input[MIX_TRACKS], int16_t *o
     }
 
     {
-        int32_t l = saturate(clamp32(left, -65536, 65535), m->drive);
-        int32_t r = saturate(clamp32(right, -65536, 65535), m->drive);
+        /* The old path narrowed/clipped the multi-track sum before DIST. That
+           made DIST=0 still sound overdriven. Apply explicit four-track
+           headroom first; only then enter optional nonlinear processing. */
+        int32_t l = clamp32((left * MIX_MASTER_HEADROOM_Q15) >> 15, -32768, 32767);
+        int32_t r = clamp32((right * MIX_MASTER_HEADROOM_Q15) >> 15, -32768, 32767);
+        l = saturate(l, m->drive);
+        r = saturate(r, m->drive);
         l = compress(l, m->compressor_threshold);
         r = compress(r, m->compressor_threshold);
 
-        int32_t fc = clamp32(m->filter_cutoff, 256, 32767);
-        m->filter_l += (int32_t)(((int64_t)(l - m->filter_l) * fc) >> 15);
-        m->filter_r += (int32_t)(((int64_t)(r - m->filter_r) * fc) >> 15);
+        if (m->filter_cutoff >= 32760) {
+            /* PCF fully open means no hidden one-pole coloration. */
+            m->filter_l = l;
+            m->filter_r = r;
+        } else {
+            int32_t fc = clamp32(m->filter_cutoff, 256, 32767);
+            m->filter_l += (int32_t)(((int64_t)(l - m->filter_l) * fc) >> 15);
+            m->filter_r += (int32_t)(((int64_t)(r - m->filter_r) * fc) >> 15);
+        }
         *out_l = clip16(m->filter_l);
         *out_r = clip16(m->filter_r);
     }
