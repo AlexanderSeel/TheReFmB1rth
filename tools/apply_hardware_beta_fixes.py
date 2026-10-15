@@ -296,8 +296,13 @@ static void draw_refm_beta(void)
     acid = root / "firmware" / "refm" / "proto" / "acid303.c"
     replace_once(
         acid,
-        "int32_t acid303_process(acid303_t *s) {\n    slide_step(s);\n",
         "int32_t acid303_process(acid303_t *s) {\n"
+        "    uint32_t sub_inc, fc;\n"
+        "    int32_t y0, y1, y2, y3, y, gain;\n"
+        "    slide_step(s);\n",
+        "int32_t acid303_process(acid303_t *s) {\n"
+        "    uint32_t sub_inc, fc;\n"
+        "    int32_t y0, y1, y2, y3, y, gain;\n"
         "#ifdef REFM_FELUCCA_PLATFORM\n"
         "    if (s->idle && !s->gate && !s->amp) return 0;\n"
         "#endif\n"
