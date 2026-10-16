@@ -27,11 +27,14 @@ class HardwareWasmFullParityTests(unittest.TestCase):
         self.assertIn("groovebox_pattern_load(&g_refm.groovebox.patterns", patch)
         self.assertIn("136u", patch)
 
-    def test_factory_bank_is_original_csharp_minor_rave_set(self):
+    def test_factory_bank_starts_with_supplied_confusion_performance_pattern(self):
         bank = (ROOT / "firmware" / "proto" / "pattern_bank.c").read_text(encoding="utf-8")
-        self.assertIn("C# minor", bank)
-        self.assertIn("dark 136 BPM blood-rave / acid", bank)
-        self.assertIn("{37,37,44,37,40,37,47,44", bank)
+        self.assertIn("user-provided 16-step performance pattern", bank)
+        self.assertIn("{43,43,31,43,46,34,34,46,34,46,46,46,46,46,46,46}", bank)
+        self.assertIn("SEQ16_TIE|SEQ16_DOWN", bank)
+        self.assertIn("SEQ16_GATE|SEQ16_DOWN", bank)
+        self.assertIn("carries Note Held without setting the visible SLIDE flag", bank)
+        # The rest of the factory bank still carries the 808/909 performance material.
         self.assertIn("HIT(0)|HIT(1)|HIT(4)", bank)
 
 
