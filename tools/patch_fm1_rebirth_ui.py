@@ -44,8 +44,6 @@ def main() -> int:
     subprocess.run([sys.executable, str(ROOT / "tools" / "apply_runtime_diagnostics.py"), str(root)], check=True, cwd=ROOT)
     subprocess.run([sys.executable, str(ROOT / "tools" / "apply_refm_boot_splash.py"), str(root)], check=True, cwd=ROOT)
 
-    # Must be last among broad target rewrites: beta.4 hardware validation proved
-    # that the earlier layered renderer/input assumptions were not valid on-device.
     subprocess.run([sys.executable, str(ROOT / "tools" / "apply_hardware_rework.py"), str(root)], check=True, cwd=ROOT)
     subprocess.run([sys.executable, str(ROOT / "tools" / "apply_pattern_edit_persistence.py"), str(root)], check=True, cwd=ROOT)
     subprocess.run([sys.executable, str(ROOT / "tools" / "apply_rebirth303_pitch_model.py"), str(root)], check=True, cwd=ROOT)
@@ -53,27 +51,18 @@ def main() -> int:
     subprocess.run([sys.executable, str(ROOT / "tools" / "fix_hardware_clean_output.py"), str(root)], check=True, cwd=ROOT)
     subprocess.run([sys.executable, str(ROOT / "tools" / "fix_hardware_renderer_target.py"), str(root)], check=True, cwd=ROOT)
 
-    # Narrow final passes: keep the proven physical ISR/input/dirty-region base,
-    # then apply the approved sound voicing and the same information hierarchy as
-    # the WASM rack. The final pass owns all page-level physical parity decisions.
     subprocess.run([sys.executable, str(ROOT / "tools" / "apply_square_organ_tone.py"), str(root)], check=True, cwd=ROOT)
     subprocess.run([sys.executable, str(ROOT / "tools" / "apply_rb240_wasm_parity.py"), str(root)], check=True, cwd=ROOT)
     subprocess.run([sys.executable, str(ROOT / "tools" / "apply_rb240_full_parity.py"), str(root)], check=True, cwd=ROOT)
     subprocess.run([sys.executable, str(ROOT / "tools" / "fix_rb240_target_arithmetic.py"), str(root)], check=True, cwd=ROOT)
-    subprocess.run([sys.executable, str(ROOT / "tools" / "apply_rb240_physical_polish_v2.py"), str(root)], check=True, cwd=ROOT)
+    subprocess.run([sys.executable, str(ROOT / "tools" / "apply_rb240_physical_polish_v3.py"), str(root)], check=True, cwd=ROOT)
 
-    # The physical factory fallback starts at 136 BPM, but an explicit bridge
-    # initialization (host test, project restore, editor/runtime caller) must keep
-    # the caller-supplied tempo. The parity pass only changes the lazy fallback.
     bridge = root / "firmware" / "refm" / "integration" / "refm_felucca_bridge.c"
     bridge_text = bridge.read_text()
     forced = "(void)bpm;\n    refm_target_init(&g_refm, 136u);"
     if forced in bridge_text:
         bridge.write_text(bridge_text.replace(forced, "refm_target_init(&g_refm, bpm);", 1))
 
-    # The page replacement chain intentionally consumes duplicated intermediate
-    # branch anchors. PROJECT is the final page and therefore needs the same
-    # normalization explicitly before the JieLi compiler sees ui_draw.c.
     draw = root / "firmware" / "src" / "ui_draw.c"
     draw_text = draw.read_text()
     if "} else {} else {" in draw_text:
@@ -92,7 +81,7 @@ def main() -> int:
     ):
         h.update(path.read_bytes())
     (root / ".refm-ui-overlay").write_text(
-        f"style=compact-rebirth-inspired+rb240-beta3-approved+hardware-240x240-wasm-parity+full-wasm-rack-hierarchy+physical-polish-v2+direct-step-navigation+exact-pattern-readback+physical-lcd-cleanup+no-legacy-graph-strip+direct-isr-keyboard+physical-master+gain32+clean-output+render-shifts+contextual-controls+dirty-regions+pattern-edit-write-through+physical-chromatic-step-entry+organ-square+refm-boot-splash\nsha256={h.hexdigest()}\n"
+        f"style=compact-rebirth-inspired+rb240-beta3-approved+hardware-240x240-wasm-parity+full-wasm-rack-hierarchy+physical-polish-v3+direct-step-navigation+exact-pattern-readback+physical-lcd-cleanup+no-legacy-graph-strip+direct-isr-keyboard+physical-master+gain32+clean-output+render-shifts+contextual-controls+dirty-regions+pattern-edit-write-through+physical-chromatic-step-entry+organ-square+refm-boot-splash\nsha256={h.hexdigest()}\n"
     )
     print("FM-1 ReFm hardware UI/input/audio correction stack applied")
     return 0
