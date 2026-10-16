@@ -60,7 +60,7 @@ def main() -> int:
     subprocess.run([sys.executable, str(ROOT / "tools" / "apply_rb240_wasm_parity.py"), str(root)], check=True, cwd=ROOT)
     subprocess.run([sys.executable, str(ROOT / "tools" / "apply_rb240_full_parity.py"), str(root)], check=True, cwd=ROOT)
     subprocess.run([sys.executable, str(ROOT / "tools" / "fix_rb240_target_arithmetic.py"), str(root)], check=True, cwd=ROOT)
-    subprocess.run([sys.executable, str(ROOT / "tools" / "apply_rb240_physical_polish.py"), str(root)], check=True, cwd=ROOT)
+    subprocess.run([sys.executable, str(ROOT / "tools" / "apply_rb240_physical_polish_v2.py"), str(root)], check=True, cwd=ROOT)
 
     # The physical factory fallback starts at 136 BPM, but an explicit bridge
     # initialization (host test, project restore, editor/runtime caller) must keep
@@ -92,7 +92,7 @@ def main() -> int:
     ):
         h.update(path.read_bytes())
     (root / ".refm-ui-overlay").write_text(
-        f"style=compact-rebirth-inspired+rb240-beta3-approved+hardware-240x240-wasm-parity+full-wasm-rack-hierarchy+physical-polish+direct-step-navigation+exact-pattern-readback+physical-lcd-cleanup+no-legacy-graph-strip+direct-isr-keyboard+physical-master+gain32+clean-output+render-shifts+contextual-controls+dirty-regions+pattern-edit-write-through+physical-chromatic-step-entry+organ-square+refm-boot-splash\nsha256={h.hexdigest()}\n"
+        f"style=compact-rebirth-inspired+rb240-beta3-approved+hardware-240x240-wasm-parity+full-wasm-rack-hierarchy+physical-polish-v2+direct-step-navigation+exact-pattern-readback+physical-lcd-cleanup+no-legacy-graph-strip+direct-isr-keyboard+physical-master+gain32+clean-output+render-shifts+contextual-controls+dirty-regions+pattern-edit-write-through+physical-chromatic-step-entry+organ-square+refm-boot-splash\nsha256={h.hexdigest()}\n"
     )
     print("FM-1 ReFm hardware UI/input/audio correction stack applied")
     return 0
