@@ -1,0 +1,6 @@
+{
+  "commit": "88ec84dd96388c8103e02729d7f1346711d85ddb",
+  "sha256": "47effef3e8efddc3cf3c9aa0b2118fe6be2e8cb4025194feeed60d1bd5ef9adf",
+  "file": "refm.wasm",
+  "app": "app/index.html"
+}
