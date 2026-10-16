@@ -32,20 +32,20 @@ static void preset_drums(pattern_bank_t *b, uint8_t pat,
 }
 
 /*
- * Factory live set: eight original parts for a dark 136 BPM blood-rave / acid
- * techno performance. Tonal centre is C# minor (C# / E / G# / B vocabulary),
- * matching the broad energy/key/tempo territory of the Blade club reference
- * without reproducing its protected melody or arrangement.
+ * Factory live set at 136 BPM. Pattern A / ACID A uses the 16-step note,
+ * octave and hold sequence supplied by the hardware tester for the intended
+ * Confusion performance setup. The remaining A-H material stays available as
+ * performance variations around it.
  *
- * A  sparse machine intro     E  breakdown / tension
- * B  four-on-floor entry      F  rebuild
- * C  rolling acid drive       G  peak rave
- * D  syncopated pressure      H  release / outro
+ * DOWN is represented both by the effective lower MIDI note and SEQ16_DOWN so
+ * the physical/virtual editors can show the octave switch explicitly. TIE
+ * carries Note Held without setting the visible SLIDE flag.
  */
 static void pattern_bank_factory_live_set(pattern_bank_t *b)
 {
     static const uint8_t a_notes[8][16] = {
-        {37,0,37,0,44,0,37,0,40,0,37,0,47,0,44,0},
+        /* A: G/G↓ -> A#/A#↓ user-provided 16-step performance pattern. */
+        {43,43,31,43,46,34,34,46,34,46,46,46,46,46,46,46},
         {37,37,44,37,40,37,47,44,37,49,44,40,37,47,44,35},
         {37,44,37,49,40,44,37,47,37,44,40,49,35,40,44,47},
         {37,0,44,47,37,40,44,0,49,47,44,40,37,35,40,44},
@@ -55,7 +55,13 @@ static void pattern_bank_factory_live_set(pattern_bank_t *b)
         {37,0,44,0,40,0,37,0,35,0,40,0,37,0,0,0}
     };
     static const uint8_t a_flags[8][16] = {
-        {3,0,1,0,1,0,1,0,3,0,1,0,1,0,1,0},
+        /* 01 ON, 02 HOLD, 03 HOLD+DOWN, 04 ON, 05 REST,
+           06 ON+DOWN, 07 ON+DOWN, 08 REST, 09 ON+DOWN, 10 REST,
+           11 ON, 12 HOLD, 13 ON, 14 ON, 15 REST, 16 ON. */
+        {SEQ16_GATE,SEQ16_TIE,(uint8_t)(SEQ16_TIE|SEQ16_DOWN),SEQ16_GATE,0,
+         (uint8_t)(SEQ16_GATE|SEQ16_DOWN),(uint8_t)(SEQ16_GATE|SEQ16_DOWN),0,
+         (uint8_t)(SEQ16_GATE|SEQ16_DOWN),0,SEQ16_GATE,SEQ16_TIE,
+         SEQ16_GATE,SEQ16_GATE,0,SEQ16_GATE},
         {3,5,1,1,1,1,5,1,3,1,1,1,5,1,1,1},
         {3,1,5,1,1,5,1,1,3,1,1,5,1,1,1,1},
         {3,0,1,5,1,1,1,0,3,5,1,1,1,1,5,1},
