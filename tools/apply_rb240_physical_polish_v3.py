@@ -25,8 +25,22 @@ def patch_bridge(root: Path) -> None:
     t = p.read_text()
     t = one(t, "static uint8_t g_focus_region;\n",
             "static uint8_t g_focus_region;\nstatic uint8_t g_hold;\n", "hold storage")
-    t = one(t, "    g_focus_active = 0u;\n",
-            "    g_focus_active = 0u;\n    g_hold = 0u;\n", "hold init")
+
+    # Earlier overlays now contain several g_focus_active resets. Restrict HOLD
+    # initialization to the explicit bridge init function so this pass remains
+    # stable when focus-exit/panic helpers evolve.
+    ia = t.find("void refm_felucca_init(uint16_t bpm)\n{")
+    ib = t.find("\n}\n", ia)
+    if ia < 0 or ib < 0:
+        raise SystemExit("physical-polish-v3 explicit init function not found")
+    init_chunk = t[ia:ib]
+    init_anchor = "    g_focus_active = 0u;\n"
+    if init_chunk.count(init_anchor) != 1:
+        raise SystemExit(
+            f"physical-polish-v3 init focus anchor mismatch: expected 1, got {init_chunk.count(init_anchor)}"
+        )
+    init_chunk = init_chunk.replace(init_anchor, init_anchor + "    g_hold = 0u;\n", 1)
+    t = t[:ia] + init_chunk + t[ib:]
 
     t = one(t,
 '''static void cycle_machine_context(int8_t delta)
