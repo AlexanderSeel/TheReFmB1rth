@@ -33,16 +33,19 @@ seq16_event_t seq16_advance(seq16_t *s){
     }
 
     if(st->flags&SEQ16_TIE){
-        /* A TB-303 held step may also change octave/pitch without retriggering
-           the envelopes. Emit it as a legato note update: groovebox playback
-           already routes note_on+slide through acid303_set_note(), whose
-           slide-on-an-open-gate path preserves the running envelopes. */
         e.valid=1u;
         e.tie=1u;
-        e.note_on=1u;
-        e.note_off=0u;
-        e.note=st->note;
-        e.slide=1u;
+        /* Historical project data represents an ordinary held step with
+           note==0. Keep that exact event contract. A non-zero note on a TIE is
+           the extended physical/virtual editor form used for a held step that
+           also changes pitch/octave. Emit only that form as a legato note
+           update; acid303_set_note(..., slide=1) changes pitch on the open gate
+           without retriggering the envelopes. */
+        if(st->note){
+            e.note_on=1u;
+            e.note=st->note;
+            e.slide=1u;
+        }
         return e;
     }
 
