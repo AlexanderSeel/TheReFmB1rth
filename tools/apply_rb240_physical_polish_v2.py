@@ -23,8 +23,6 @@ def patch_bridge(root: Path) -> None:
     t = p.read_text()
     t = one(t, "static uint8_t g_focus_region;\n",
             "static uint8_t g_focus_region;\nstatic uint8_t g_hold;\n", "hold storage")
-    # Reset HOLD on an explicit engine/UI init. Static zero initialization already
-    # covers the lazy boot path.
     if "    g_focus_active = 0u;\n" in t:
         t = t.replace("    g_focus_active = 0u;\n",
                       "    g_focus_active = 0u;\n    g_hold = 0u;\n", 1)
@@ -61,12 +59,12 @@ def patch_bridge(root: Path) -> None:
         "        } else if (g_ui.page == UI240_ACID_MAIN) ui240_edit_acid_main(&g_ui, &g_refm.groovebox, encoder, d);\n",
         "HOME live knobs")
 
+    # Other passes can insert drum-trigger handling between ui240_performance_key
+    # and this return, so use the stable one-line consumed anchor.
     t = one(t,
+        "    if (r.consumed) return;\n",
         "    if (r.consumed) return;\n"
-        "    if (g_ui.machine >= UI240_MACHINE_808 || note > 127u) return;\n",
-        "    if (r.consumed) return;\n"
-        "    if (!on && g_hold && (g_ui.page == UI240_HOME || g_ui.page == UI240_ACID_MAIN)) return;\n"
-        "    if (g_ui.machine >= UI240_MACHINE_808 || note > 127u) return;\n",
+        "    if (!on && g_hold && (g_ui.page == UI240_HOME || g_ui.page == UI240_ACID_MAIN)) return;\n",
         "HOLD note release")
 
     t = one(t,
